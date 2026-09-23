@@ -20,22 +20,12 @@
     return state.assignedNode ? nodeNames[state.assignedNode] : nodeChoiceLabel();
   }
 
-  function notify(message, trigger) {
+  function notify(message) {
     const toast = $('#prototype-toast');
     clearTimeout(noticeTimer);
     toast.textContent = message;
     toast.hidden = !message;
     if (!message) return;
-
-    const anchor = trigger.getBoundingClientRect();
-    const gap = 10;
-    const width = toast.offsetWidth;
-    const height = toast.offsetHeight;
-    const left = Math.max(12, Math.min(window.innerWidth - width - 12, anchor.left + (anchor.width - width) / 2));
-    const below = anchor.bottom + gap;
-    const top = below + height <= window.innerHeight - 12 ? below : Math.max(12, anchor.top - height - gap);
-    toast.style.left = `${left}px`;
-    toast.style.top = `${top}px`;
     noticeTimer = window.setTimeout(() => { toast.hidden = true; }, 4000);
   }
 
@@ -131,14 +121,14 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
       await navigator.clipboard.writeText(command);
-      notify('已复制 connect 示例命令；演示地址无法真实进房。', $('#copy-connect'));
+      notify('已复制 connect 示例命令；演示地址无法真实进房。');
     } catch {
       const selection = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents($('#connect-command'));
       selection.removeAllRanges();
       selection.addRange(range);
-      notify('未能自动复制；命令已选中，可手动复制。', $('#copy-connect'));
+      notify('未能自动复制；命令已选中，可手动复制。');
     }
   }
 
@@ -147,10 +137,10 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
       await navigator.clipboard.writeText(uri);
-      notify('已复制 Steam 示例链接；演示地址无法真实进房。', $('#copy-steam-link'));
+      notify('已复制 Steam 示例链接；演示地址无法真实进房。');
     } catch {
       window.prompt('复制 Steam 入口示例链接（地址不可用于真实进房）', uri);
-      notify('请从弹出的文本框复制示例链接。', $('#copy-steam-link'));
+      notify('请从弹出的文本框复制示例链接。');
     }
   }
 
@@ -159,14 +149,14 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
       await navigator.clipboard.writeText(option);
-      notify('已复制启动选项 -console。', $('#copy-console-option'));
+      notify('已复制启动选项 -console。');
     } catch {
       const selection = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents($('#console-option'));
       selection.removeAllRanges();
       selection.addRange(range);
-      notify('未能自动复制；启动选项已选中，可手动复制。', $('#copy-console-option'));
+      notify('未能自动复制；启动选项已选中，可手动复制。');
     }
   }
 
@@ -213,7 +203,7 @@
     render();
   });
   $('#steam-entry').addEventListener('click', () => {
-    if (state.stage === 'ready') notify('原型演示：不会启动 Steam 客户端。', $('#steam-entry'));
+    if (state.stage === 'ready') notify('原型演示：不会启动 Steam 客户端。');
   });
   $('#copy-connect').addEventListener('click', copyCommand);
   $('#copy-steam-link').addEventListener('click', copySteamLink);
