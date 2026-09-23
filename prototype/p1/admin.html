@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f2e9">
+  <title>P-1D · 管理员原型</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="admin.css">
+  <script src="admin.js" defer></script>
+</head>
+<body class="admin-page">
+  <div class="admin-demo"><div class="admin-demo__inner"><span><span class="prototype-dot" aria-hidden="true"></span>P-1D 管理员原型 <small>仅模拟数据</small></span><div><a href="party.html">查看 P-1C</a><button id="demo-report" type="button">模拟 Controller 上报</button><button id="demo-network-change" type="button">模拟网络配置变更</button><button id="demo-reclaim" type="button">模拟恢复并完整回收</button><button id="demo-reset" type="button">重置</button></div></div></div>
+  <header class="site-header"><div class="site-header__inner"><div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Dota 2 <strong>游廊联机</strong></span></div><div class="admin-identity"><span>管理后台</span><button id="logout" type="button" hidden>退出登录</button></div></div></header>
+
+  <main id="admin-login" class="admin-login">
+    <section class="panel admin-login__card" aria-labelledby="login-title"><span class="step">管理员登录</span><h1 id="login-title">进入管理后台</h1><p>正式产品使用独立管理员账号；此处仅演示登录界面。</p><form id="login-form" autocomplete="off"><label>演示账号<input id="login-name" autocomplete="off" required placeholder="任意演示文字"></label><label>演示密码<input id="login-password" type="password" autocomplete="off" required placeholder="请勿填写真实密码"></label><button class="primary-button" type="submit">进入演示 <span aria-hidden="true">↗</span></button></form><p class="admin-hint">原型只检查是否填写，不发送或保存账号与密码。</p></section>
+  </main>
+
+  <main id="admin-app" class="admin-app" hidden>
+    <header class="a-intro a-intro--compact"><h1>管理后台</h1></header>
+    <div id="admin-alert" class="admin-alert" role="status" aria-live="polite"></div>
+    <nav class="admin-tabs" aria-label="管理区域"><button type="button" data-tab="overview" aria-current="page">概览与公告</button><button type="button" data-tab="content">内容与版本</button><button type="button" data-tab="nodes">节点与入口</button><button type="button" data-tab="instances">申请与实例</button></nav>
+
+    <section id="tab-overview" class="admin-section" aria-labelledby="overview-title">
+      <div class="admin-section__heading"><span class="step">01 / 平台</span><h2 id="overview-title">概览与公告</h2></div>
+      <div class="admin-grid">
+        <section class="panel admin-card"><div class="admin-card__top"><div><span class="step">全局维护</span><h3>新申请与等待队列</h3></div><span id="global-state" class="admin-pill"></span></div><p>暂停后不接收新申请；已有等待申请暂停调度、保留排队时间。已运行的服务器不会自动停止。</p><label class="admin-check"><input id="global-accept" type="checkbox" checked><span>接受新申请</span></label><label class="admin-field">维护提示<textarea id="maintenance-message" rows="2">今晚 22:00 将暂停新申请。</textarea></label><button id="save-global" class="admin-secondary" type="button">保存全局设置</button></section>
+        <section class="panel admin-card"><div class="admin-card__top"><div><span class="step">站点公告</span><h3>玩家页面提示</h3></div></div><p>一条轻量公告，和全局维护开关分别设置。</p><label class="admin-check"><input id="notice-enabled" type="checkbox" checked><span>显示公告</span></label><label class="admin-field">级别<select id="notice-level"><option value="info">信息</option><option value="warning" selected>提醒</option><option value="maintenance">维护</option></select></label><label class="admin-field">内容<textarea id="notice-message" rows="2">今晚 22:00 将暂停新申请。当前仍可正常申请。</textarea></label><button id="save-notice" class="admin-secondary" type="button">保存公告</button></section>
+      </div>
+    </section>
+
+    <section id="tab-content" class="admin-section" aria-labelledby="content-title" hidden>
+      <div class="admin-section__heading"><span class="step">02 / 内容</span><h2 id="content-title">地图、玩法与版本</h2></div>
+      <div class="admin-grid">
+        <section class="panel admin-card"><span class="step">游廊游戏</span><h3>星潮远征</h3><p>关闭“接受新申请”会暂停对应等待请求的调度；关闭“正式提供”会终结尚未分配的等待请求。已有实例继续运行。</p><div class="admin-check-row"><label class="admin-check"><input id="game-enabled" type="checkbox" checked>正式提供</label><label class="admin-check"><input id="game-accept" type="checkbox" checked>接受新申请</label></div><label class="admin-field">维护提示<textarea id="game-message" rows="2" placeholder="暂不可申请时向玩家显示的原因"></textarea></label><button id="save-game" class="admin-secondary" type="button">保存地图设置</button><div class="admin-divider"></div><span class="step">玩法预设</span><div class="admin-preset"><strong>N6</strong><label><input id="preset-enabled" type="checkbox" checked>正式提供</label><label><input id="preset-accept" type="checkbox" checked>接受新申请</label></div><div class="admin-preset"><strong>N7</strong><span>接受新申请 · 模拟状态</span></div><div class="admin-preset"><strong>Solo</strong><span>接受新申请 · 模拟状态</span></div><label class="admin-field">N6 维护提示<input id="preset-message" placeholder="玩法暂停时显示"></label><button id="save-preset" class="admin-secondary" type="button">保存 N6 设置</button></section>
+        <section class="panel admin-card"><span class="step">ContentVersion</span><h3>当前发布版本</h3><div class="admin-version"><span>平台目标版本</span><strong id="published-version">v2</strong></div><div class="admin-version"><span>候选版本</span><strong>v3</strong></div><p>Node Controller 上报节点本地版本。管理员只能切换平台目标，不能在这里改写节点已上报的版本。</p><div id="publish-gate" class="admin-callout"></div><button id="publish-version" class="admin-secondary" type="button">将 v3 发布为当前版本</button><p class="admin-hint">发布后，旧版本节点不再符合新实例的版本条件；已创建的实例保持原版本。</p></section>
+      </div>
+    </section>
+
+    <section id="tab-nodes" class="admin-section" aria-labelledby="nodes-title" hidden>
+      <div class="admin-section__heading"><span class="step">03 / 节点</span><h2 id="nodes-title">节点与一键入口</h2></div>
+      <div class="admin-grid">
+        <section class="panel admin-card"><div class="admin-card__top"><div><span class="step">游戏节点</span><h3>青岚一号</h3></div><span id="node-a-state" class="admin-pill"></span></div><div class="admin-metrics"><div><span>系统 / 心跳</span><strong>Windows · 刚刚</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>容量</span><strong id="node-a-capacity">0 / 3 使用 · 硬上限 4</strong></div></div><div class="admin-check-row"><label class="admin-check"><input id="node-a-accept" type="checkbox" checked>接受新分配</label><label class="admin-check"><input id="node-a-drain" type="checkbox">整节点 Drain</label></div><div class="admin-inline"><label>优先级<input id="node-a-priority" type="number" min="1" value="10"></label><label>期望容量<input id="node-a-desired" type="number" min="1" max="4" value="3"></label></div><button id="save-node" class="admin-secondary" type="button">保存节点调度设置</button><div class="admin-divider"></div><span class="step">Node × ArcadeGame</span><div class="admin-metrics"><div><span>星潮远征 · 上报版本</span><strong id="binding-version">v2 · 已确认</strong></div><div><span>上报时间</span><strong id="binding-time">2 分钟前 · Controller 上报</strong></div></div><label class="admin-check"><input id="binding-accept" type="checkbox" checked>允许此节点接收星潮远征的新实例</label><p class="admin-hint">此开关只控制新分配，不改变节点磁盘内容，也不停止已有实例。</p></section>
+        <section class="panel admin-card"><div class="admin-card__top"><div><span class="step">游戏节点</span><h3>松影二号</h3></div><span class="admin-pill admin-pill--warm">心跳延迟</span></div><div class="admin-metrics"><div><span>系统 / 心跳</span><strong>Linux · 2 分钟前</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>上报版本</span><strong>星潮远征 v2 · 已确认</strong></div><div><span>容量</span><strong id="node-b-capacity">3 / 3 使用 · 硬上限 4 · 含异常资源</strong></div><div><span>新分配</span><strong>心跳延迟 · 暂停</strong></div></div><p class="admin-hint">节点状态由 Controller 上报；心跳延迟时不向该节点创建新分配。</p><div class="admin-divider"></div><span class="step">青岚一号 · 一键入口</span><p>一键入口的“实测通过”和“向玩家开放”分别控制；未实测通过不能开放。网络配置变化后，旧验证失效。</p><div class="admin-entry"><div><strong>Steam</strong><small id="steam-verification"></small></div><button id="verify-steam" class="admin-secondary" type="button">确认真人验证</button><label class="admin-check"><input id="steam-enabled" type="checkbox">向玩家开放</label></div><div class="admin-entry"><div><strong>蒸汽平台</strong><small id="china-verification"></small></div><button id="verify-china" class="admin-secondary" type="button">确认真人验证</button><label class="admin-check"><input id="china-enabled" type="checkbox">向玩家开放</label></div><p id="entry-revision" class="admin-hint"></p><p class="admin-hint">验证须覆盖当前网络配置的全部可能公网端口映射；A2S 成功不等于真人可以进入。</p></section>
+        <section class="panel admin-card admin-card--wide"><div class="admin-card__top"><div><span class="step">游戏节点</span><h3>溪谷四号</h3></div><span class="admin-pill admin-pill--warm">离线</span></div><div class="admin-metrics"><div><span>系统 / 心跳</span><strong>Linux · 30 分钟前</strong></div><div><span>内容状态</span><strong>无法确认 · 不接收新分配</strong></div><div><span>最近错误</span><strong>Controller 连接中断</strong></div></div></section>
+      </div>
+    </section>
+
+    <section id="tab-instances" class="admin-section" aria-labelledby="instances-title" hidden>
+      <div class="admin-section__heading"><span class="step">04 / 实例</span><h2 id="instances-title">申请与实例</h2></div>
+      <div class="admin-stack">
+        <section id="waiting-request" class="panel admin-instance"><div><span class="step">纯等待 · 尚无资源分配</span><h3>等待服务器资源</h3><p>示例队伍 · 星潮远征 N6 · 未分配节点</p></div><button id="cancel-waiting" class="admin-secondary" type="button">取消等待申请</button></section>
+        <section class="panel admin-instance"><div><span class="step">分配并启动 · 最后上报</span><h3>正在启动服务器</h3><p>松影二号 · ContentVersion v2 · 心跳延迟，当前结果待核对</p></div><span class="admin-pill">容量已占用</span></section>
+        <section class="panel admin-instance"><div><span class="step">已有资源分配 · 最后上报</span><h3 id="running-title">服务器运行中</h3><p>松影二号 · 星潮远征 N6 · ContentVersion v2 · 模板修订 r3</p></div><button id="stop-instance" class="admin-secondary" type="button">请求停止</button></section>
+        <section id="quarantined-instance" class="panel admin-instance admin-instance--warm"><div><span class="step">quarantined · 容量仍占用</span><h3 id="quarantine-title">旧服务器待核对</h3><p id="quarantine-detail">松影二号 · 停止结果未确认 · 不可直接释放容量</p></div><div class="admin-instance__actions"><button id="resync-instance" class="admin-secondary" type="button">请求重新核对</button><button id="release-instance" class="admin-secondary" type="button" disabled>释放容量</button></div></section>
+        <p class="admin-hint">取消仅适用于纯 waiting 且尚无 Allocation 的申请；停止与重新核对不立即释放容量。只有 d2core 确认实例已停止且清理完成后才可释放。</p>
+      </div>
+    </section>
+    <p id="admin-toast" class="admin-toast" role="status" aria-live="polite" hidden></p>
+  </main>
+
+  <dialog id="admin-dialog" class="admin-dialog" aria-labelledby="admin-dialog-title" aria-describedby="admin-dialog-text"><span class="step">请确认</span><h2 id="admin-dialog-title"></h2><p id="admin-dialog-text"></p><div><button id="admin-dialog-cancel" type="button" class="admin-secondary">返回</button><button id="admin-dialog-confirm" type="button" class="admin-secondary admin-secondary--warm">确认</button></div></dialog>
+  <footer class="site-footer"><span>Dota 2 Arcade Platform</span><span>P-1D · 管理员原型 · 模拟数据</span></footer>
+</body>
+</html>
