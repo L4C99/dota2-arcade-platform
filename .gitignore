@@ -1,0 +1,15 @@
+# OS and editors
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Local-only data and secrets
+.env
+.env.*
+!.env.example
+
+# Temporary preview output
+prototype/p1/screenshots/
