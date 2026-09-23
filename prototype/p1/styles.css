@@ -64,3 +64,32 @@ h1,h2,p{margin-top:0}h1,h2{letter-spacing:-.045em}h1{line-height:1.2}h2{line-hei
 @media (max-width:700px){
   .site-footer{font-size:11px;flex-wrap:wrap}
 }
+
+/* P-1A copy review: leave room for choices rather than promotional text. */
+.a-intro--compact{padding:34px 8px 22px}
+.a-intro--compact h1,
+.b-hero h1,
+.c-heading h1{
+  font-family:Inter,"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:34px;
+  font-weight:700;
+  line-height:1.3;
+  letter-spacing:-.04em;
+  margin:0;
+}
+.b-hero{padding:34px 5px 0}
+.b-hero h1{margin-bottom:24px}
+.c-heading{padding:34px 2px 22px}
+.c-summary h2{
+  font-family:Inter,"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:22px;
+  font-weight:700;
+  line-height:1.4;
+  margin:0 0 20px;
+}
+@media (max-width:700px){
+  .a-intro--compact{padding:25px 2px 18px}
+  .b-hero{padding:25px 2px 0}
+  .c-heading{padding:25px 2px 18px}
+  .a-intro--compact h1,.b-hero h1,.c-heading h1{font-size:28px}
+}
