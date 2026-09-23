@@ -105,7 +105,7 @@
           <button id="steam-entry" type="button" class="primary-button">Steam 一键进入 <span aria-hidden="true">↗</span></button>
           <div class="flow-entry-unavailable">蒸汽平台一键进入 <small>当前节点尚未完成验证</small></div>
         </div>
-        <p class="flow-protocol-note">一键入口如未响应：先启动 Steam 再试；Windows 可复制入口链接用 Win+R 打开；仍无法进入时请使用下方手动连接。<button id="copy-steam-link" type="button" class="flow-inline-button">复制 Steam 入口链接</button></p>
+        <p class="flow-protocol-note"><span>一键进入没反应？先启动 Steam 后重试。</span> <span>Windows 用户可复制入口链接，按 Win + R 粘贴打开。</span> <span>仍无法进入？使用下方手动连接。</span> <button id="copy-steam-link" type="button" class="flow-inline-button">复制 Steam 入口链接</button></p>
         <div class="flow-connect"><div><span>手动连接</span><code id="connect-command">connect demo-node.example:45123</code></div><button id="copy-connect" type="button">复制命令</button></div>
         <details class="flow-help"><summary>如何使用 / 如何打开控制台 <span aria-hidden="true">⌄</span></summary>
           <ol><li>在 Steam 库中打开 Dota 2「属性 → 启动选项」，填入 <span class="flow-copy-pair"><code id="console-option">-console</code><button id="copy-console-option" type="button" class="flow-inline-button">复制启动项</button></span>。</li><li>重启 Dota 2，按 <kbd>\</kbd> 打开控制台；若无反应，请在游戏按键设置中确认或绑定控制台按键。</li><li>粘贴上方复制的 <code>connect</code> 命令，按回车执行。</li></ol>
