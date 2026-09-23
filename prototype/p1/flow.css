@@ -23,6 +23,7 @@
 .flow-progress li{display:flex;align-items:center;gap:8px;min-height:48px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;color:var(--muted);font-size:12px}
 .flow-progress li span{display:grid;place-items:center;flex:none;width:23px;height:23px;border-radius:50%;background:#edf2eb;font-size:10px}
 .flow-progress .is-current{background:#eaf4e9;border-color:#b6d1bc;color:var(--ink);font-weight:700}
+.flow-progress .is-current span{background:#d3e8d6;color:var(--ink)}
 .flow-progress .is-done{color:#4f795f}
 .flow-progress .is-done span{background:#d8e9db;color:var(--ink)}
 .flow-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;margin-top:25px}
@@ -38,6 +39,8 @@
 .flow-entry-unavailable small{display:block;margin-top:3px;font-size:12px;font-weight:400;line-height:1.5}
 .flow-protocol-note{margin:13px 0 21px!important;font-size:13px!important;line-height:1.65!important}
 .flow-inline-button{display:inline;border:0;background:none;padding:0 0 0 4px;color:var(--ink);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.flow-copy-pair{display:inline-flex;align-items:baseline;gap:6px;white-space:nowrap}
+.flow-copy-pair .flow-inline-button{padding-left:0}
 .flow-connect{display:flex;align-items:end;justify-content:space-between;gap:10px;border:1px solid #cdddcf;border-radius:14px;background:#f3f8f2;padding:13px}
 .flow-connect>div{min-width:0}
 .flow-connect span{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}
