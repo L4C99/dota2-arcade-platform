@@ -1,7 +1,7 @@
 (() => {
   const $ = (selector) => document.querySelector(selector);
   const state = {
-    loggedIn: false, tab: 'overview', globalAccept: true, noticeEnabled: true, noticeLevel: 'warning',
+    loggedIn: false, tab: 'overview', globalAccept: true, maintenanceMessage: '今晚 22:00 将暂停新申请。', noticeEnabled: true, noticeLevel: 'warning',
     gameEnabled: true, gameAccept: true, presetEnabled: true, presetAccept: true,
     published: 'v2', reported: 'v2', bindingAccept: true, nodeAccept: true, drain: false,
     priority: 10, desired: 3, revision: 7, steamVerified: true, steamEnabled: true,
@@ -38,12 +38,13 @@
     });
     ['overview', 'content', 'nodes', 'instances'].forEach((tab) => { $(`#tab-${tab}`).hidden = tab !== state.tab; });
     $('#admin-alert').textContent = state.globalAccept
-      ? '平台正在接受新申请；已运行的服务器按各自状态继续管理。'
-      : '全局维护中：新申请暂停，等待队列保留原排队时间；已运行的服务器不自动停止。';
+      ? '全站允许提交新的开服申请；各地图和玩法仍按各自设置生效。'
+      : `全站暂停新申请；等待中的申请保留排队时间，已分配的服务器继续处理。${state.maintenanceMessage ? ` 玩家提示：${state.maintenanceMessage}` : ''}`;
     $('#admin-alert').dataset.warn = String(!state.globalAccept);
-    $('#global-state').textContent = state.globalAccept ? '接受新申请' : '全局维护中';
+    $('#global-state').textContent = state.globalAccept ? '允许新申请' : '暂停新申请';
     $('#global-state').classList.toggle('admin-pill--warm', !state.globalAccept);
     $('#global-accept').checked = state.globalAccept;
+    $('#maintenance-message').value = state.maintenanceMessage;
     $('#notice-enabled').checked = state.noticeEnabled;
     $('#notice-level').value = state.noticeLevel;
     $('#game-enabled').checked = state.gameEnabled;
@@ -52,7 +53,7 @@
     $('#preset-accept').checked = state.presetAccept;
 
     $('#published-version').textContent = state.published;
-    const canPublish = state.published !== 'v3' && state.reported === 'v3' && state.bindingAccept && state.nodeAccept && !state.drain;
+    const canPublish = state.published !== 'v3' && state.reported === 'v3' && state.bindingAccept && state.nodeAccept && !state.drain && state.desired > 0;
     $('#publish-version').disabled = !canPublish;
     $('#publish-gate').dataset.ready = String(canPublish);
     $('#publish-gate').textContent = state.published === 'v3'
@@ -61,43 +62,48 @@
         ? '演示条件已具备：青岚一号由 Controller 上报 v3，且内容验证已记录。发布需再次确认。'
         : '暂不能发布：需要已验证的目标节点由 Controller 上报 v3，并处于可接收新分配的状态。';
 
-    $('#node-a-state').textContent = state.drain ? 'Drain 中' : state.nodeAccept ? '在线 · 接受分配' : '在线 · 暂停分配';
-    $('#node-a-state').classList.toggle('admin-pill--warm', state.drain || !state.nodeAccept);
+    $('#node-a-state').textContent = state.drain ? '整节点维护中' : !state.nodeAccept ? '在线 · 暂停新分配' : state.desired === 0 ? '在线 · 调度名额为 0' : '在线 · 接收新分配';
+    $('#node-a-state').classList.toggle('admin-pill--warm', state.drain || !state.nodeAccept || state.desired === 0);
     $('#node-a-accept').checked = state.nodeAccept;
     $('#node-a-drain').checked = state.drain;
     $('#node-a-priority').value = state.priority;
     $('#node-a-desired').value = state.desired;
     $('#node-a-capacity').textContent = `0 / ${state.desired} 使用 · 硬上限 4`;
-    $('#node-b-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 使用 · 硬上限 4${state.quarantined ? ' · 含异常资源' : ''}`;
-    const nodeBCard = $('#node-b-capacity').closest('.admin-card');
-    const nodeBPill = nodeBCard.querySelector('.admin-pill');
-    nodeBPill.textContent = state.quarantined ? '心跳延迟' : '在线';
-    nodeBPill.classList.toggle('admin-pill--warm', state.quarantined);
-    nodeBCard.querySelector('.admin-metrics>div:first-child strong').textContent = state.quarantined ? 'Linux · 2 分钟前' : 'Linux · 刚刚';
-    nodeBCard.querySelector('.admin-metrics>div:last-child strong').textContent = state.quarantined ? '心跳延迟 · 暂停' : '恢复联系 · 重新确认资格';
+    $('#node-b-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 使用 · 硬上限 4${state.quarantined ? ' · 含待核对资源' : ''}`;
+    $('#node-b-state').textContent = state.quarantined ? '心跳延迟' : '已恢复联系';
+    $('#node-b-state').classList.toggle('admin-pill--warm', state.quarantined);
+    $('#node-b-heartbeat').textContent = state.quarantined ? 'Linux · 2 分钟前' : 'Linux · 刚刚';
+    $('#node-b-new-allocation').textContent = state.quarantined ? '暂停：心跳延迟' : '暂不分配：其他申请待对账';
     $('#binding-version').textContent = `${state.reported} · 已确认`;
     $('#binding-time').textContent = state.reported === 'v3' ? '刚刚 · Controller 上报' : '2 分钟前 · Controller 上报';
     $('#binding-accept').checked = state.bindingAccept;
 
-    $('#steam-verification').textContent = state.steamVerified ? `真人实测通过 · revision ${state.revision}` : '未验证 · 暂不可开放';
-    $('#china-verification').textContent = state.chinaVerified ? `真人实测通过 · revision ${state.revision}` : '未验证 · 暂不可开放';
+    $('#steam-verification').textContent = state.steamVerified ? `当前网络配置（第 ${state.revision} 版）已完成实际进房测试` : '当前网络配置尚未完成实际进房测试';
+    $('#china-verification').textContent = state.chinaVerified ? `当前网络配置（第 ${state.revision} 版）已完成实际进房测试` : '当前网络配置尚未完成实际进房测试';
     $('#steam-enabled').checked = state.steamEnabled;
     $('#steam-enabled').disabled = !state.steamVerified;
     $('#china-enabled').checked = state.chinaEnabled;
     $('#china-enabled').disabled = !state.chinaVerified;
-    $('#entry-revision').textContent = `当前入口配置 revision ${state.revision}；验证只对应当前配置。`;
+    $('#entry-revision').textContent = `当前网络配置：第 ${state.revision} 版。实测结果仅对这一版有效。`;
 
     $('#waiting-request').hidden = !state.waiting;
     $('#waiting-request h3').textContent = !state.globalAccept || !state.gameAccept || !state.presetAccept
       ? '等待中 · 调度暂停' : '等待服务器资源';
-    $('#running-title').textContent = state.running === 'running' ? '服务器运行中' : '正在结束服务器';
+    $('#creating-title').textContent = state.quarantined ? '启动结果待核对' : '最近上报：正在启动';
+    $('#creating-note').textContent = state.quarantined
+      ? '最后上报正在启动；节点心跳延迟，当前是否启动成功尚不确定。'
+      : '节点已恢复联系；此申请仍占用容量，等待最新创建结果。';
+    $('#running-stage').textContent = state.running === 'stopping' ? '申请 C · 停止请求已提交' : '申请 C · 最近上报运行中';
+    $('#running-title').textContent = state.running === 'stopping'
+      ? '已请求停止 · 等待确认'
+      : state.quarantined ? '服务器状态待确认' : '最近上报：运行中';
+    $('#running-note').textContent = state.running === 'stopping'
+      ? '已提交停止请求；d2core 确认停止并完成清理前，继续占用容量。'
+      : state.quarantined ? '节点心跳延迟；最后上报为运行中，当前状态需节点恢复后确认。' : '节点已恢复联系；当前申请仍占用 1 个名额。';
     $('#stop-instance').disabled = state.running !== 'running';
-    $('#quarantine-title').textContent = state.quarantined ? '旧服务器待核对' : '旧服务器已完整回收';
-    $('#quarantine-detail').textContent = state.quarantined
-      ? '松影二号 · 停止结果未确认 · 不可直接释放容量'
-      : '松影二号 · d2core 已确认停止与清理完成 · 容量已释放';
-    $('#resync-instance').disabled = !state.quarantined;
-    $('#release-instance').textContent = state.quarantined ? '释放容量' : '容量已释放';
+    $('#quarantined-instance').hidden = !state.quarantined;
+    $('#reclaimed-group').hidden = state.quarantined;
+    $('#reclaimed-instance').hidden = state.quarantined;
   }
 
   $('#login-form').addEventListener('submit', (event) => {
@@ -112,7 +118,7 @@
   $('#demo-reset').addEventListener('click', () => window.location.reload());
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.tab = button.dataset.tab; render(); }));
 
-  $('#save-global').addEventListener('click', () => { state.globalAccept = $('#global-accept').checked; render(); notify('全局设置已更新（模拟）。'); });
+  $('#save-global').addEventListener('click', () => { state.globalAccept = $('#global-accept').checked; state.maintenanceMessage = $('#maintenance-message').value.trim(); render(); notify(state.globalAccept ? '全站已允许提交新申请（模拟）。' : '全站已暂停新申请；等待申请保留排队时间（模拟）。'); });
   $('#save-notice').addEventListener('click', () => { state.noticeEnabled = $('#notice-enabled').checked; state.noticeLevel = $('#notice-level').value; render(); notify('站点公告已更新（模拟）。'); });
   $('#save-game').addEventListener('click', () => {
     state.gameEnabled = $('#game-enabled').checked;
@@ -129,16 +135,16 @@
     notify('N6 玩法设置已更新（模拟）。');
   });
   $('#publish-version').addEventListener('click', () => {
-    if (state.published === 'v3' || state.reported !== 'v3' || !state.bindingAccept || !state.nodeAccept || state.drain) return;
-    ask('发布 ContentVersion v3？', '只改变新资源分配的目标版本。已创建的实例保持原版本；仍上报 v2 的节点不能接收 v3 新实例。', () => {
+    if (state.published === 'v3' || state.reported !== 'v3' || !state.bindingAccept || !state.nodeAccept || state.drain || state.desired === 0) return;
+    ask('将 v3 设为新服务器的目标版本？', '只改变下一次新资源分配使用的版本。已创建的服务器保持原版本；仍上报 v2 的节点不能接收 v3 新分配。', () => {
       state.published = 'v3'; render(); notify('当前发布版本已切换为 v3（模拟）。');
     });
   });
   $('#save-node').addEventListener('click', () => {
     const desired = Number($('#node-a-desired').value);
     const priority = Number($('#node-a-priority').value);
-    if (!Number.isInteger(desired) || desired < 1 || desired > 4 || !Number.isInteger(priority) || priority < 1) {
-      notify('请输入有效的期望容量（1–4）和正整数优先级。'); return;
+    if (!Number.isInteger(desired) || desired < 0 || desired > 4 || !Number.isInteger(priority) || priority < 1) {
+      notify('请输入有效的节点名额上限（0–4）和正整数优先级。'); return;
     }
     state.desired = desired; state.priority = priority;
     state.nodeAccept = $('#node-a-accept').checked; state.drain = $('#node-a-drain').checked;
