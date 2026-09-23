@@ -102,3 +102,9 @@ h1,h2,p{margin-top:0}h1,h2{letter-spacing:-.045em}h1{line-height:1.2}h2{line-hei
   .concept-a .game-card > .selected-pill,
   .concept-a .game-card > .paused-pill{top:15px;right:18px}
 }
+
+/* Keep state pills aligned when one mobile card has a two-line message. */
+@media (max-width:410px){
+  .concept-a .game-card > .selected-pill,
+  .concept-a .game-card > .paused-pill{margin-top:auto}
+}
