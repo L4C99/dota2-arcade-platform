@@ -16,3 +16,37 @@ h1,h2,p{margin-top:0}h1,h2{letter-spacing:-.045em}h1{line-height:1.2}h2{line-hei
 @media(max-width:700px){.prototype-bar__inner{flex-wrap:wrap;justify-content:space-between;padding:10px 17px;gap:10px}.prototype-label{order:0}.preview-toggle{order:1}.variant-nav{order:2;width:100%;display:grid;grid-template-columns:repeat(3,1fr)}.variant-tab{padding:8px 5px}.site-header__inner{padding:0 18px;min-height:61px}.identity{font-size:0}.identity strong{font-size:0}.identity__avatar{font-size:11px}main{padding:15px 16px 45px}.global-notice{align-items:flex-start;padding:10px 12px}.global-notice p{display:block}.global-notice strong{display:block;margin-bottom:3px}.notice-meta{display:none}.site-footer{padding:18px 16px 27px;gap:10px}.a-intro{padding:37px 2px 25px}.a-intro h1{font-size:39px}.intro-index{display:none}.a-layout,.c-layout{display:block}.a-primary,.a-sidebar,.c-workspace{display:grid;gap:12px}.a-sidebar{margin-top:12px}.game-grid{grid-template-columns:1fr 1fr}.game-card{min-height:139px;display:flex;flex-direction:column;align-items:stretch}.game-art{width:auto;height:72px}.game-art b{font-size:35px;transform:translate(5px,21px)}.game-card>.selected-pill,.game-card>.paused-pill{bottom:31px;right:13px}.game-card__text{padding-top:8px}.game-card__text strong{font-size:13px}.game-card__text small{font-size:10px}.preset-grid{grid-template-columns:repeat(3,1fr)}.preset-card{min-height:95px;padding:11px}.request-panel .primary-button{position:relative}.active-card--a{margin-top:18px;padding:24px}.active-card--a .active-card__body{align-items:flex-start}.active-card__number{display:none}.b-hero{padding:32px 2px 0}.b-hero h1{font-size:43px;margin:26px 0 12px}.b-hero>p{margin-bottom:28px;font-size:12px}.b-hero__rule span{gap:6px;font-size:9px}.b-hero__rule b{font-size:9px}.b-section{grid-template-columns:1fr;gap:10px;padding:25px 0}.b-section__side{display:flex;align-items:baseline;gap:12px}.b-section__side p{margin:0}.b-number{font-size:22px}.b-section__heading h2{font-size:20px}.b-section__heading span{font-size:10px}.b-submit{align-items:stretch;flex-direction:column}.b-submit .primary-button{width:100%;min-width:0}.b-after-note{text-align:center}.active-card--b{margin:22px 0;padding:24px}.active-card--b h2{font-size:32px}.active-card__bottom{align-items:flex-start;flex-direction:column}.c-heading{padding:33px 2px 23px}.c-heading h1{font-size:38px}.c-heading__tag{display:none}.c-summary{position:static;margin-top:12px}.c-preset-row{grid-template-columns:repeat(3,1fr)}.c-games{grid-template-columns:1fr 1fr}.c-games label,.c-games__disabled{min-height:93px;align-items:flex-start;flex-wrap:wrap}.c-games label .choice-check{margin-left:auto}.c-summary h2{margin:16px 0}.c-active-grid{grid-template-columns:1fr;gap:30px}.active-card--c{padding:23px}}
 @media(max-width:410px){.variant-tab span{display:none}.brand{font-size:13px}.a-intro h1{font-size:35px}.game-panel,.preset-panel,.party-panel,.request-panel,.c-panel{padding:19px}.game-grid{gap:8px}.game-card{min-height:145px}.game-card>.selected-pill,.game-card>.paused-pill{position:static;margin:7px 0 0 4px;align-self:flex-start}.preset-grid{gap:6px}.preset-card{padding:9px}.preset-card__top strong{font-size:17px}.preset-card>span:nth-child(3){font-size:10px}.b-presets{gap:5px}.b-presets label{padding:11px}.c-games{grid-template-columns:1fr}.c-games label,.c-games__disabled{min-height:60px;align-items:center}.c-games__disabled .paused-pill{display:inline-flex}.c-preset-row{gap:5px}.c-preset-row label{padding:9px}.c-preset-row small{font-size:9px}}
 .auto-reset{margin-top:10px;padding:4px 0;border:0;background:none;color:var(--ink-soft);font-size:11px;text-decoration:underline;text-underline-offset:3px}.manual-node .auto-choice,.manual-node .c-auto{background:#f7f8f3;border-color:#dde4dc}.manual-node .auto-choice .choice-check,.manual-node .c-auto .choice-check{display:none}
+
+/* A: keep the visual hierarchy while making supporting text easier to read. */
+.concept-a .game-card > .selected-pill,
+.concept-a .game-card > .paused-pill{top:20px;bottom:auto;right:20px}
+@media (min-width:701px){
+  .concept-a .eyebrow,.concept-a .step,.concept-a .fine-print{font-size:12px}
+  .concept-a .lead{font-size:16px}
+  .concept-a .game-card__text strong{font-size:16px}
+  .concept-a .game-card__text small{font-size:13px}
+  .concept-a .preset-card{min-height:108px}
+  .concept-a .preset-card__top strong{font-size:22px}
+  .concept-a .preset-card > span:nth-child(3){font-size:13px}
+  .concept-a .preset-card small{font-size:12px}
+  .concept-a .party-line strong{font-size:14px}
+  .concept-a .party-line small,.concept-a .party-count{font-size:12px}
+  .concept-a .request-panel__desc{font-size:13px}
+  .concept-a .auto-choice strong{font-size:13px}
+  .concept-a .auto-choice small{font-size:12px}
+  .concept-a .manual-disclosure summary{font-size:13px}
+  .concept-a .manual-disclosure > p,.concept-a .node-list label,.concept-a .node-list .node-disabled{font-size:12px}
+  .concept-a .node-list small{font-size:11px}
+  .concept-a .content-note,.concept-a .active-card__body > div > span{font-size:12px}
+  .concept-a .cta-footnote{font-size:11px}
+  .concept-a .primary-button{font-size:15px}
+}
+@media (min-width:1600px){
+  .prototype-bar__inner,.site-header__inner,main,.site-footer{max-width:1400px}
+}
+@media (max-width:700px){
+  .concept-a .game-card__text strong{font-size:14px}
+  .concept-a .game-card__text small{font-size:11px}
+  .concept-a .request-panel__desc,.concept-a .auto-choice small{font-size:12px}
+  .concept-a .cta-footnote{font-size:11px}
+}
