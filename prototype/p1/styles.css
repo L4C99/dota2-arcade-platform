@@ -93,3 +93,12 @@ h1,h2,p{margin-top:0}h1,h2{letter-spacing:-.045em}h1{line-height:1.2}h2{line-hei
   .c-heading{padding:25px 2px 18px}
   .a-intro--compact h1,.b-hero h1,.c-heading h1{font-size:28px}
 }
+
+/* A: keep the map tile as an accent; let its name and status lead. */
+@media (min-width:901px){
+  .concept-a .game-card{min-height:155px}
+  .concept-a .game-art{height:76px}
+  .concept-a .game-art b{font-size:36px;transform:translate(5px,25px)}
+  .concept-a .game-card > .selected-pill,
+  .concept-a .game-card > .paused-pill{top:15px;right:18px}
+}
