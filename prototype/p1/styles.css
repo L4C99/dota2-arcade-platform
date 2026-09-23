@@ -98,7 +98,7 @@ h1,h2,p{margin-top:0}h1,h2{letter-spacing:-.045em}h1{line-height:1.2}h2{line-hei
 @media (min-width:901px){
   .concept-a .game-card{min-height:155px}
   .concept-a .game-art{height:76px}
-  .concept-a .game-art b{font-size:36px;transform:translate(5px,25px)}
+  .concept-a .game-art b{font-size:36px;transform:translate(5px,16px)}
   .concept-a .game-card > .selected-pill,
   .concept-a .game-card > .paused-pill{top:15px;right:18px}
 }
