@@ -1,0 +1,60 @@
+.flow-page [hidden]{display:none!important}
+.flow-demo{background:#183f35;color:#f6f5ec}
+.flow-demo__inner{max-width:1240px;min-height:52px;margin:auto;padding:8px 28px;display:flex;align-items:center;justify-content:space-between;gap:18px}
+.flow-demo__inner>span{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;white-space:nowrap}
+.flow-demo__inner small{font-size:11px;font-weight:400;color:#bfd2c4}
+.flow-demo__actions{display:flex;align-items:center;gap:8px}
+.flow-demo__actions a,.flow-demo__actions button{border:1px solid #648274;border-radius:999px;background:transparent;color:#e5eee4;padding:7px 12px;text-decoration:none;font-size:11px;white-space:nowrap}
+.flow-demo__actions button:not(:disabled):hover,.flow-demo__actions a:hover{background:#31584c}
+.flow-demo__actions button:disabled{opacity:.46;cursor:default}
+.flow-demo__actions :focus-visible,.flow-page button:focus-visible,.flow-help summary:focus-visible{outline:3px solid #9cccb0;outline-offset:3px}
+.flow-request{display:grid;grid-template-columns:minmax(0,1.63fr) minmax(320px,1fr);gap:18px;align-items:start}
+.flow-status,.flow-join{padding:30px}
+.flow-status__top{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.flow-status__pill{display:inline-flex;padding:6px 11px;border-radius:999px;background:#e5efe5;color:#32664a;font-size:12px;font-weight:700;white-space:nowrap}
+.flow-status__pill[data-stage="stopping"],.flow-status__pill[data-stage="cancelled"]{background:#f7eadc;color:#9c6639}
+.flow-status h2,.flow-join h2{font-size:clamp(27px,3vw,35px);letter-spacing:-.04em;margin:24px 0 9px}
+.flow-status__description,.flow-join>p{font-size:14px;line-height:1.7;color:var(--ink-soft);margin-bottom:22px}
+.flow-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;border-top:1px solid var(--line)}
+.flow-facts>div{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);font-size:13px}
+.flow-facts span{color:var(--muted)}
+.flow-facts strong{text-align:right;overflow-wrap:anywhere}
+.flow-progress{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:25px 0 0;padding:0}
+.flow-progress li{display:flex;align-items:center;gap:8px;min-height:48px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;color:var(--muted);font-size:12px}
+.flow-progress li span{display:grid;place-items:center;flex:none;width:23px;height:23px;border-radius:50%;background:#edf2eb;font-size:10px}
+.flow-progress .is-current{background:#eaf4e9;border-color:#b6d1bc;color:var(--ink);font-weight:700}
+.flow-progress .is-done{color:#4f795f}
+.flow-progress .is-done span{background:#d8e9db;color:var(--ink)}
+.flow-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;margin-top:25px}
+.flow-actions>span{font-size:12px;line-height:1.5;color:var(--muted)}
+.flow-secondary{border:1px solid #bdd2c2;border-radius:11px;background:#f7faf6;color:var(--ink);padding:11px 15px;font-size:13px;font-weight:700}
+.flow-secondary:hover{background:#eaf4e9}
+.flow-secondary--danger{border-color:#e5d2be;background:#fcf8f2;color:#9a633a}
+.flow-secondary--danger:hover{background:#f7eadc}
+.flow-inline-note{margin:22px 0 0;border-left:3px solid #8fad9b;padding:5px 0 5px 12px;color:var(--ink-soft);font-size:13px;line-height:1.7}
+.flow-join h2{margin-top:13px}
+.flow-join__buttons{display:grid;gap:9px}
+.flow-join__buttons .primary-button{width:100%}
+.flow-entry-unavailable{border:1px solid var(--line);border-radius:13px;padding:11px 14px;color:var(--muted);font-size:13px;font-weight:700}
+.flow-entry-unavailable small{display:block;margin-top:3px;font-size:11px;font-weight:400;line-height:1.5}
+.flow-protocol-note{margin:13px 0 21px!important;font-size:12px!important;line-height:1.65!important}
+.flow-inline-button{display:inline;border:0;background:none;padding:0 0 0 4px;color:var(--ink);font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.flow-connect{display:flex;align-items:end;justify-content:space-between;gap:10px;border:1px solid #cdddcf;border-radius:14px;background:#f3f8f2;padding:13px}
+.flow-connect>div{min-width:0}
+.flow-connect span{display:block;color:var(--muted);font-size:11px;margin-bottom:6px}
+.flow-connect code{display:block;overflow-wrap:anywhere;font-size:13px;font-weight:700;color:var(--ink)}
+.flow-connect button{flex:none;border:1px solid #a9c2ad;border-radius:9px;background:#fffefa;padding:9px 11px;color:var(--ink);font-size:11px;font-weight:700}
+.flow-help{border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:18px;padding:15px 0}
+.flow-help summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;color:var(--ink);font-size:13px;font-weight:700}
+.flow-help summary::-webkit-details-marker{display:none}
+.flow-help summary span{font-size:18px}
+.flow-help[open] summary span{transform:rotate(180deg)}
+.flow-help ol{padding-left:21px;margin:14px 0 8px;color:var(--ink-soft);font-size:12px;line-height:1.75}
+.flow-help li+li{margin-top:6px}
+.flow-help p{font-size:11px;line-height:1.65;color:var(--muted);margin:10px 0 0}
+.flow-lifecycle{display:flex;gap:9px;margin-top:20px}
+.flow-toast{min-height:20px;margin:14px 0 0;color:var(--ink-soft);font-size:12px;line-height:1.5}
+@media(min-width:1600px){.flow-demo__inner{max-width:1400px}}
+@media(max-width:900px){.flow-request{grid-template-columns:minmax(0,1.35fr) minmax(265px,1fr)}.flow-facts{grid-template-columns:1fr}.flow-progress{grid-template-columns:1fr}.flow-status,.flow-join{padding:23px}}
+@media(max-width:700px){.flow-demo__inner{padding:10px 17px;align-items:flex-start;flex-direction:column;gap:9px}.flow-demo__actions{width:100%;flex-wrap:wrap}.flow-request{grid-template-columns:1fr;gap:12px}.flow-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.flow-progress{grid-template-columns:repeat(3,1fr)}.flow-status,.flow-join{padding:22px}.flow-status h2,.flow-join h2{font-size:28px}.flow-status__description,.flow-join>p{font-size:13px}}
+@media(max-width:410px){.flow-demo__actions a,.flow-demo__actions button{padding:6px 9px;font-size:10px}.flow-status,.flow-join{padding:19px}.flow-facts{grid-template-columns:1fr}.flow-progress li{flex-direction:column;align-items:flex-start;gap:5px;font-size:11px}.flow-connect{align-items:stretch;flex-direction:column}.flow-connect button{align-self:flex-start}.flow-lifecycle{flex-wrap:wrap}}

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f2e9">
+  <title>P-1B · 玩家正常流程原型</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="flow.css">
+  <script src="flow.js" defer></script>
+</head>
+<body class="flow-page">
+  <div class="flow-demo" aria-label="原型演示控制">
+    <div class="flow-demo__inner">
+      <span><span class="prototype-dot" aria-hidden="true"></span>P-1B 正常流程 <small>仅模拟数据</small></span>
+      <div class="flow-demo__actions">
+        <a href="index.html">查看 P-1A 定稿</a>
+        <button id="simulate-next" type="button" disabled>模拟节点继续</button>
+        <button id="reset-demo" type="button">重置原型</button>
+      </div>
+    </div>
+  </div>
+
+  <header class="site-header">
+    <div class="site-header__inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Dota 2 <strong>游廊联机</strong></span></div>
+      <div class="identity"><span class="identity__avatar">L</span><span>匿名玩家 <strong>林间旅人</strong></span></div>
+    </div>
+  </header>
+
+  <main class="concept-a">
+    <div class="global-notice" role="note">
+      <span class="notice-icon" aria-hidden="true">!</span>
+      <p><strong>全站维护预告</strong><span>今晚 22:00 将暂停新申请。当前仍可正常申请；已有房间不受影响。</span></p>
+      <span class="notice-meta">平台公告</span>
+    </div>
+
+    <header class="a-intro a-intro--compact"><h1 id="page-title">申请服务器</h1></header>
+
+    <div id="application-view" class="a-layout">
+      <div class="a-primary">
+        <section class="panel game-panel" aria-labelledby="game-title">
+          <div class="section-heading"><div><span class="step">01 / 选择内容</span><h2 id="game-title">全部地图</h2></div></div>
+          <div class="game-grid">
+            <label class="game-card game-card--selected"><input type="radio" name="game" value="star-tide" checked><span class="game-art" aria-hidden="true"><span>01</span><b>✦</b></span><span class="game-card__text"><strong>星潮远征</strong><small>协作 · 探索 · 守点</small></span><span class="selected-pill">已选择</span></label>
+            <div class="game-card game-card--paused" aria-disabled="true"><span class="game-art game-art--two" aria-hidden="true"><span>02</span><b>◇</b></span><span class="game-card__text"><strong>遗迹守卫</strong><small>内容更新中，暂不可申请</small></span><span class="paused-pill">维护中</span></div>
+          </div>
+          <p class="content-note"><span aria-hidden="true">●</span> 内容维护：遗迹守卫正在更新，星潮远征不受影响。</p>
+        </section>
+
+        <section class="panel preset-panel" aria-labelledby="preset-title">
+          <div class="section-heading"><div><span class="step">02 / 选择玩法</span><h2 id="preset-title">游戏模式</h2></div></div>
+          <div class="preset-grid">
+            <label class="preset-card"><input type="radio" name="preset" value="N6" checked><span class="preset-card__top"><strong>N6</strong><span class="radio-indicator"></span></span><span>平衡挑战</span><small>最多 4 人</small></label>
+            <label class="preset-card"><input type="radio" name="preset" value="N7"><span class="preset-card__top"><strong>N7</strong><span class="radio-indicator"></span></span><span>进阶挑战</span><small>最多 4 人</small></label>
+            <label class="preset-card"><input type="radio" name="preset" value="Solo"><span class="preset-card__top"><strong>Solo</strong><span class="radio-indicator"></span></span><span>单人练习</span><small>仅限 1 人</small></label>
+          </div>
+        </section>
+      </div>
+
+      <aside class="a-sidebar" aria-label="申请摘要">
+        <section class="panel party-panel"><span class="step">当前队伍</span><div class="party-line"><span class="party-avatar">L</span><div><strong>仅自己</strong><small>单人申请</small></div><span class="party-count">1 人</span></div></section>
+        <section class="panel request-panel" aria-labelledby="node-title">
+          <span class="step">03 / 申请服务器</span><h2 id="node-title">节点选择</h2>
+          <p class="request-panel__desc">默认自动选择可用节点。节点容量和内容状态会在申请时确认。</p>
+          <div class="auto-choice"><span class="auto-choice__icon" aria-hidden="true">↗</span><span><strong id="node-choice-title">自动选择节点</strong><small id="node-choice-subtitle">当前默认 · 优先可用资源</small></span><span id="auto-check" class="choice-check" aria-hidden="true">✓</span></div>
+          <details class="manual-disclosure"><summary>高级选项：手动指定节点 <span aria-hidden="true">⌄</span></summary><p>手动指定后只等待该节点，不会自动切换到其他节点。</p>
+            <div class="node-list">
+              <label><input type="radio" name="node" value="qinglan"><span class="node-state available"></span><span>青岚一号 <small>可用 · 2 / 4 空位 · 28 ms</small></span></label>
+              <label><input type="radio" name="node" value="songying"><span class="node-state tight"></span><span>松影二号 <small>容量紧张 · 1 / 4 空位 · 35 ms</small></span></label>
+              <div class="node-disabled"><span class="node-state maintenance"></span><span>云阶三号 <small>维护 · 暂不接新申请</small></span></div>
+              <div class="node-disabled"><span class="node-state offline"></span><span>溪谷四号 <small>离线 · 暂不接新申请</small></span></div>
+            </div>
+            <button id="auto-reset" class="auto-reset" type="button">恢复自动选择</button>
+          </details>
+          <button id="apply-button" type="button" class="primary-button">申请服务器 <span aria-hidden="true">↗</span></button>
+          <p class="cta-footnote">已有活动申请时，会优先显示当前状态。</p>
+        </section>
+      </aside>
+    </div>
+
+    <div id="request-view" class="flow-request" hidden>
+      <section class="panel flow-status" aria-labelledby="status-title">
+        <div class="flow-status__top"><span class="step">当前申请</span><span id="status-pill" class="flow-status__pill"></span></div>
+        <h2 id="status-title"></h2>
+        <p id="status-description" class="flow-status__description"></p>
+        <div class="flow-facts" aria-label="申请内容">
+          <div><span>地图</span><strong>星潮远征</strong></div>
+          <div><span>模式</span><strong id="fact-preset">N6</strong></div>
+          <div><span>队伍</span><strong>仅自己</strong></div>
+          <div><span>节点</span><strong id="fact-node">自动选择节点</strong></div>
+        </div>
+        <ol class="flow-progress" aria-label="开服进度">
+          <li data-progress="waiting"><span>01</span>等待资源</li>
+          <li data-progress="creating"><span>02</span>分配并启动</li>
+          <li data-progress="ready"><span>03</span>可以进入</li>
+        </ol>
+        <div id="waiting-actions" class="flow-actions" hidden><button id="cancel-button" type="button" class="flow-secondary">取消等待申请</button><span>仅等待中、尚未分配节点时可取消。</span></div>
+        <p id="creating-note" class="flow-inline-note" hidden>服务器正在启动。即使连接地址已分配，也要等服务器就绪后才能进入。</p>
+        <p id="stopping-note" class="flow-inline-note" hidden>正在结束服务器并回收资源。回收完成前不会释放容量。</p>
+        <div id="terminal-actions" class="flow-actions" hidden><button id="start-over" type="button" class="flow-secondary">重新选择并申请</button></div>
+      </section>
+
+      <aside id="join-panel" class="panel flow-join" aria-labelledby="join-title" hidden>
+        <span class="step">服务器已就绪</span><h2 id="join-title">进入游戏</h2>
+        <p>节点已确认就绪，连接信息也已生成。请选择可用入口。</p>
+        <div class="flow-join__buttons">
+          <button id="steam-entry" type="button" class="primary-button">通过 Steam 一键进入 <span aria-hidden="true">↗</span></button>
+          <div class="flow-entry-unavailable">蒸汽平台一键进入 <small>当前节点尚未完成真人验证，暂不开放</small></div>
+        </div>
+        <p class="flow-protocol-note">一键入口如未响应：先启动 Steam 再试；Windows 可复制入口链接用 Win+R 打开；仍无法进入时请使用下方手动连接。<button id="copy-steam-link" type="button" class="flow-inline-button">复制 Steam 入口链接</button></p>
+        <div class="flow-connect"><div><span>手动连接 · 永久兜底</span><code id="connect-command">connect demo-node.example:45123</code></div><button id="copy-connect" type="button">复制命令</button></div>
+        <details class="flow-help"><summary>如何使用 / 如何打开控制台 <span aria-hidden="true">⌄</span></summary>
+          <ol><li>在 Dota 2 客户端设置中启用开发者控制台，并确认打开控制台的按键绑定。</li><li>进入游戏后按所绑定的按键打开控制台。</li><li>粘贴上方复制的 <code>connect</code> 命令，按回车执行。</li></ol>
+          <p>一键入口失败时，使用这条命令。具体设置路径和默认键位需在真实 Dota 2 客户端复核后定稿。</p>
+        </details>
+        <div class="flow-lifecycle"><button id="next-game" type="button" class="flow-secondary">下一局</button><button id="end-server" type="button" class="flow-secondary flow-secondary--danger">结束服务器</button></div>
+      </aside>
+    </div>
+    <p id="prototype-toast" class="flow-toast" role="status" aria-live="polite"></p>
+  </main>
+
+  <footer class="site-footer"><span>Dota 2 Arcade Platform</span><span>P-1B · 玩家正常流程 · 模拟数据</span></footer>
+</body>
+</html>
