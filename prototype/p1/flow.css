@@ -53,7 +53,7 @@
 .flow-help li+li{margin-top:6px}
 .flow-lifecycle{display:flex;gap:9px;margin-top:20px}
 .flow-next-explainer{font-size:13px;line-height:1.65;color:var(--muted);margin:10px 0 0}
-.flow-toast{min-height:20px;margin:14px 0 0;color:var(--ink-soft);font-size:12px;line-height:1.5}
+.flow-toast{position:fixed;z-index:20;width:max-content;max-width:calc(100vw - 24px);margin:0;padding:11px 14px;border:1px solid #cbdccf;border-left:4px solid #6d9f78;border-radius:12px;background:var(--white);box-shadow:0 14px 34px rgba(20,55,43,.18);color:var(--ink);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 @media(min-width:1600px){.flow-demo__inner{max-width:1400px}}
 @media(max-width:900px){.flow-request{grid-template-columns:minmax(0,1.35fr) minmax(265px,1fr)}.flow-facts{grid-template-columns:1fr}.flow-progress{grid-template-columns:1fr}.flow-status,.flow-join{padding:23px}}
 @media(max-width:700px){.flow-demo__inner{padding:10px 17px;align-items:flex-start;flex-direction:column;gap:9px}.flow-demo__actions{width:100%;flex-wrap:wrap}.flow-request{grid-template-columns:1fr;gap:12px}.flow-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.flow-progress{grid-template-columns:repeat(3,1fr)}.flow-status,.flow-join{padding:22px}.flow-status h2,.flow-join h2{font-size:28px}.flow-status__description{font-size:13px}}

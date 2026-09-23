@@ -2,6 +2,7 @@
   const $ = (selector) => document.querySelector(selector);
   const state = { stage: 'idle', preset: 'N6', node: null, assignedNode: null, nextGameIntent: false };
   const nodeNames = { qinglan: '青岚一号', songying: '松影二号' };
+  let noticeTimer;
   const stageCopy = {
     waiting: ['等待服务器资源', '申请已提交；有可用资源时会开始启动。', '等待中'],
     creating: ['正在启动服务器', '', '启动中'],
@@ -19,9 +20,23 @@
     return state.assignedNode ? nodeNames[state.assignedNode] : nodeChoiceLabel();
   }
 
-  function notify(message) {
-    $('#prototype-toast').textContent = message;
-    $('#prototype-toast').hidden = !message;
+  function notify(message, trigger) {
+    const toast = $('#prototype-toast');
+    clearTimeout(noticeTimer);
+    toast.textContent = message;
+    toast.hidden = !message;
+    if (!message) return;
+
+    const anchor = trigger.getBoundingClientRect();
+    const gap = 10;
+    const width = toast.offsetWidth;
+    const height = toast.offsetHeight;
+    const left = Math.max(12, Math.min(window.innerWidth - width - 12, anchor.left + (anchor.width - width) / 2));
+    const below = anchor.bottom + gap;
+    const top = below + height <= window.innerHeight - 12 ? below : Math.max(12, anchor.top - height - gap);
+    toast.style.left = `${left}px`;
+    toast.style.top = `${top}px`;
+    noticeTimer = window.setTimeout(() => { toast.hidden = true; }, 4000);
   }
 
   function render() {
@@ -116,14 +131,14 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
       await navigator.clipboard.writeText(command);
-      notify('已复制手动连接命令。演示地址不可用于真实进房。');
+      notify('已复制 connect 示例命令；演示地址无法真实进房。', $('#copy-connect'));
     } catch {
       const selection = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents($('#connect-command'));
       selection.removeAllRanges();
       selection.addRange(range);
-      notify('浏览器未允许自动复制；命令已选中，可手动复制。');
+      notify('未能自动复制；命令已选中，可手动复制。', $('#copy-connect'));
     }
   }
 
@@ -132,10 +147,10 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
       await navigator.clipboard.writeText(uri);
-      notify('已复制 Steam 入口示例链接；该地址不可用于真实进房。');
+      notify('已复制 Steam 示例链接；演示地址无法真实进房。', $('#copy-steam-link'));
     } catch {
       window.prompt('复制 Steam 入口示例链接（地址不可用于真实进房）', uri);
-      notify('请从弹出的文本框复制示例链接。');
+      notify('请从弹出的文本框复制示例链接。', $('#copy-steam-link'));
     }
   }
 
@@ -144,14 +159,14 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
       await navigator.clipboard.writeText(option);
-      notify('已复制启动选项。');
+      notify('已复制启动选项 -console。', $('#copy-console-option'));
     } catch {
       const selection = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents($('#console-option'));
       selection.removeAllRanges();
       selection.addRange(range);
-      notify('浏览器未允许自动复制；启动选项已选中，可手动复制。');
+      notify('未能自动复制；启动选项已选中，可手动复制。', $('#copy-console-option'));
     }
   }
 
@@ -198,7 +213,7 @@
     render();
   });
   $('#steam-entry').addEventListener('click', () => {
-    if (state.stage === 'ready') notify('原型演示：此入口代表已验证且已启用的 Steam 链接，不会启动客户端。');
+    if (state.stage === 'ready') notify('原型演示：不会启动 Steam 客户端。', $('#steam-entry'));
   });
   $('#copy-connect').addEventListener('click', copyCommand);
   $('#copy-steam-link').addEventListener('click', copySteamLink);
