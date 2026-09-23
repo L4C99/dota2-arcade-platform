@@ -96,28 +96,25 @@
           <li data-progress="ready"><span>03</span>可以进入</li>
         </ol>
         <div id="waiting-actions" class="flow-actions" hidden><button id="cancel-button" type="button" class="flow-secondary">取消等待申请</button><span>仅等待中、尚未分配节点时可取消。</span></div>
-        <p id="creating-note" class="flow-inline-note" hidden>服务器正在启动。即使连接地址已分配，也要等服务器就绪后才能进入。</p>
-        <p id="stopping-note" class="flow-inline-note" hidden>正在结束服务器并回收资源。回收完成前不会释放容量。</p>
         <div id="terminal-actions" class="flow-actions" hidden><button id="start-over" type="button" class="flow-secondary">重新选择并申请</button></div>
       </section>
 
       <aside id="join-panel" class="panel flow-join" aria-labelledby="join-title" hidden>
         <span class="step">服务器已就绪</span><h2 id="join-title">进入游戏</h2>
-        <p>节点已确认就绪，连接信息也已生成。请选择可用入口。</p>
         <div class="flow-join__buttons">
           <button id="steam-entry" type="button" class="primary-button">通过 Steam 一键进入 <span aria-hidden="true">↗</span></button>
           <div class="flow-entry-unavailable">蒸汽平台一键进入 <small>当前节点尚未完成真人验证，暂不开放</small></div>
         </div>
         <p class="flow-protocol-note">一键入口如未响应：先启动 Steam 再试；Windows 可复制入口链接用 Win+R 打开；仍无法进入时请使用下方手动连接。<button id="copy-steam-link" type="button" class="flow-inline-button">复制 Steam 入口链接</button></p>
-        <div class="flow-connect"><div><span>手动连接 · 永久兜底</span><code id="connect-command">connect demo-node.example:45123</code></div><button id="copy-connect" type="button">复制命令</button></div>
+        <div class="flow-connect"><div><span>手动连接</span><code id="connect-command">connect demo-node.example:45123</code></div><button id="copy-connect" type="button">复制命令</button></div>
         <details class="flow-help"><summary>如何使用 / 如何打开控制台 <span aria-hidden="true">⌄</span></summary>
-          <ol><li>在 Dota 2 客户端设置中启用开发者控制台，并确认打开控制台的按键绑定。</li><li>进入游戏后按所绑定的按键打开控制台。</li><li>粘贴上方复制的 <code>connect</code> 命令，按回车执行。</li></ol>
-          <p>一键入口失败时，使用这条命令。具体设置路径和默认键位需在真实 Dota 2 客户端复核后定稿。</p>
+          <ol><li>在 Steam 库中打开 Dota 2「属性 → 启动选项」，填入 <code id="console-option">-console</code>。<button id="copy-console-option" type="button" class="flow-inline-button">复制启动项</button></li><li>重启 Dota 2，按 <kbd>\</kbd> 打开控制台；若无反应，请在游戏按键设置中确认或绑定控制台按键。</li><li>粘贴上方复制的 <code>connect</code> 命令，按回车执行。</li></ol>
         </details>
-        <div class="flow-lifecycle"><button id="next-game" type="button" class="flow-secondary">下一局</button><button id="end-server" type="button" class="flow-secondary flow-secondary--danger">结束服务器</button></div>
+        <div class="flow-lifecycle"><button id="next-game" type="button" class="flow-secondary">下一局 · 沿用当前选项</button><button id="end-server" type="button" class="flow-secondary flow-secondary--danger">结束服务器</button></div>
+        <p class="flow-next-explainer">先完整回收，再按当前地图、模式和节点选择重新排队；手动指定时仍等待原节点。</p>
       </aside>
     </div>
-    <p id="prototype-toast" class="flow-toast" role="status" aria-live="polite"></p>
+    <p id="prototype-toast" class="flow-toast" role="status" aria-live="polite" hidden></p>
   </main>
 
   <footer class="site-footer"><span>Dota 2 Arcade Platform</span><span>P-1B · 玩家正常流程 · 模拟数据</span></footer>
