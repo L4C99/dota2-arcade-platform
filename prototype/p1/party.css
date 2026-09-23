@@ -43,6 +43,7 @@
 .party-request .party-lead{margin-bottom:0}
 .party-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;border-top:1px solid var(--line);margin-top:22px}
 .party-facts>div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:13px 0;font-size:13px}
+.party-facts>div:last-child:nth-child(odd){grid-column:1/-1}
 .party-facts span{color:var(--muted)}
 .party-facts strong{text-align:right;overflow-wrap:anywhere}
 .party-alert{border:1px solid #cbdcca;border-radius:14px;background:#f2f7f0;padding:15px;margin-top:21px}

@@ -58,14 +58,14 @@
 
         <section id="invited-panel" class="panel party-main" hidden>
           <span class="step">队伍邀请</span>
-          <h2>林间小队邀请你加入</h2>
-          <p class="party-lead">队长：山海同游 · 当前 1 人。加入后，队伍的开服申请由队长提交。</p>
+          <h2>山海同游邀请你加入队伍</h2>
+          <p class="party-lead">目前队伍有 1 人。加入后，只有队长可以申请服务器、结束服务器或开始下一局。</p>
           <div class="party-action-row"><button id="accept-invite" type="button" class="primary-button">加入队伍 <span aria-hidden="true">↗</span></button><button id="decline-invite" type="button" class="party-secondary">暂不加入</button></div>
           <p class="party-small">演示邀请，不会加入真实队伍。</p>
         </section>
 
         <section id="team-panel" class="panel party-main" aria-labelledby="team-title" hidden>
-          <div class="party-heading"><div><span class="step">当前队伍</span><h2 id="team-title">林间小队</h2></div><span id="team-count" class="party-count"></span></div>
+          <div class="party-heading"><div><span class="step">当前队伍</span><h2 id="team-title">当前成员</h2></div><span id="team-count" class="party-count"></span></div>
           <p class="party-lead">队伍会保留；结束一局服务器不会解散队伍。</p>
           <div id="member-list" class="party-members" aria-label="队伍成员"></div>
           <div class="party-manage"><button id="leave-party" type="button" class="party-secondary" hidden>退出队伍</button><button id="disband-party" type="button" class="party-secondary party-secondary--warm" hidden>解散队伍</button><span id="manage-note"></span></div>
@@ -88,19 +88,18 @@
           <div id="request-facts" class="party-facts" hidden>
             <div><span>地图</span><strong>星潮远征</strong></div>
             <div><span>模式</span><strong>N6</strong></div>
-            <div><span>队伍</span><strong>林间小队</strong></div>
             <div><span>节点</span><strong>青岚一号</strong></div>
           </div>
-          <div id="unknown-note" class="party-alert" hidden><strong>正在核对状态</strong><p>节点任务结果尚未确认。当前资源继续占用；此时不能重新创建或改派服务器。</p></div>
-          <div id="quarantine-note" class="party-alert party-alert--warm" hidden><strong>旧服务器可能仍在运行</strong><p>平台不会释放原节点容量，也不会将它当作已经停止。管理员随后继续处理旧资源。</p></div>
+          <div id="unknown-note" class="party-alert" hidden><strong>正在核对状态</strong><p>为避免同时开出两台服务器，现在不能再次申请。当前占用的节点名额也不会提前释放。</p></div>
+          <div id="quarantine-note" class="party-alert party-alert--warm" hidden><strong>旧服务器可能仍在运行</strong><p>它继续占用青岚一号的名额，管理员会继续处理。</p></div>
           <button id="abandon-button" type="button" class="party-danger" hidden>放弃此异常服务器并继续</button>
           <p id="request-footnote" class="party-small"></p>
         </section>
 
         <section id="legacy-panel" class="panel party-legacy" hidden>
-          <span class="step">保留的异常记录</span>
-          <h2>旧资源仍待处理</h2>
-          <p>旧申请与资源分配记录保留，青岚一号的容量仍被占用。管理员确认完整回收后，才会释放容量。</p>
+          <span class="step">旧服务器</span>
+          <h2>仍在处理</h2>
+          <p>旧服务器可能仍在运行，青岚一号的名额也仍被占用。管理员确认它已关闭并清理完成后，才会释放名额。</p>
         </section>
       </aside>
     </div>
@@ -109,8 +108,8 @@
 
   <dialog id="abandon-dialog" class="party-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description">
     <span class="step">请确认</span>
-    <h2 id="dialog-title">放弃此异常服务器并继续？</h2>
-    <p id="dialog-description">这只会解除当前队伍的申请阻塞。旧服务器可能仍在运行，原节点容量仍被占用，并由管理员继续处理。</p>
+    <h2 id="dialog-title">确定放弃这台异常服务器？</h2>
+    <p id="dialog-description"></p>
     <div class="party-dialog__actions"><button id="close-dialog" type="button" class="party-secondary">返回</button><button id="confirm-abandon" type="button" class="party-danger">确认放弃并继续</button></div>
   </dialog>
 

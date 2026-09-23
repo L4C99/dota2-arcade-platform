@@ -57,7 +57,7 @@
       button.addEventListener('click', () => {
         onRemove();
         render();
-        notify(`${name}已从演示队伍移除。`);
+        notify(`已移除${name}。`);
       });
       row.append(button);
     }
@@ -81,7 +81,7 @@
     $('#disband-party').hidden = !captain;
     $('#disband-party').disabled = state.request !== 'none' && state.request !== 'freed';
     $('#manage-note').textContent = captain
-      ? ($('#disband-party').disabled ? '有阻塞中的活动申请时，队长不能解散队伍。' : '没有阻塞中的申请，可以解散队伍。')
+      ? ($('#disband-party').disabled ? '服务器申请尚未结束，队长暂时不能解散队伍。' : '可以解散队伍。')
       : '队员可随时退出；退出不会停止队伍已有服务器。';
     $('#invite-link').textContent = `https://example.invalid/join/DEMO-P1C-${state.inviteVersion}`;
     $('#add-demo-member').disabled = members.length >= 4;
@@ -94,13 +94,13 @@
       none: captain
         ? ['可以申请服务器', '队长选择地图、模式和节点后，为当前队伍提交申请。', '可申请', '正常申请流程见 P-1B 演示。']
         : role === 'member'
-          ? ['等待队长申请', '队伍的开服申请由队长提交；队员可以查看申请状态。', '未申请', '队员不能替队长申请或结束服务器。']
+          ? ['等待队长申请', '只有队长可以为队伍申请服务器；队员可以查看申请状态。', '未申请', '队员不能替队长申请或结束服务器。']
           : ['暂无活动申请', '当前没有队伍申请；未入队时仍可提交单人申请。', '未申请', '单人申请流程见 P-1B 演示。'],
-      unknown: ['状态暂时无法确认', '节点任务响应中断，平台正在对账。', '核对中', '当前申请仍占用资源，不能通过重新申请绕过对账。'],
-      quarantined: ['服务器清理异常', '自动流程无法确认旧服务器已完整回收。', '异常隔离', captain
-        ? (nextIntent ? '下一局已暂停；确认放弃后才会创建新的申请。' : '放弃后可重新选择并提交新申请。')
+      unknown: ['状态暂时无法确认', '节点没有给出确定结果，平台正在核对。', '核对中', '请等待核对结果。'],
+      quarantined: ['服务器清理异常', '平台暂时无法确认旧服务器已关闭并清理完成。', '待处理', captain
+        ? (nextIntent ? '下一局已暂停；确认放弃后才会按上局选项重新排队。' : '放弃后可重新选择并申请新服务器。')
         : '请队长决定是否放弃此异常服务器。'],
-      freed: ['可以重新申请', '旧申请已解除对队伍的阻塞。请重新选择地图、模式和节点，提交新的申请。', '可继续', '旧资源仍由管理员处理，未释放节点容量。'],
+      freed: ['可以重新申请', '现在可以重新选择地图、模式和节点，申请一台新服务器。', '可继续', ''],
       'waiting-new': ['新申请等待资源', '已沿用上局地图、模式和自动节点方式重新排队；这是新的申请。', '等待中', '新申请不继承原来的排队位置。']
     }[request];
     $('#request-title').textContent = view[0];
@@ -154,7 +154,12 @@
       notify('复制未成功，请手动选择演示链接。');
     }
   });
-  $('#abandon-button').addEventListener('click', () => $('#abandon-dialog').showModal());
+  $('#abandon-button').addEventListener('click', () => {
+    $('#dialog-description').textContent = state.nextIntent
+      ? '确认后，平台会按上局选项自动提交新申请。这个操作不会关闭旧服务器；它可能仍在运行，并继续占用青岚一号的名额，直到管理员处理完成。'
+      : '确认后，你可以重新选地图和模式，申请新服务器。这个操作不会关闭旧服务器；它可能仍在运行，并继续占用青岚一号的名额，直到管理员处理完成。';
+    $('#abandon-dialog').showModal();
+  });
   $('#close-dialog').addEventListener('click', () => $('#abandon-dialog').close());
   $('#confirm-abandon').addEventListener('click', () => {
     if (state.role !== 'captain' || state.request !== 'quarantined') return;
@@ -162,7 +167,7 @@
     state.request = state.nextIntent ? 'waiting-new' : 'freed';
     $('#abandon-dialog').close();
     render();
-    notify(state.nextIntent ? '旧申请已解除阻塞；下一局的新申请已进入等待。' : '旧申请已解除阻塞；可以重新申请。');
+    notify(state.nextIntent ? '已为下一局重新排队；旧服务器仍待处理。' : '可以重新申请服务器；旧服务器仍待处理。');
   });
 
   render();
