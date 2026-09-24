@@ -59,7 +59,7 @@
     $('#publish-version').disabled = !canPublish;
     $('#publish-gate').dataset.ready = String(canPublish || state.published === 'v3');
     $('#publish-gate').textContent = state.published === 'v3'
-      ? '已启用 v3。后续分配只会使用准备好 v3 的节点。'
+      ? 'v3 已启用。之后分配服务器时，只会选择已准备好 v3 的节点。'
       : canPublish
         ? '青岚一号已准备并验证好 v3，可以切换。'
         : '暂不能切换：请先在可用节点上准备并测试 v3。';
