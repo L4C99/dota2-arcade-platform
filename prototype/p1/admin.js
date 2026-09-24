@@ -59,7 +59,7 @@
     $('#publish-version').disabled = !canPublish;
     $('#publish-gate').dataset.ready = String(canPublish || state.published === 'v3');
     $('#publish-gate').textContent = state.published === 'v3'
-      ? '已切换到 v3。新服务器只会分配给准备好 v3 的节点。'
+      ? '已启用 v3。后续分配只会使用准备好 v3 的节点。'
       : canPublish
         ? '青岚一号已准备并验证好 v3，可以切换。'
         : '暂不能切换：请先在可用节点上准备并测试 v3。';
@@ -138,8 +138,8 @@
   });
   $('#publish-version').addEventListener('click', () => {
     if (state.published === 'v3' || state.reported !== 'v3' || !state.versionVerified || !state.bindingAccept || !state.nodeAccept || state.drain || state.desired === 0) return;
-    ask('让新服务器使用 v3？', '新开的服务器改用 v3；已开的服务器不变。未准备好 v3 的节点暂不接收这张地图的新服务器。', () => {
-      state.published = 'v3'; render(); notify('已切换：这张地图的新服务器使用 v3（模拟）。');
+    ask('让后续分配的服务器使用 v3？', '此后分配到节点的服务器使用 v3；已分配到节点的服务器仍使用原版本。未准备好 v3 的节点暂不接收这张地图的后续分配。', () => {
+      state.published = 'v3'; render(); notify('已启用 v3，后续分配的服务器将使用此版本（模拟）。');
     });
   });
   $('#save-node').addEventListener('click', () => {

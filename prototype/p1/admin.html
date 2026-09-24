@@ -34,7 +34,7 @@
       <div class="admin-section__heading"><span class="step">02 / 内容</span><h2 id="content-title">地图、玩法与版本</h2></div>
       <div class="admin-grid">
         <section class="panel admin-card"><span class="step">游廊游戏</span><h3>星潮远征</h3><p>下架后玩家不能再选这张地图；暂停接受新申请时，地图仍会显示。正在启动或运行的服务器不会因此停止。</p><div class="admin-control"><label class="admin-check"><input id="game-enabled" type="checkbox" checked>上架这张地图</label><small>下架后，选图列表不再显示；还在排队的申请也会结束。</small></div><div class="admin-control"><label class="admin-check"><input id="game-accept" type="checkbox" checked>允许申请这张地图</label><small>关闭后地图仍可见；排队中的申请会暂停，恢复后继续等待。</small></div><label class="admin-field">这张地图暂不可申请时的提示<textarea id="game-message" rows="2" placeholder="例如：地图更新中，暂不可申请"></textarea></label><button id="save-game" class="admin-secondary" type="button">保存地图设置</button></section>
-        <section class="panel admin-card"><span class="step">内容版本</span><h3>新服务器使用的地图版本</h3><div class="admin-version"><span>当前版本</span><strong id="published-version">v2</strong></div><div id="candidate-version-row" class="admin-version"><span>准备切换到</span><strong>v3</strong></div><p>新开的服务器会使用当前版本。</p><div id="publish-gate" class="admin-callout"></div><button id="publish-version" class="admin-secondary" type="button">让新服务器使用 v3</button><p class="admin-hint">已开的服务器不会自动升级。</p></section>
+        <section class="panel admin-card"><span class="step">内容版本</span><h3>服务器分配时使用的地图版本</h3><div class="admin-version"><span>当前启用版本</span><strong id="published-version">v2</strong></div><div id="candidate-version-row" class="admin-version"><span>待启用版本</span><strong>v3</strong></div><p>服务器分配到节点时，使用当时启用的版本。</p><div id="publish-gate" class="admin-callout"></div><button id="publish-version" class="admin-secondary" type="button">让后续分配的服务器使用 v3</button><p class="admin-hint">已分配到节点的服务器不会切换版本。</p></section>
         <section class="panel admin-card admin-card--wide"><span class="step">玩法预设</span><h3>N6</h3><p>N6 可以单独下架，也可以暂停接受新申请，不影响 N7 和 Solo。</p><div class="admin-control"><label class="admin-check"><input id="preset-enabled" type="checkbox" checked>上架 N6</label><small>下架后 N6 不再可选；还在排队的 N6 申请也会结束。</small></div><div class="admin-control"><label class="admin-check"><input id="preset-accept" type="checkbox" checked>允许申请 N6</label><small>关闭后 N6 仍可见；排队中的 N6 申请会暂停，恢复后继续等待。</small></div><label class="admin-field">N6 暂不可申请时的提示<input id="preset-message" placeholder="例如：玩法维护中"></label><button id="save-preset" class="admin-secondary" type="button">保存 N6 设置</button><div class="admin-preset"><strong>N7</strong><span>可选 · 可申请（演示）</span></div><div class="admin-preset"><strong>Solo</strong><span>可选 · 可申请（演示）</span></div></section>
       </div>
     </section>
@@ -45,21 +45,21 @@
         <section class="panel admin-card">
           <div class="admin-card__top"><div><span class="step">节点调度 · 可编辑</span><h3>青岚一号</h3></div><span id="node-a-state" class="admin-pill"></span></div>
           <div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong>Windows · 刚刚</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>容量占用</span><strong id="node-a-capacity">0 / 3 使用 · 硬上限 4</strong></div></div>
-          <div class="admin-control"><label class="admin-check"><input id="node-a-accept" type="checkbox" checked>允许向此节点分配新服务器</label><small>关闭后，此节点不再接收新分配；已有服务器继续运行。</small></div>
-          <div class="admin-control"><label class="admin-check"><input id="node-a-drain" type="checkbox">进入整节点维护</label><small>维护期间停止向整台节点分配新服务器，可在此取消维护；已有服务器不会自动停止。</small></div>
+          <div class="admin-control"><label class="admin-check"><input id="node-a-accept" type="checkbox" checked>允许向此节点分配服务器</label><small>关闭后，此节点不再接收后续分配；已分配的服务器不会因此停止。</small></div>
+          <div class="admin-control"><label class="admin-check"><input id="node-a-drain" type="checkbox">进入整节点维护</label><small>维护期间不再向此节点分配服务器，可在此取消维护；已分配的服务器不会因此停止。</small></div>
           <div class="admin-inline"><label>调度优先级<input id="node-a-priority" type="number" min="1" value="10"></label><label>最多同时占用的名额<input id="node-a-desired" type="number" min="0" max="4" value="3"></label></div>
           <p class="admin-hint">实际可用名额还受节点上报的硬上限（4）约束；设为 0 可暂停新分配。</p>
           <button id="save-node" class="admin-secondary" type="button">保存青岚一号的调度设置</button>
         </section>
         <section class="panel admin-card">
           <div class="admin-card__top"><div><span class="step">节点状态 · 只读</span><h3>松影二号</h3></div><span id="node-b-state" class="admin-pill admin-pill--warm">心跳延迟</span></div>
-          <div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong id="node-b-heartbeat">Linux · 2 分钟前</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>上次确认的内容版本</span><strong>星潮远征 v2</strong></div><div><span>容量占用</span><strong id="node-b-capacity">3 / 3 使用 · 硬上限 4 · 含异常资源</strong></div><div><span>新服务器分配</span><strong id="node-b-new-allocation">暂停：心跳延迟</strong></div></div>
-          <p class="admin-hint">心跳延迟时，页面只能显示上次上报的状态；平台不会把新服务器分配给此节点。</p>
+          <div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong id="node-b-heartbeat">Linux · 2 分钟前</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>上次确认的内容版本</span><strong>星潮远征 v2</strong></div><div><span>容量占用</span><strong id="node-b-capacity">3 / 3 使用 · 硬上限 4 · 含异常资源</strong></div><div><span>后续分配</span><strong id="node-b-new-allocation">暂停：心跳延迟</strong></div></div>
+          <p class="admin-hint">心跳延迟时，页面只能显示上次上报的状态；平台不会再向此节点分配服务器。</p>
         </section>
         <section class="panel admin-card">
           <span class="step">青岚一号 × 星潮远征</span><h3>此地图在该节点的新分配</h3>
           <div class="admin-metrics"><div><span>节点上报的内容版本</span><strong id="binding-version">v2 · 已确认</strong></div><div><span>上报时间</span><strong id="binding-time">2 分钟前 · Controller 上报</strong></div></div>
-          <div class="admin-control"><label class="admin-check"><input id="binding-accept" type="checkbox" checked>允许此节点接收星潮远征的新服务器</label><small>仅暂停这台节点上这张地图的新分配。不会修改节点内容，也不会停止已有服务器。</small></div>
+          <div class="admin-control"><label class="admin-check"><input id="binding-accept" type="checkbox" checked>允许向此节点分配星潮远征服务器</label><small>仅暂停这台节点上这张地图的后续分配。不会修改节点内容，也不会停止已分配的服务器。</small></div>
         </section>
         <section class="panel admin-card">
           <div class="admin-card__top"><div><span class="step">节点状态 · 只读</span><h3>溪谷四号</h3></div><span class="admin-pill admin-pill--warm">离线</span></div>
