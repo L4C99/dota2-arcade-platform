@@ -10,6 +10,22 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+*.db
+*.sqlite*
+*.dump
+*.bak
+*.vpk
+*.dmp
+data/
+dist/
+.cache/
+.local-appdata/
+
+# Local binaries
+/platform-server
+/platform-server.exe
+/node-controller
+/node-controller.exe
 
 # Temporary preview output
 prototype/p1/screenshots/
