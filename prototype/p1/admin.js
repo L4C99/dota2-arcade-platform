@@ -3,7 +3,7 @@
   const state = {
     loggedIn: false, tab: 'overview', globalAccept: true, maintenanceMessage: '今晚 22:00 起暂停申请服务器。', noticeEnabled: true, noticeLevel: 'warning',
     gameEnabled: true, gameAccept: true, presetEnabled: true, presetAccept: true,
-    published: 'v2', reported: 'v2', bindingAccept: true, nodeAccept: true, drain: false,
+    published: 'v2', reported: 'v2', versionVerified: false, bindingAccept: true, nodeAccept: true, drain: false,
     priority: 10, desired: 3, revision: 7, steamVerified: true, steamEnabled: true,
     chinaVerified: false, chinaEnabled: false, waiting: true, running: 'running', quarantined: true
   };
@@ -53,14 +53,16 @@
     $('#preset-accept').checked = state.presetAccept;
 
     $('#published-version').textContent = state.published;
-    const canPublish = state.published !== 'v3' && state.reported === 'v3' && state.bindingAccept && state.nodeAccept && !state.drain && state.desired > 0;
+    const canPublish = state.published !== 'v3' && state.reported === 'v3' && state.versionVerified && state.bindingAccept && state.nodeAccept && !state.drain && state.desired > 0;
+    $('#candidate-version-row').hidden = state.published === 'v3';
+    $('#publish-version').hidden = state.published === 'v3';
     $('#publish-version').disabled = !canPublish;
-    $('#publish-gate').dataset.ready = String(canPublish);
+    $('#publish-gate').dataset.ready = String(canPublish || state.published === 'v3');
     $('#publish-gate').textContent = state.published === 'v3'
-      ? 'v3 已发布。青岚一号匹配；仍上报 v2 的松影二号不会接收 v3 新实例。'
+      ? '已切换到 v3。新服务器只会分配给准备好 v3 的节点。'
       : canPublish
-        ? '演示条件已具备：青岚一号由 Controller 上报 v3，且内容验证已记录。发布需再次确认。'
-        : '暂不能发布：需要已验证的目标节点由 Controller 上报 v3，并处于可接收新分配的状态。';
+        ? '青岚一号已准备并验证好 v3，可以切换。'
+        : '暂不能切换：请先在可用节点上准备并测试 v3。';
 
     $('#node-a-state').textContent = state.drain ? '整节点维护中' : !state.nodeAccept ? '在线 · 暂停新分配' : state.desired === 0 ? '在线 · 调度名额为 0' : '在线 · 接收新分配';
     $('#node-a-state').classList.toggle('admin-pill--warm', state.drain || !state.nodeAccept || state.desired === 0);
@@ -125,7 +127,7 @@
     state.gameAccept = $('#game-accept').checked;
     if (!state.gameEnabled) state.waiting = false;
     render();
-    notify(state.gameEnabled ? '地图设置已更新（模拟）。' : '地图已下架；尚未分配的对应等待申请已终结（模拟）。');
+    notify(state.gameEnabled ? '地图设置已更新（模拟）。' : '地图已下架；还在排队的申请已结束（模拟）。');
   });
   $('#save-preset').addEventListener('click', () => {
     state.presetEnabled = $('#preset-enabled').checked;
@@ -135,9 +137,9 @@
     notify('N6 玩法设置已更新（模拟）。');
   });
   $('#publish-version').addEventListener('click', () => {
-    if (state.published === 'v3' || state.reported !== 'v3' || !state.bindingAccept || !state.nodeAccept || state.drain || state.desired === 0) return;
-    ask('将 v3 设为新服务器的目标版本？', '只改变下一次新资源分配使用的版本。已创建的服务器保持原版本；仍上报 v2 的节点不能接收 v3 新分配。', () => {
-      state.published = 'v3'; render(); notify('当前发布版本已切换为 v3（模拟）。');
+    if (state.published === 'v3' || state.reported !== 'v3' || !state.versionVerified || !state.bindingAccept || !state.nodeAccept || state.drain || state.desired === 0) return;
+    ask('让新服务器使用 v3？', '新开的服务器改用 v3；已开的服务器不变。未准备好 v3 的节点暂不接收这张地图的新服务器。', () => {
+      state.published = 'v3'; render(); notify('已切换：这张地图的新服务器使用 v3（模拟）。');
     });
   });
   $('#save-node').addEventListener('click', () => {
@@ -168,7 +170,7 @@
     state.running = 'stopping'; render(); notify('已提交停止请求；容量仍被占用（模拟）。');
   }));
   $('#resync-instance').addEventListener('click', () => notify('已请求重新核对；结果未知期间继续占用容量（模拟）。'));
-  $('#demo-report').addEventListener('click', () => { state.reported = 'v3'; render(); notify('模拟 Controller 已读回并上报 v3；管理员没有改写节点事实。'); });
+  $('#demo-report').addEventListener('click', () => { state.reported = 'v3'; state.versionVerified = true; render(); notify('模拟青岚一号上报 v3，并完成内容实测确认。'); });
   $('#demo-network-change').addEventListener('click', () => {
     state.revision += 1;
     state.steamVerified = state.steamEnabled = state.chinaVerified = state.chinaEnabled = false;
