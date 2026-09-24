@@ -41,40 +41,50 @@
 
     <section id="tab-nodes" class="admin-section" aria-labelledby="nodes-title" hidden>
       <div class="admin-section__heading"><span class="step">03 / 节点</span><h2 id="nodes-title">节点与一键入口</h2></div>
-      <div class="admin-grid">
-        <section class="panel admin-card">
-          <div class="admin-card__top"><div><span class="step">节点调度 · 可编辑</span><h3>青岚一号</h3></div><span id="node-a-state" class="admin-pill"></span></div>
-          <div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong>Windows · 刚刚</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>容量占用</span><strong id="node-a-capacity">0 / 3 使用 · 硬上限 4</strong></div></div>
-          <div class="admin-control"><label class="admin-check"><input id="node-a-accept" type="checkbox" checked>允许向此节点分配服务器</label><small>关闭后，此节点不再接收后续分配；已分配的服务器不会因此停止。</small></div>
-          <div class="admin-control"><label class="admin-check"><input id="node-a-drain" type="checkbox">进入整节点维护</label><small>维护期间不再向此节点分配服务器，可在此取消维护；已分配的服务器不会因此停止。</small></div>
-          <div class="admin-inline"><label>调度优先级<input id="node-a-priority" type="number" min="1" value="10"></label><label>最多同时占用的名额<input id="node-a-desired" type="number" min="0" max="4" value="3"></label></div>
-          <p class="admin-hint">实际可用名额还受节点上报的硬上限（4）约束；设为 0 可暂停新分配。</p>
-          <button id="save-node" class="admin-secondary" type="button">保存青岚一号的调度设置</button>
-        </section>
-        <section class="panel admin-card">
-          <div class="admin-card__top"><div><span class="step">节点状态 · 只读</span><h3>松影二号</h3></div><span id="node-b-state" class="admin-pill admin-pill--warm">心跳延迟</span></div>
-          <div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong id="node-b-heartbeat">Linux · 2 分钟前</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>上次确认的内容版本</span><strong>星潮远征 v2</strong></div><div><span>容量占用</span><strong id="node-b-capacity">3 / 3 使用 · 硬上限 4 · 含异常资源</strong></div><div><span>后续分配</span><strong id="node-b-new-allocation">暂停：心跳延迟</strong></div></div>
-          <p class="admin-hint">心跳延迟时，页面只能显示上次上报的状态；平台不会再向此节点分配服务器。</p>
-        </section>
-        <section class="panel admin-card">
-          <span class="step">青岚一号 × 星潮远征</span><h3>此地图在该节点的新分配</h3>
-          <div class="admin-metrics"><div><span>节点上报的内容版本</span><strong id="binding-version">v2 · 已确认</strong></div><div><span>上报时间</span><strong id="binding-time">2 分钟前 · Controller 上报</strong></div></div>
-          <div class="admin-control"><label class="admin-check"><input id="binding-accept" type="checkbox" checked>允许向此节点分配星潮远征服务器</label><small>仅暂停这台节点上这张地图的后续分配。不会修改节点内容，也不会停止已分配的服务器。</small></div>
-        </section>
-        <section class="panel admin-card">
-          <div class="admin-card__top"><div><span class="step">节点状态 · 只读</span><h3>溪谷四号</h3></div><span class="admin-pill admin-pill--warm">离线</span></div>
-          <div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong>Linux · 30 分钟前</strong></div><div><span>内容状态</span><strong>无法确认 · 不接收新分配</strong></div><div><span>最近错误</span><strong>Controller 连接中断</strong></div></div>
-        </section>
-        <section class="panel admin-card admin-card--wide">
-          <span class="step">青岚一号 · 玩家入口</span><h3>一键进入游戏</h3>
-          <p>管理员需先用真实客户端测试当前网络配置下的所有可能公网端口。验证通过后，才可决定是否向玩家显示对应的一键进入按钮。</p>
-          <div class="admin-entry-grid">
-            <div class="admin-entry"><strong>Steam</strong><small id="steam-verification"></small><button id="verify-steam" class="admin-secondary" type="button">确认已完成实测</button><label class="admin-check"><input id="steam-enabled" type="checkbox">向玩家显示 Steam 一键按钮</label></div>
-            <div class="admin-entry"><strong>蒸汽平台</strong><small id="china-verification"></small><button id="verify-china" class="admin-secondary" type="button">确认已完成实测</button><label class="admin-check"><input id="china-enabled" type="checkbox">向玩家显示蒸汽平台一键按钮</label></div>
-          </div>
-          <p id="entry-revision" class="admin-hint"></p><p class="admin-hint">网络配置变化后，旧验证和开放状态会失效。A2S 查询成功不能代替真实客户端进房测试。</p>
-        </section>
-      </div>
+      <section class="admin-node-overview" aria-labelledby="node-list-title">
+        <div class="admin-node-heading"><div><span class="step">节点列表</span><h3 id="node-list-title">选择节点</h3></div><p>先看节点状态，再查看该节点的设置。本原型仅演示青岚一号的设置操作。</p></div>
+        <div class="admin-node-list">
+          <button class="admin-node-option" type="button" data-node="a" aria-controls="node-detail-a" aria-pressed="true"><span class="admin-node-option__top"><strong>青岚一号</strong><span id="node-a-state" class="admin-pill"></span></span><span class="admin-node-option__meta">Windows · 刚刚</span><span id="node-a-summary-capacity" class="admin-node-option__foot">0 / 3 使用 · 硬上限 4</span></button>
+          <button class="admin-node-option" type="button" data-node="b" aria-controls="node-detail-b" aria-pressed="false"><span class="admin-node-option__top"><strong>松影二号</strong><span id="node-b-state" class="admin-pill admin-pill--warm">心跳延迟</span></span><span id="node-b-summary-heartbeat" class="admin-node-option__meta">Linux · 2 分钟前</span><span id="node-b-summary-capacity" class="admin-node-option__foot">3 / 3 使用 · 含待核对资源</span></button>
+          <button class="admin-node-option" type="button" data-node="c" aria-controls="node-detail-c" aria-pressed="false"><span class="admin-node-option__top"><strong>溪谷四号</strong><span class="admin-pill admin-pill--warm">离线</span></span><span class="admin-node-option__meta">Linux · 30 分钟前</span><span class="admin-node-option__foot">状态无法确认 · 暂不分配</span></button>
+        </div>
+      </section>
+      <section id="node-detail-a" class="admin-node-detail" aria-labelledby="node-detail-a-title">
+        <div class="admin-node-heading"><div><span class="step">节点详情 · 当前选中</span><h3 id="node-detail-a-title">青岚一号</h3></div><p>这台节点的调度、地图分配和玩家入口分别设置。</p></div>
+        <div class="panel admin-card admin-node-panel">
+          <section class="admin-node-block">
+            <span class="step">整台节点</span><h4>调度与容量</h4>
+            <div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong>Windows · 刚刚</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>容量占用</span><strong id="node-a-capacity">0 / 3 使用 · 硬上限 4</strong></div></div>
+            <div class="admin-control"><label class="admin-check"><input id="node-a-accept" type="checkbox" checked>允许向此节点分配服务器</label><small>关闭后，此节点不再接收后续分配；已分配的服务器不会因此停止。</small></div>
+            <div class="admin-control"><label class="admin-check"><input id="node-a-drain" type="checkbox">进入整节点维护</label><small>维护期间不再向此节点分配服务器，可在此取消维护；已分配的服务器不会因此停止。</small></div>
+            <div class="admin-inline"><label>调度优先级<input id="node-a-priority" type="number" min="1" value="10"></label><label>最多同时占用的名额<input id="node-a-desired" type="number" min="0" max="4" value="3"></label></div>
+            <p class="admin-hint">实际可用名额还受节点上报的硬上限（4）约束；设为 0 可暂停新分配。</p>
+            <button id="save-node" class="admin-secondary" type="button">保存青岚一号的调度设置</button>
+          </section>
+          <section class="admin-node-block">
+            <span class="step">此节点 × 星潮远征</span><h4>这张地图的分配</h4>
+            <div class="admin-metrics"><div><span>节点上报的内容版本</span><strong id="binding-version">v2 · 已确认</strong></div><div><span>上报时间</span><strong id="binding-time">2 分钟前 · Controller 上报</strong></div></div>
+            <div class="admin-control"><label class="admin-check"><input id="binding-accept" type="checkbox" checked>允许向此节点分配星潮远征服务器</label><small>仅暂停这台节点上这张地图的后续分配。不会修改节点内容，也不会停止已分配的服务器。</small></div>
+          </section>
+          <section class="admin-node-block">
+            <span class="step">此节点 · 玩家入口</span><h4>一键进入游戏</h4>
+            <p>管理员需先用真实客户端测试当前网络配置下的所有可能公网端口。验证通过后，才可决定是否向玩家显示对应的一键进入按钮。</p>
+            <div class="admin-entry-grid">
+              <div class="admin-entry"><strong>Steam</strong><small id="steam-verification"></small><button id="verify-steam" class="admin-secondary" type="button">确认已完成实测</button><label class="admin-check"><input id="steam-enabled" type="checkbox">向玩家显示 Steam 一键按钮</label></div>
+              <div class="admin-entry"><strong>蒸汽平台</strong><small id="china-verification"></small><button id="verify-china" class="admin-secondary" type="button">确认已完成实测</button><label class="admin-check"><input id="china-enabled" type="checkbox">向玩家显示蒸汽平台一键按钮</label></div>
+            </div>
+            <p id="entry-revision" class="admin-hint"></p><p class="admin-hint">网络配置变化后，旧验证和开放状态会失效。A2S 查询成功不能代替真实客户端进房测试。</p>
+          </section>
+        </div>
+      </section>
+      <section id="node-detail-b" class="admin-node-detail" aria-labelledby="node-detail-b-title" hidden>
+        <div class="admin-node-heading"><div><span class="step">节点详情 · 只读</span><h3 id="node-detail-b-title">松影二号</h3></div></div>
+        <section class="panel admin-card"><h4>运行状态</h4><div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong id="node-b-heartbeat">Linux · 2 分钟前</strong></div><div><span>Controller / d2core</span><strong>兼容 · v0.1.1</strong></div><div><span>上次确认的内容版本</span><strong>星潮远征 v2</strong></div><div><span>容量占用</span><strong id="node-b-capacity">3 / 3 使用 · 硬上限 4 · 含待核对资源</strong></div><div><span>后续分配</span><strong id="node-b-new-allocation">暂停：心跳延迟</strong></div></div><p id="node-b-detail-note" class="admin-hint">心跳延迟时，页面只能显示上次上报的状态；平台不会再向此节点分配服务器。</p></section>
+      </section>
+      <section id="node-detail-c" class="admin-node-detail" aria-labelledby="node-detail-c-title" hidden>
+        <div class="admin-node-heading"><div><span class="step">节点详情 · 只读</span><h3 id="node-detail-c-title">溪谷四号</h3></div></div>
+        <section class="panel admin-card"><h4>运行状态</h4><div class="admin-metrics"><div><span>系统 / 最近心跳</span><strong>Linux · 30 分钟前</strong></div><div><span>内容状态</span><strong>无法确认 · 不接收新分配</strong></div><div><span>最近错误</span><strong>Controller 连接中断</strong></div></div></section>
+      </section>
     </section>
 
     <section id="tab-instances" class="admin-section" aria-labelledby="instances-title" hidden>

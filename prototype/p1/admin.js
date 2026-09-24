@@ -1,7 +1,7 @@
 (() => {
   const $ = (selector) => document.querySelector(selector);
   const state = {
-    loggedIn: false, tab: 'overview', globalAccept: true, maintenanceMessage: '今晚 22:00 起暂停申请服务器。', noticeEnabled: true, noticeLevel: 'warning',
+    loggedIn: false, tab: 'overview', selectedNode: 'a', globalAccept: true, maintenanceMessage: '今晚 22:00 起暂停申请服务器。', noticeEnabled: true, noticeLevel: 'warning',
     gameEnabled: true, gameAccept: true, presetEnabled: true, presetAccept: true,
     published: 'v2', reported: 'v2', versionVerified: false, bindingAccept: true, nodeAccept: true, drain: false,
     priority: 10, desired: 3, revision: 7, steamVerified: true, steamEnabled: true,
@@ -25,6 +25,11 @@
     $('#admin-dialog').showModal();
   }
 
+  function renderNodeSelection() {
+    document.querySelectorAll('[data-node]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.node === state.selectedNode)); });
+    ['a', 'b', 'c'].forEach((node) => { $(`#node-detail-${node}`).hidden = node !== state.selectedNode; });
+  }
+
   function render() {
     $('#admin-login').hidden = state.loggedIn;
     $('#admin-app').hidden = !state.loggedIn;
@@ -37,6 +42,7 @@
       else button.removeAttribute('aria-current');
     });
     ['overview', 'content', 'nodes', 'instances'].forEach((tab) => { $(`#tab-${tab}`).hidden = tab !== state.tab; });
+    renderNodeSelection();
     $('#admin-alert').textContent = state.globalAccept
       ? '全站允许玩家申请服务器；各地图和玩法仍按各自设置生效。'
       : `全站暂停申请服务器；等待申请暂停调度，恢复后按原提交时间继续排队。已分配的服务器不会因此停止。${state.maintenanceMessage ? ` 玩家提示：${state.maintenanceMessage}` : ''}`;
@@ -71,11 +77,17 @@
     $('#node-a-priority').value = state.priority;
     $('#node-a-desired').value = state.desired;
     $('#node-a-capacity').textContent = `0 / ${state.desired} 使用 · 硬上限 4`;
+    $('#node-a-summary-capacity').textContent = `0 / ${state.desired} 使用 · 硬上限 4`;
     $('#node-b-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 使用 · 硬上限 4${state.quarantined ? ' · 含待核对资源' : ''}`;
+    $('#node-b-summary-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 使用${state.quarantined ? ' · 含待核对资源' : ''}`;
     $('#node-b-state').textContent = state.quarantined ? '心跳延迟' : '已恢复联系';
     $('#node-b-state').classList.toggle('admin-pill--warm', state.quarantined);
     $('#node-b-heartbeat').textContent = state.quarantined ? 'Linux · 2 分钟前' : 'Linux · 刚刚';
+    $('#node-b-summary-heartbeat').textContent = $('#node-b-heartbeat').textContent;
     $('#node-b-new-allocation').textContent = state.quarantined ? '暂停：心跳延迟' : '暂不分配：其他申请待对账';
+    $('#node-b-detail-note').textContent = state.quarantined
+      ? '心跳延迟时，页面只能显示上次上报的状态；平台不会再向此节点分配服务器。'
+      : '节点已恢复联系；仍有申请待核对，暂不向此节点分配服务器。';
     $('#binding-version').textContent = `${state.reported} · 已确认`;
     $('#binding-time').textContent = state.reported === 'v3' ? '刚刚 · Controller 上报' : '2 分钟前 · Controller 上报';
     $('#binding-accept').checked = state.bindingAccept;
@@ -119,6 +131,7 @@
   $('#logout').addEventListener('click', () => { state.loggedIn = false; render(); notify('已退出原型演示。'); });
   $('#demo-reset').addEventListener('click', () => window.location.reload());
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.tab = button.dataset.tab; render(); }));
+  document.querySelectorAll('[data-node]').forEach((button) => button.addEventListener('click', () => { state.selectedNode = button.dataset.node; renderNodeSelection(); }));
 
   $('#save-global').addEventListener('click', () => { state.globalAccept = $('#global-accept').checked; state.maintenanceMessage = $('#maintenance-message').value.trim(); render(); notify(state.globalAccept ? '全站已允许申请服务器（模拟）。' : '全站已暂停申请服务器；等待申请不会被取消（模拟）。'); });
   $('#save-notice').addEventListener('click', () => { state.noticeEnabled = $('#notice-enabled').checked; state.noticeLevel = $('#notice-level').value; render(); notify('站点公告已更新（模拟）。'); });
