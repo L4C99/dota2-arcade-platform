@@ -75,9 +75,18 @@
       <section class="admin-node-overview" aria-labelledby="node-list-title">
         <div class="admin-node-heading"><div><span class="step">节点列表</span><h3 id="node-list-title">选择节点</h3></div><p>先看节点状态，再查看该节点的设置。本原型仅演示青岚一号的设置操作。</p></div>
         <div class="admin-node-list">
-          <button class="admin-node-option" type="button" data-node="a" aria-controls="node-detail-a" aria-pressed="true"><span class="admin-node-option__top"><strong>青岚一号</strong><span id="node-a-state" class="admin-pill"></span></span><span class="admin-node-option__meta">Windows · 刚刚</span><span id="node-a-summary-capacity" class="admin-node-option__foot">0 / 3 使用 · 硬上限 4</span></button>
-          <button class="admin-node-option" type="button" data-node="b" aria-controls="node-detail-b" aria-pressed="false"><span class="admin-node-option__top"><strong>松影二号</strong><span id="node-b-state" class="admin-pill admin-pill--warm">心跳延迟</span></span><span id="node-b-summary-heartbeat" class="admin-node-option__meta">Linux · 2 分钟前</span><span id="node-b-summary-capacity" class="admin-node-option__foot">3 / 3 使用 · 含待核对资源</span></button>
-          <button class="admin-node-option" type="button" data-node="c" aria-controls="node-detail-c" aria-pressed="false"><span class="admin-node-option__top"><strong>溪谷四号</strong><span class="admin-pill admin-pill--warm">离线</span></span><span class="admin-node-option__meta">Linux · 30 分钟前</span><span class="admin-node-option__foot">状态无法确认 · 暂不分配</span></button>
+          <button class="admin-node-option" type="button" data-node="a" aria-controls="node-detail-a" aria-pressed="true">
+            <span class="admin-node-option__top"><strong>青岚一号</strong><span id="node-a-state" class="admin-pill">在线</span></span>
+            <span class="admin-node-option__facts"><span><span>系统 / 最近心跳</span><strong>Windows · 刚刚</strong></span><span><span>容量</span><strong id="node-a-summary-capacity">0 / 3 占用 · 硬上限 4</strong></span><span><span>新分配</span><strong id="node-a-summary-new-allocation">允许接收</strong></span></span>
+          </button>
+          <button class="admin-node-option" type="button" data-node="b" aria-controls="node-detail-b" aria-pressed="false">
+            <span class="admin-node-option__top"><strong>松影二号</strong><span id="node-b-state" class="admin-pill admin-pill--warm">心跳延迟</span></span>
+            <span class="admin-node-option__facts"><span><span>系统 / 最近心跳</span><strong id="node-b-summary-heartbeat">Linux · 2 分钟前</strong></span><span><span>容量</span><strong id="node-b-summary-capacity">3 / 3 占用 · 含待核对资源</strong></span><span><span>新分配</span><strong id="node-b-summary-new-allocation">暂停 · 心跳延迟</strong></span></span>
+          </button>
+          <button class="admin-node-option" type="button" data-node="c" aria-controls="node-detail-c" aria-pressed="false">
+            <span class="admin-node-option__top"><strong>溪谷四号</strong><span class="admin-pill admin-pill--warm">离线</span></span>
+            <span class="admin-node-option__facts"><span><span>系统 / 最近心跳</span><strong>Linux · 30 分钟前</strong></span><span><span>容量</span><strong>无法确认</strong></span><span><span>新分配</span><strong>暂停 · 节点离线</strong></span></span>
+          </button>
         </div>
       </section>
       <section id="node-detail-a" class="admin-node-detail" aria-labelledby="node-detail-a-title">

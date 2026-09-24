@@ -121,17 +121,18 @@
         ? '青岚一号已准备并验证好 v3，可以切换。'
         : '暂不能切换：请先在可用节点上准备并测试 v3。';
 
-    $('#node-a-state').textContent = state.drain ? '整节点维护中' : !state.nodeAccept ? '在线 · 暂停新分配' : state.desired === 0 ? '在线 · 调度名额为 0' : '在线 · 接收新分配';
-    $('#node-a-state').classList.toggle('admin-pill--warm', state.drain || !state.nodeAccept || state.desired === 0);
+    $('#node-a-state').textContent = '在线';
     $('#node-a-accept').checked = state.nodeAccept;
     $('#node-a-drain').checked = state.drain;
     $('#node-a-priority').value = state.priority;
     $('#node-a-desired').value = state.desired;
     $('#node-a-capacity').textContent = `0 / ${state.desired} 使用 · 硬上限 4`;
-    $('#node-a-summary-capacity').textContent = `0 / ${state.desired} 使用 · 硬上限 4`;
+    $('#node-a-summary-capacity').textContent = `0 / ${state.desired} 占用 · 硬上限 4`;
+    $('#node-a-summary-new-allocation').textContent = state.drain ? '暂停 · 整节点维护' : !state.nodeAccept ? '暂停 · 管理员关闭' : state.desired === 0 ? '暂停 · 名额设为 0' : '允许接收';
     $('#node-b-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 使用 · 硬上限 4${state.quarantined ? ' · 含待核对资源' : ''}`;
-    $('#node-b-summary-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 使用${state.quarantined ? ' · 含待核对资源' : ''}`;
-    $('#node-b-state').textContent = state.quarantined ? '心跳延迟' : '已恢复联系';
+    $('#node-b-summary-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 占用 · 硬上限 4${state.quarantined ? ' · 含待核对资源' : ''}`;
+    $('#node-b-summary-new-allocation').textContent = state.quarantined ? '暂停 · 心跳延迟' : '暂停 · 申请待对账';
+    $('#node-b-state').textContent = state.quarantined ? '心跳延迟' : '在线';
     $('#node-b-state').classList.toggle('admin-pill--warm', state.quarantined);
     $('#node-b-heartbeat').textContent = state.quarantined ? 'Linux · 2 分钟前' : 'Linux · 刚刚';
     $('#node-b-summary-heartbeat').textContent = $('#node-b-heartbeat').textContent;
