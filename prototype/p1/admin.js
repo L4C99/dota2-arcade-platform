@@ -1,14 +1,14 @@
 (() => {
   const $ = (selector) => document.querySelector(selector);
   const state = {
-    loggedIn: false, tab: 'overview', selectedNode: 'a', selectedGame: 'star', globalAccept: true, maintenanceMessage: '今晚 22:00 起暂停申请服务器。', noticeEnabled: true, noticeLevel: 'warning',
+    loggedIn: false, tab: 'overview', selectedNode: 'a', selectedGame: 'star', selectedBindingGame: 'star', globalAccept: true, maintenanceMessage: '今晚 22:00 起暂停申请服务器。', noticeEnabled: true, noticeLevel: 'warning',
     gameEnabled: true, gameAccept: true, harborGameEnabled: true, harborGameAccept: true,
     selectedPresets: { star: 'n6', harbor: 'standard' },
     presets: {
       star: { n6: { name: 'N6', enabled: true, accept: true, message: '' }, n7: { name: 'N7', enabled: true, accept: true, message: '' }, solo: { name: 'Solo', enabled: true, accept: true, message: '' } },
       harbor: { standard: { name: '标准', enabled: true, accept: true, message: '' }, challenge: { name: '挑战', enabled: true, accept: true, message: '' } }
     },
-    published: 'v2', reported: 'v2', versionVerified: false, bindingAccept: true, nodeAccept: true, drain: false,
+    published: 'v2', reported: 'v2', versionVerified: false, bindingAccept: true, harborBindingAccept: true, nodeAccept: true, drain: false,
     priority: 10, desired: 3, revision: 7, steamVerified: true, steamEnabled: true,
     chinaVerified: false, chinaEnabled: false, waiting: true, running: 'running', quarantined: true
   };
@@ -38,6 +38,23 @@
   function renderGameSelection() {
     document.querySelectorAll('[data-game]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.game === state.selectedGame)); });
     ['star', 'harbor'].forEach((game) => { $(`#game-detail-${game}`).hidden = game !== state.selectedGame; });
+  }
+
+  function renderBindingSelection() {
+    const star = state.selectedBindingGame === 'star';
+    document.querySelectorAll('[data-binding-game]').forEach((button) => {
+      const isStar = button.dataset.bindingGame === 'star';
+      const version = isStar ? state.reported : 'v1';
+      const accepting = isStar ? state.bindingAccept : state.harborBindingAccept;
+      button.setAttribute('aria-pressed', String(button.dataset.bindingGame === state.selectedBindingGame));
+      button.querySelector('small').textContent = `节点版本 ${version} · ${accepting ? '允许新分配' : '暂停新分配'}`;
+    });
+    const name = star ? '星潮远征' : '雾港守卫';
+    $('#binding-game-title').textContent = name;
+    $('#binding-version').textContent = `${star ? state.reported : 'v1'} · 已确认`;
+    $('#binding-time').textContent = star && state.reported === 'v3' ? '刚刚' : star ? '2 分钟前' : '5 分钟前';
+    $('#binding-accept').checked = star ? state.bindingAccept : state.harborBindingAccept;
+    $('#binding-accept-text').textContent = `允许在这台节点上分配${name}服务器`;
   }
 
   function renderPresetSelection(game) {
@@ -87,6 +104,7 @@
     ['overview', 'content', 'nodes', 'instances'].forEach((tab) => { $(`#tab-${tab}`).hidden = tab !== state.tab; });
     renderNodeSelection();
     renderGameSelection();
+    renderBindingSelection();
     renderPresetSelection('star');
     renderPresetSelection('harbor');
     $('#admin-alert').textContent = state.globalAccept
@@ -126,31 +144,27 @@
     $('#node-a-drain').checked = state.drain;
     $('#node-a-priority').value = state.priority;
     $('#node-a-desired').value = state.desired;
-    $('#node-a-capacity').textContent = `0 / ${state.desired} 使用 · 硬上限 4`;
+    $('#node-a-capacity').textContent = `0 / ${state.desired} 占用 · 节点上限 4`;
     $('#node-a-summary-capacity').textContent = `0 / ${state.desired} 占用 · 硬上限 4`;
     $('#node-a-summary-new-allocation').textContent = state.drain ? '暂停 · 整节点维护' : !state.nodeAccept ? '暂停 · 管理员关闭' : state.desired === 0 ? '暂停 · 名额设为 0' : '允许接收';
-    $('#node-b-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 使用 · 硬上限 4${state.quarantined ? ' · 含待核对资源' : ''}`;
+    $('#node-b-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 占用 · 节点上限 4${state.quarantined ? ' · 含待核对资源' : ''}`;
     $('#node-b-summary-capacity').textContent = `${state.quarantined ? 3 : 2} / 3 占用 · 硬上限 4${state.quarantined ? ' · 含待核对资源' : ''}`;
     $('#node-b-summary-new-allocation').textContent = state.quarantined ? '暂停 · 心跳延迟' : '暂停 · 申请待对账';
     $('#node-b-state').textContent = state.quarantined ? '心跳延迟' : '在线';
     $('#node-b-state').classList.toggle('admin-pill--warm', state.quarantined);
     $('#node-b-heartbeat').textContent = state.quarantined ? 'Linux · 2 分钟前' : 'Linux · 刚刚';
     $('#node-b-summary-heartbeat').textContent = $('#node-b-heartbeat').textContent;
-    $('#node-b-new-allocation').textContent = state.quarantined ? '暂停：心跳延迟' : '暂不分配：其他申请待对账';
+    $('#node-b-new-allocation').textContent = state.quarantined ? '暂停 · 心跳延迟' : '暂停 · 申请待核对';
     $('#node-b-detail-note').textContent = state.quarantined
-      ? '心跳延迟时，页面只能显示上次上报的状态；平台不会再向此节点分配服务器。'
-      : '节点已恢复联系；仍有申请待核对，暂不向此节点分配服务器。';
-    $('#binding-version').textContent = `${state.reported} · 已确认`;
-    $('#binding-time').textContent = state.reported === 'v3' ? '刚刚 · Controller 上报' : '2 分钟前 · Controller 上报';
-    $('#binding-accept').checked = state.bindingAccept;
-
-    $('#steam-verification').textContent = state.steamVerified ? `当前网络配置（第 ${state.revision} 版）已完成实际进房测试` : '当前网络配置尚未完成实际进房测试';
-    $('#china-verification').textContent = state.chinaVerified ? `当前网络配置（第 ${state.revision} 版）已完成实际进房测试` : '当前网络配置尚未完成实际进房测试';
+      ? '心跳延迟时，这里显示上次确认的信息；暂停新分配，已有服务器仍占用名额。'
+      : '节点已恢复联系；仍有申请待核对，暂时不接收新分配。';
+    $('#steam-verification').textContent = state.steamVerified ? `第 ${state.revision} 版网络配置已通过进房实测` : '当前网络配置尚未实测进房';
+    $('#china-verification').textContent = state.chinaVerified ? `第 ${state.revision} 版网络配置已通过进房实测` : '当前网络配置尚未实测进房';
     $('#steam-enabled').checked = state.steamEnabled;
     $('#steam-enabled').disabled = !state.steamVerified;
     $('#china-enabled').checked = state.chinaEnabled;
     $('#china-enabled').disabled = !state.chinaVerified;
-    $('#entry-revision').textContent = `当前网络配置：第 ${state.revision} 版。实测结果仅对这一版有效。`;
+    $('#entry-revision').textContent = `当前网络配置：第 ${state.revision} 版。更改配置后需要重新实测入口。`;
 
     $('#waiting-request').hidden = !state.waiting;
     $('#waiting-request h3').textContent = !state.globalAccept || !state.gameAccept || !state.presets.star.n6.accept
@@ -185,6 +199,7 @@
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.tab = button.dataset.tab; render(); }));
   document.querySelectorAll('[data-node]').forEach((button) => button.addEventListener('click', () => { state.selectedNode = button.dataset.node; renderNodeSelection(); }));
   document.querySelectorAll('[data-game]').forEach((button) => button.addEventListener('click', () => { state.selectedGame = button.dataset.game; renderGameSelection(); }));
+  document.querySelectorAll('[data-binding-game]').forEach((button) => button.addEventListener('click', () => { state.selectedBindingGame = button.dataset.bindingGame; renderBindingSelection(); }));
   document.querySelectorAll('[data-preset-map]').forEach((button) => button.addEventListener('click', () => { state.selectedPresets[button.dataset.presetMap] = button.dataset.preset; renderPresetSelection(button.dataset.presetMap); }));
 
   $('#save-global').addEventListener('click', () => { state.globalAccept = $('#global-accept').checked; state.maintenanceMessage = $('#maintenance-message').value.trim(); render(); notify(state.globalAccept ? '全站已允许申请服务器（模拟）。' : '全站已暂停申请服务器；等待申请不会被取消（模拟）。'); });
@@ -220,10 +235,15 @@
     state.nodeAccept = $('#node-a-accept').checked; state.drain = $('#node-a-drain').checked;
     render(); notify('节点调度设置已更新；已有实例不受影响（模拟）。');
   });
-  $('#binding-accept').addEventListener('change', (event) => { state.bindingAccept = event.target.checked; render(); notify('仅调整此节点此地图的新分配开关（模拟）。'); });
+  $('#binding-accept').addEventListener('change', (event) => {
+    const star = state.selectedBindingGame === 'star';
+    state[star ? 'bindingAccept' : 'harborBindingAccept'] = event.target.checked;
+    render();
+    notify(`青岚一号上的${star ? '星潮远征' : '雾港守卫'}已${event.target.checked ? '允许' : '暂停'}新分配（模拟）。`);
+  });
   ['steam', 'china'].forEach((kind) => {
-    $(`#verify-${kind}`).addEventListener('click', () => ask('确认已完成真人验证？', '只有使用真实客户端验证当前网络配置下所有可能的公网端口映射后，才能标记实测通过。此处只改变模拟状态。', () => {
-      state[`${kind}Verified`] = true; render(); notify('真人验证状态已记录（模拟）。');
+    $(`#verify-${kind}`).addEventListener('click', () => ask('确认已完成进房实测？', '请先用真实客户端测试这台节点可能使用的所有公网端口，确认能进房。此处只改变模拟状态。', () => {
+      state[`${kind}Verified`] = true; render(); notify('进房实测结果已记录（模拟）。');
     }));
     $(`#${kind}-enabled`).addEventListener('change', (event) => {
       if (!state[`${kind}Verified`]) { event.target.checked = false; return; }
@@ -242,7 +262,7 @@
   $('#demo-network-change').addEventListener('click', () => {
     state.revision += 1;
     state.steamVerified = state.steamEnabled = state.chinaVerified = state.chinaEnabled = false;
-    render(); notify('网络配置 revision 已变化；旧验证和开放状态已失效（模拟）。');
+    render(); notify('网络配置已更改；一键入口需重新实测后才能开放（模拟）。');
   });
   $('#demo-reclaim').addEventListener('click', () => { state.quarantined = false; render(); notify('模拟节点恢复，d2core 确认完整回收，旧容量已释放。'); });
   $('#admin-dialog-cancel').addEventListener('click', () => { $('#admin-dialog').close(); confirmAction = null; });
