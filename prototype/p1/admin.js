@@ -14,7 +14,6 @@
   };
   let toastTimer;
   let confirmAction = null;
-  const displayVersion = (version) => version.replace(/^v(?=\d)/, 'V');
 
   function notify(message) {
     const toast = $('#admin-toast');
@@ -48,11 +47,11 @@
       const version = isStar ? state.reported : 'v1';
       const accepting = isStar ? state.bindingAccept : state.harborBindingAccept;
       button.setAttribute('aria-pressed', String(button.dataset.bindingGame === state.selectedBindingGame));
-      button.querySelector('small').textContent = `节点版本 ${displayVersion(version)} · ${accepting ? '允许新分配' : '暂停新分配'}`;
+      button.querySelector('small').textContent = `节点版本 ${version} · ${accepting ? '允许新分配' : '暂停新分配'}`;
     });
     const name = star ? '星潮远征' : '雾港守卫';
     $('#binding-game-title').textContent = name;
-    $('#binding-version').textContent = `${displayVersion(star ? state.reported : 'v1')} · 已确认`;
+    $('#binding-version').textContent = `${star ? state.reported : 'v1'} · 已确认`;
     $('#binding-time').textContent = star && state.reported === 'v3' ? '刚刚' : star ? '2 分钟前' : '5 分钟前';
     $('#binding-accept').checked = star ? state.bindingAccept : state.harborBindingAccept;
     $('#binding-accept-text').textContent = `允许在这台节点上分配${name}服务器`;
@@ -127,18 +126,18 @@
     $('#game-state-harbor').textContent = !state.harborGameEnabled ? '已下架' : state.harborGameAccept ? '可申请' : '暂不可申请';
     $('#game-state-harbor').classList.toggle('admin-pill--warm', !state.harborGameEnabled || !state.harborGameAccept);
 
-    $('#published-version').textContent = displayVersion(state.published);
-    $('#game-summary-star-version').textContent = displayVersion(state.published);
+    $('#published-version').textContent = state.published;
+    $('#game-summary-star-version').textContent = state.published;
     const nodeAVerified = state.reported === 'v3' && state.versionVerified;
     const nodeAEligible = nodeAVerified && state.bindingAccept && state.nodeAccept && !state.drain && state.desired > 0;
     const canPublish = state.published !== 'v3' && nodeAEligible;
-    $('#version-node-a-fact').textContent = `已确认 ${displayVersion(state.reported)} · 在线`;
-    $('#version-node-a-test').textContent = nodeAVerified ? 'V3 实测已通过' : 'V3 尚未验证';
+    $('#version-node-a-fact').textContent = `已确认 ${state.reported} · 在线`;
+    $('#version-node-a-test').textContent = nodeAVerified ? 'v3 实测已通过' : 'v3 尚未验证';
     $('#version-node-a-outcome').textContent = state.published === 'v3'
       ? nodeAEligible ? '可接收新分配' : '暂不可接收新分配'
       : nodeAEligible ? '切换后可接收' : '切换后暂不可接收';
     $('#version-node-a-outcome').dataset.ready = String(nodeAEligible);
-    $('#version-node-b-fact').textContent = state.quarantined ? '上次确认 V2 · 心跳延迟' : '已确认 V2 · 在线';
+    $('#version-node-b-fact').textContent = state.quarantined ? '上次确认 v2 · 心跳延迟' : '已确认 v2 · 在线';
     $('#version-node-b-outcome').textContent = state.published === 'v3' ? '暂不可接收 · 版本不符' : '切换后暂不可接收';
     $('#version-node-c-outcome').textContent = state.published === 'v3' ? '暂不可接收 · 版本未确认' : '切换后暂不可接收';
     $('#candidate-version-row').hidden = state.published === 'v3';
@@ -147,13 +146,13 @@
     $('#publish-gate').dataset.ready = String(nodeAEligible);
     $('#publish-gate').textContent = state.published === 'v3'
       ? nodeAEligible
-        ? 'V3 已启用。目前青岚一号可接收这张地图的新分配；其他节点暂不可接收。'
-        : 'V3 已启用，但目前没有可接收这张地图新分配的节点。'
+        ? 'v3 已启用。目前青岚一号可接收这张地图的新分配；其他节点暂不可接收。'
+        : 'v3 已启用，但目前没有可接收这张地图新分配的节点。'
       : canPublish
-        ? '青岚一号已准备并验证 V3，可以切换；其他节点暂不接收 V3 新分配。'
+        ? '青岚一号已准备并验证 v3，可以切换；其他节点暂不接收 v3 新分配。'
         : nodeAVerified
-          ? '暂不能切换：青岚一号已验证 V3，但当前暂停接收新分配。'
-          : '暂不能切换：目前没有已准备并验证 V3 的可用节点。';
+          ? '暂不能切换：青岚一号已验证 v3，但当前暂停接收新分配。'
+          : '暂不能切换：目前没有已准备并验证 v3 的可用节点。';
 
     $('#node-a-state').textContent = '在线';
     $('#node-a-accept').checked = state.nodeAccept;
@@ -241,8 +240,8 @@
   $('#save-harbor-preset').addEventListener('click', () => savePreset('harbor'));
   $('#publish-version').addEventListener('click', () => {
     if (state.published === 'v3' || state.reported !== 'v3' || !state.versionVerified || !state.bindingAccept || !state.nodeAccept || state.drain || state.desired === 0) return;
-    ask('让后续分配的服务器使用 V3？', '此后分配到节点的服务器使用 V3；已分配到节点的服务器仍使用原版本。未准备好 V3 的节点暂不接收这张地图的后续分配。', () => {
-      state.published = 'v3'; render(); notify('已启用 V3，后续分配的服务器将使用此版本（模拟）。');
+    ask('让后续分配的服务器使用 v3？', '此后分配到节点的服务器使用 v3；已分配到节点的服务器仍使用原版本。未准备好 v3 的节点暂不接收这张地图的后续分配。', () => {
+      state.published = 'v3'; render(); notify('已启用 v3，后续分配的服务器将使用此版本（模拟）。');
     });
   });
   $('#save-node').addEventListener('click', () => {
@@ -281,7 +280,7 @@
     state.running = 'stopping'; render(); notify('已提交停止请求；容量仍被占用（模拟）。');
   }));
   $('#resync-instance').addEventListener('click', () => notify('已请求重新核对；结果未知期间继续占用容量（模拟）。'));
-  $('#demo-report').addEventListener('click', () => { state.reported = 'v3'; state.versionVerified = true; render(); notify('模拟青岚一号上报 V3，并完成内容实测确认。'); });
+  $('#demo-report').addEventListener('click', () => { state.reported = 'v3'; state.versionVerified = true; render(); notify('模拟青岚一号上报 v3，并完成内容实测确认。'); });
   $('#demo-network-change').addEventListener('click', () => {
     state.steamVerified = state.steamEnabled = state.chinaVerified = state.chinaEnabled = false;
     render(); notify('网络配置已更改；一键入口需重新实测后才能开放（模拟）。');
