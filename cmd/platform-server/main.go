@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -82,20 +83,36 @@ func run(args []string) error {
 			return nil
 		}
 		if len(args) >= 4 && args[1] == "integration-job" {
-			instanceID := ""
-			if len(args) == 5 {
-				instanceID = args[4]
-			} else if len(args) != 4 {
-				return errors.New("invalid integration job arguments")
+			var id string
+			var err error
+			switch args[3] {
+			case "create":
+				if len(args) != 5 && len(args) != 6 {
+					return errors.New("create requires template binding and optional port")
+				}
+				port := 0
+				if len(args) == 6 {
+					port, err = strconv.Atoi(args[5])
+					if err != nil {
+						return err
+					}
+				}
+				id, err = s.CreateIntegrationCreateJob(ctx, args[2], args[4], port)
+			case "stop":
+				if len(args) != 5 {
+					return errors.New("stop requires instance ID")
+				}
+				id, err = s.CreateIntegrationJob(ctx, args[2], "stop", args[4])
+			default:
+				return errors.New("invalid integration job kind")
 			}
-			id, err := s.CreateIntegrationJob(ctx, args[2], args[3], instanceID)
 			if err != nil {
 				return err
 			}
 			fmt.Printf("node_job_id=%s\n", id)
 			return nil
 		}
-		return errors.New("usage: platform-server node register <name> <windows|linux> | node integration-job <node-id> create|stop [instance-id]")
+		return errors.New("usage: platform-server node register <name> <windows|linux> | node integration-job <node-id> create <template-binding> [port] | node integration-job <node-id> stop <instance-id>")
 	case "serve":
 		if len(args) != 1 {
 			return errors.New("usage: platform-server serve")

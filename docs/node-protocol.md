@@ -1,4 +1,4 @@
-# Node API v1（P0C）
+# Node API v1（P0C/P0D）
 
 Node Controller 主动连接 Platform Server 的 `/api/node/v1`。正式环境经 Caddy 使用 HTTPS；Platform Server 只接收 Caddy 转发的本地 HTTP。开发模式只允许 Controller 访问 loopback HTTP。生产不关闭 TLS 证书校验。
 
@@ -27,3 +27,9 @@ P0 的任务明确标记 `integration_only=true`，由本地管理员流程创�
 ## Controller 本地配置
 
 Controller 使用显式绝对路径 JSON 配置，其中包含 Platform URL、Node ID、Secret 文件路径、d2core `BUILD.json` 和 data-dir、端口映射、硬上限、逻辑模板到本机绝对路径的绑定，以及可选内容 metadata/当前链接位置。所有 d2core 关键路径须为 ASCII 绝对路径。节点 Secret、真实节点路径、端口和部署参数保存在仓库外的开发或生产专用目录。源码工作树不作为生产运行目录。
+
+## P0D 本地核心调用
+
+Controller 用固定 v0.1.1 Go client 对同用户 d2core manager 发出 `list/create/stop/operation/status`。`list` 成功才将 protocolVersion 报为 1。每次领取新任务前读取未终结任务；集成 create job 只携带逻辑模板绑定键和请求 port。Controller 从本机绑定解析 ASCII 绝对模板路径，调用 `prepare` 持久化 key、路径、port 和指纹，校验服务端返回的冻结值，再将原值提交 d2core。key 与不可变 NodeJob ID 确定性绑定。
+
+`accepted` 后保存两个 core ID；仅在 operation 终结且 status 显示 create 为 active/running/ready，或 stop 为 reclaimed/stopped/complete 时报告 `succeeded`。丢失 create 响应保留 `unknown`，不换 key、不盲目再次 create。明确的无副作用 validate/protocol 拒绝可报告 `rejected_no_effect`；已有 core ID 或无法判断副作用时报告 `unknown`。重启和长断联的完整对账属于 P0E 验收。

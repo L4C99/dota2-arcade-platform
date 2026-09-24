@@ -43,6 +43,7 @@ func (s *Store) ClaimNextJob(ctx context.Context, nodeID string) (*nodev1.Job, e
 
 func (s *Store) OpenJobsForNode(ctx context.Context, nodeID string) ([]nodev1.Job, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT j.id,j.kind,j.state,j.integration_only,
+		COALESCE(j.template_binding_key,''),j.requested_port,
         COALESCE(j.instance_id,''),COALESCE(j.operation_id,''),
         COALESCE(e.core_idempotency_key,''),COALESCE(e.resolved_template_path,''),
         COALESCE(e.requested_port,0),COALESCE(encode(e.request_fingerprint,'hex'),'')
@@ -66,6 +67,7 @@ func (s *Store) OpenJobsForNode(ctx context.Context, nodeID string) ([]nodev1.Jo
 
 func (s *Store) JobForNode(ctx context.Context, nodeID, jobID string) (nodev1.Job, error) {
 	row := s.Pool.QueryRow(ctx, `SELECT j.id,j.kind,j.state,j.integration_only,
+		COALESCE(j.template_binding_key,''),j.requested_port,
         COALESCE(j.instance_id,''),COALESCE(j.operation_id,''),
         COALESCE(e.core_idempotency_key,''),COALESCE(e.resolved_template_path,''),
         COALESCE(e.requested_port,0),COALESCE(encode(e.request_fingerprint,'hex'),'')
@@ -81,6 +83,7 @@ func scanJob(row jobScanner) (nodev1.Job, error) {
 	var key, template, fingerprint string
 	var port int
 	err := row.Scan(&job.ID, &job.Kind, &job.State, &job.IntegrationOnly,
+		&job.TemplateBindingKey, &job.RequestedPort,
 		&job.InstanceID, &job.OperationID, &key, &template, &port, &fingerprint)
 	if err != nil {
 		return nodev1.Job{}, err

@@ -20,4 +20,6 @@ go build ./cmd/platform-server ./cmd/node-controller
 
 P0B 起，`platform-server` 提供 `migrate`、`serve`、`admin create <username>`、`admin reset-password <username>` 和 `version`。管理员密码从 stdin 管道输入，不作为命令参数。服务启动会先校验并应用显式 migration；失败则拒绝监听。环境变量示例位于 [configs/examples/](configs/examples/)，开发实例只绑定本机回环地址，正式实例默认要求 HTTPS 公网 origin 与 Secure Cookie。
 
-P0C 的 [Node API v1](docs/node-protocol.md) 提供预置节点认证、事实心跳与 durable NodeJob claim/prepare/report。`platform-server node register <name> <windows|linux>` 登记节点并仅输出一次 Secret。`node-controller heartbeat|run --config <绝对路径>` 读取本机配置和独立 Secret 文件；在 P0D 完成真实 d2core 本地连接前，Controller 如实上报协议未验证并不领取任务。
+P0C 的 [Node API v1](docs/node-protocol.md) 提供预置节点认证、事实心跳与 durable NodeJob claim/prepare/report。`platform-server node register <name> <windows|linux>` 登记节点并仅输出一次 Secret。`node-controller heartbeat|run --config <绝对路径>` 读取本机配置和独立 Secret 文件。
+
+P0D 的 Controller 使用固定 d2core v0.1.1 Go client 连接同用户本地 API。成功调用 `list` 后才报告 protocol v1；兼容心跳后先读取未终结任务，再领取新任务。集成测试任务由 `platform-server node integration-job <node-id> create <template-binding> [port]` 或 `... stop <instance-id>` 建立。`template-binding` 是 Controller 本机配置的逻辑键，Server 不接收或下发任意本机路径。真实节点的安装路径、端口、模板与 Secret 必须由节点拥有者提供并保存在仓库外；当前代码的真实 d2core/Dota 验收仍待开发测试节点授权。

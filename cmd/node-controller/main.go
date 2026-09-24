@@ -12,7 +12,9 @@ import (
 
 	"github.com/L4C99/dota2-arcade-platform/internal/buildinfo"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/config"
+	"github.com/L4C99/dota2-arcade-platform/internal/controller/core"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/platformclient"
+	"github.com/L4C99/dota2-arcade-platform/internal/controller/runner"
 )
 
 func main() {
@@ -35,8 +37,17 @@ func run(args []string) error {
 		return err
 	}
 	client := platformclient.New(conf.PlatformURL, conf.NodeID, secret)
+	coreClient, err := core.New(conf.D2CoreDataDir)
+	if err != nil {
+		return err
+	}
+	worker := &runner.Runner{Platform: client, Core: coreClient, TemplateBindings: conf.TemplateBindings, Network: conf.Network}
 	send := func(ctx context.Context) (string, error) {
-		facts := conf.Facts(buildinfo.Version, 0)
+		protocol := 0
+		if _, err := coreClient.List(ctx); err == nil {
+			protocol = 1
+		}
+		facts := conf.Facts(buildinfo.Version, protocol)
 		result, err := client.Heartbeat(ctx, facts)
 		return result.CompatibilityStatus, err
 	}
@@ -52,17 +63,24 @@ func run(args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	lastStatus := ""
 	for {
-		status, err := send(ctx)
+		cycle, cancel := context.WithTimeout(ctx, 20*time.Second)
+		status, err := send(cycle)
 		if err != nil {
 			log.Printf("heartbeat failed: %v", err)
 		} else if status != lastStatus {
 			log.Printf("node compatibility: %s", status)
 			lastStatus = status
 		}
+		if err == nil && status == "compatible" {
+			if err := worker.Step(cycle); err != nil {
+				log.Printf("node job cycle failed: %v", err)
+			}
+		}
+		cancel()
 		select {
 		case <-ctx.Done():
 			return nil

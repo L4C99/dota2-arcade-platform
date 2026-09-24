@@ -115,6 +115,14 @@ func TestPostgresDurability(t *testing.T) {
 	if _, err := s.Pool.Exec(ctx, "INSERT INTO nodes(id,display_name) VALUES($1,'test node')", nodeID); err != nil {
 		t.Fatal(err)
 	}
+	targetJobID, err := s.CreateIntegrationCreateJob(ctx, nodeID, "test-template", 28000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetJob, err := s.JobForNode(ctx, nodeID, targetJobID)
+	if err != nil || targetJob.TemplateBindingKey != "test-template" || targetJob.RequestedPort != 28000 {
+		t.Fatalf("integration target: %+v %v", targetJob, err)
+	}
 	jobID, err := s.CreateIntegrationJob(ctx, nodeID, "create", "")
 	if err != nil {
 		t.Fatal(err)

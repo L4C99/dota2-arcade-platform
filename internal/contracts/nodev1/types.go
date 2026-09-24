@@ -2,6 +2,8 @@
 package nodev1
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net"
 	"regexp"
@@ -55,13 +57,26 @@ type HeartbeatResult struct {
 }
 
 type Job struct {
-	ID              string        `json:"id"`
-	Kind            string        `json:"kind"`
-	State           string        `json:"state"`
-	IntegrationOnly bool          `json:"integrationOnly"`
-	InstanceID      string        `json:"instanceId,omitempty"`
-	OperationID     string        `json:"operationId,omitempty"`
-	FrozenCreate    *FrozenCreate `json:"frozenCreate,omitempty"`
+	ID                 string        `json:"id"`
+	Kind               string        `json:"kind"`
+	State              string        `json:"state"`
+	IntegrationOnly    bool          `json:"integrationOnly"`
+	TemplateBindingKey string        `json:"templateBindingKey,omitempty"`
+	RequestedPort      int           `json:"requestedPort"`
+	InstanceID         string        `json:"instanceId,omitempty"`
+	OperationID        string        `json:"operationId,omitempty"`
+	FrozenCreate       *FrozenCreate `json:"frozenCreate,omitempty"`
+}
+
+// CreateFingerprint is the Platform's frozen request digest. d2core applies
+// its own normalized template-path/port fingerprint under the same stable key.
+func CreateFingerprint(key, template string, port int) [32]byte {
+	request, _ := json.Marshal(struct {
+		IdempotencyKey string `json:"idempotencyKey"`
+		Template       string `json:"template"`
+		Port           int    `json:"port"`
+	}{key, template, port})
+	return sha256.Sum256(request)
 }
 
 type FrozenCreate struct {

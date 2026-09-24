@@ -3,12 +3,11 @@ package store
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -24,15 +23,6 @@ var ErrJobConflict = errors.New("node job conflict")
 
 func CoreIdempotencyKey(nodeJobID string) string {
 	return "nodejob-" + strings.ReplaceAll(nodeJobID, "-", "")
-}
-
-func createFingerprint(key, template string, port int) [32]byte {
-	request, _ := json.Marshal(struct {
-		IdempotencyKey string `json:"idempotencyKey"`
-		Template       string `json:"template"`
-		Port           int    `json:"port"`
-	}{key, template, port})
-	return sha256.Sum256(request)
 }
 
 // CreateIntegrationJob is the P0-only dispatch entry point. P1 will create
@@ -53,6 +43,21 @@ func (s *Store) CreateIntegrationJob(ctx context.Context, nodeID, kind, instance
 	return id, err
 }
 
+// CreateIntegrationCreateJob records the logical template binding. Only the
+// Controller may resolve it to a trusted local absolute path before prepare.
+func (s *Store) CreateIntegrationCreateJob(ctx context.Context, nodeID, bindingKey string, port int) (string, error) {
+	if len(bindingKey) < 1 || len(bindingKey) > 128 || port < 0 || port > 65535 {
+		return "", fmt.Errorf("invalid integration create target")
+	}
+	id, err := NewID()
+	if err != nil {
+		return "", err
+	}
+	_, err = s.Pool.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,template_binding_key,requested_port)
+		VALUES($1,$2,'create',true,$3,$4)`, id, nodeID, bindingKey, port)
+	return id, err
+}
+
 // PrepareCreate persists every d2core create parameter before the first core
 // call. A repeated prepare must match the previously frozen request exactly.
 func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template string, port int) (FrozenCreate, error) {
@@ -60,7 +65,7 @@ func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template strin
 		return FrozenCreate{}, fmt.Errorf("%w: invalid create request", ErrJobConflict)
 	}
 	key := CoreIdempotencyKey(jobID)
-	fingerprint := createFingerprint(key, template, port)
+	fingerprint := nodev1.CreateFingerprint(key, template, port)
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return FrozenCreate{}, err
