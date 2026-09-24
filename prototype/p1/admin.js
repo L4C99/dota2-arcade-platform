@@ -128,16 +128,31 @@
 
     $('#published-version').textContent = state.published;
     $('#game-summary-star-version').textContent = state.published;
-    const canPublish = state.published !== 'v3' && state.reported === 'v3' && state.versionVerified && state.bindingAccept && state.nodeAccept && !state.drain && state.desired > 0;
+    const nodeAVerified = state.reported === 'v3' && state.versionVerified;
+    const nodeAEligible = nodeAVerified && state.bindingAccept && state.nodeAccept && !state.drain && state.desired > 0;
+    const canPublish = state.published !== 'v3' && nodeAEligible;
+    $('#version-node-a-fact').textContent = `已确认 ${state.reported} · 在线`;
+    $('#version-node-a-test').textContent = nodeAVerified ? 'v3 实测已通过' : 'v3 尚未验证';
+    $('#version-node-a-outcome').textContent = state.published === 'v3'
+      ? nodeAEligible ? '可接收新分配' : '暂不可接收新分配'
+      : nodeAEligible ? '切换后可接收' : '切换后暂不可接收';
+    $('#version-node-a-outcome').dataset.ready = String(nodeAEligible);
+    $('#version-node-b-fact').textContent = state.quarantined ? '上次确认 v2 · 心跳延迟' : '已确认 v2 · 在线';
+    $('#version-node-b-outcome').textContent = state.published === 'v3' ? '暂不可接收 · 版本不符' : '切换后暂不可接收';
+    $('#version-node-c-outcome').textContent = state.published === 'v3' ? '暂不可接收 · 版本未确认' : '切换后暂不可接收';
     $('#candidate-version-row').hidden = state.published === 'v3';
     $('#publish-version').hidden = state.published === 'v3';
     $('#publish-version').disabled = !canPublish;
-    $('#publish-gate').dataset.ready = String(canPublish || state.published === 'v3');
+    $('#publish-gate').dataset.ready = String(nodeAEligible);
     $('#publish-gate').textContent = state.published === 'v3'
-      ? 'v3 已启用。之后分配服务器时，只会选择已准备好 v3 的节点。'
+      ? nodeAEligible
+        ? 'v3 已启用。目前青岚一号可接收这张地图的新分配；其他节点暂不可接收。'
+        : 'v3 已启用，但目前没有可接收这张地图新分配的节点。'
       : canPublish
-        ? '青岚一号已准备并验证好 v3，可以切换。'
-        : '暂不能切换：请先在可用节点上准备并测试 v3。';
+        ? '青岚一号已准备并验证 v3，可以切换；其他节点暂不接收 v3 新分配。'
+        : nodeAVerified
+          ? '暂不能切换：青岚一号已验证 v3，但当前暂停接收新分配。'
+          : '暂不能切换：目前没有已准备并验证 v3 的可用节点。';
 
     $('#node-a-state').textContent = '在线';
     $('#node-a-accept').checked = state.nodeAccept;
