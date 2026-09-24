@@ -10,7 +10,7 @@
     },
     published: 'v2', reported: 'v2', versionVerified: false, bindingAccept: true, harborBindingAccept: true, nodeAccept: true, drain: false,
     priority: 10, desired: 3, steamVerified: true, steamEnabled: true,
-    chinaVerified: false, chinaEnabled: false, waiting: true, running: 'running', quarantined: true
+    chinaVerified: false, chinaEnabled: false, waiting: true, running: 'running', quarantined: true, resyncPending: false
   };
   let toastTimer;
   let confirmAction = null;
@@ -185,14 +185,15 @@
     $('#china-enabled').checked = state.chinaEnabled;
     $('#china-enabled').disabled = !state.chinaVerified;
 
+    $('#waiting-group').hidden = !state.waiting;
     $('#waiting-request').hidden = !state.waiting;
     $('#waiting-request h3').textContent = !state.globalAccept || !state.gameAccept || !state.presets.star.n6.accept
-      ? '等待中 · 调度暂停' : '等待服务器资源';
+      ? '等待中 · 暂不安排节点' : '等待服务器资源';
     $('#creating-title').textContent = state.quarantined ? '启动结果待核对' : '最近上报：正在启动';
     $('#creating-note').textContent = state.quarantined
       ? '最后上报正在启动；节点心跳延迟，当前是否启动成功尚不确定。'
       : '节点已恢复联系；此申请仍占用容量，等待最新创建结果。';
-    $('#running-stage').textContent = state.running === 'stopping' ? '申请 C · 停止请求已提交' : '申请 C · 最近上报运行中';
+    $('#running-stage').textContent = state.running === 'stopping' ? '申请状态 · 停止请求已提交' : '申请状态 · 最近上报运行中';
     $('#running-title').textContent = state.running === 'stopping'
       ? '已请求停止 · 等待确认'
       : state.quarantined ? '服务器状态待确认' : '最近上报：运行中';
@@ -200,7 +201,14 @@
       ? '已提交停止请求；d2core 确认停止并完成清理前，继续占用容量。'
       : state.quarantined ? '节点心跳延迟；最后上报为运行中，当前状态需节点恢复后确认。' : '节点已恢复联系；当前申请仍占用 1 个名额。';
     $('#stop-instance').disabled = state.running !== 'running';
+    $('#stop-instance').textContent = state.running === 'stopping' ? '停止请求已提交' : '请求停止这台服务器';
     $('#quarantined-instance').hidden = !state.quarantined;
+    $('#quarantined-title').textContent = state.resyncPending ? '旧服务器正在核对' : '旧服务器回收情况不明';
+    $('#quarantined-note').textContent = state.resyncPending
+      ? '核对请求已提交；确认停止并清理完成前，继续占用 1 个名额。'
+      : '停止与清理结果尚未确认；仍占用 1 个名额。重新核对不会立即释放容量。';
+    $('#resync-instance').disabled = state.resyncPending;
+    $('#resync-instance').textContent = state.resyncPending ? '核对请求已提交' : '请求重新核对';
     $('#reclaimed-group').hidden = state.quarantined;
     $('#reclaimed-instance').hidden = state.quarantined;
   }
@@ -273,19 +281,21 @@
     });
   });
 
-  $('#cancel-waiting').addEventListener('click', () => ask('取消这条等待申请？', '示例申请仍处于纯等待，尚未创建资源分配，因此可以安全取消。', () => {
+  $('#cancel-waiting').addEventListener('click', () => ask('取消这条等待申请？', '平台还没为这条申请创建过节点分配记录，也没占用名额，因此可以取消。', () => {
     state.waiting = false; render(); notify('等待申请已取消（模拟）。');
   }));
   $('#stop-instance').addEventListener('click', () => ask('请求停止服务器？', '会提交停止任务；只有 d2core 确认停止且清理完成后才释放容量。', () => {
     state.running = 'stopping'; render(); notify('已提交停止请求；容量仍被占用（模拟）。');
   }));
-  $('#resync-instance').addEventListener('click', () => notify('已请求重新核对；结果未知期间继续占用容量（模拟）。'));
+  $('#resync-instance').addEventListener('click', () => {
+    state.resyncPending = true; render(); notify('已请求重新核对；结果未知期间继续占用容量（模拟）。');
+  });
   $('#demo-report').addEventListener('click', () => { state.reported = 'v3'; state.versionVerified = true; render(); notify('模拟青岚一号上报 v3，并完成内容实测确认。'); });
   $('#demo-network-change').addEventListener('click', () => {
     state.steamVerified = state.steamEnabled = state.chinaVerified = state.chinaEnabled = false;
     render(); notify('网络配置已更改；一键入口需重新实测后才能开放（模拟）。');
   });
-  $('#demo-reclaim').addEventListener('click', () => { state.quarantined = false; render(); notify('模拟节点恢复，d2core 确认完整回收，旧容量已释放。'); });
+  $('#demo-reclaim').addEventListener('click', () => { state.quarantined = false; state.resyncPending = false; render(); notify('模拟节点恢复，d2core 确认完整回收，旧容量已释放。'); });
   $('#admin-dialog-cancel').addEventListener('click', () => { $('#admin-dialog').close(); confirmAction = null; });
   $('#admin-dialog-confirm').addEventListener('click', () => { const action = confirmAction; confirmAction = null; $('#admin-dialog').close(); if (action) action(); });
   $('#admin-dialog').addEventListener('close', () => { confirmAction = null; });

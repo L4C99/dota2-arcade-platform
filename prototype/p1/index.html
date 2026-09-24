@@ -4,19 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f5f2e9">
-  <title>P-1A · 玩家首页视觉方向</title>
+  <title>P-1 · 已验收玩家首页原型</title>
   <link rel="stylesheet" href="styles.css">
   <script src="prototype.js" defer></script>
 </head>
 <body>
   <div class="prototype-bar">
     <div class="prototype-bar__inner">
-      <span class="prototype-label"><span class="prototype-dot"></span>P-1A 视觉原型 <span class="muted">· 仅模拟数据</span></span>
-      <nav class="variant-nav" aria-label="视觉方案">
-        <button type="button" class="variant-tab" data-target="a" aria-pressed="true">A <span>舒展卡片</span></button>
-        <button type="button" class="variant-tab" data-target="b" aria-pressed="false">B <span>编辑式单栏</span></button>
-        <button type="button" class="variant-tab" data-target="c" aria-pressed="false">C <span>双栏工具式</span></button>
-      </nav>
+      <span class="prototype-label"><span class="prototype-dot"></span>P-1 已验收原型 <span class="muted">· 仅模拟数据</span></span>
       <button type="button" class="preview-toggle" aria-pressed="false">预览已有申请</button>
     </div>
   </div>
@@ -35,7 +30,7 @@
       <span class="notice-meta">平台公告</span>
     </div>
 
-    <article class="concept concept-a" data-concept="a" aria-labelledby="title-a">
+    <article class="concept concept-a" aria-labelledby="title-a">
       <header class="a-intro a-intro--compact"><h1 id="title-a">申请服务器</h1></header>
 
       <div class="application-view a-layout">
@@ -68,26 +63,6 @@
       <div class="active-view active-card active-card--a"><div class="active-card__label"><span class="pulse-dot"></span>当前活动申请</div><div class="active-card__body"><div><h2>正在等待服务器资源</h2><p>星潮远征 · <span data-active-preset>N6</span> · 当前队伍：仅自己 · <span data-active-node>自动选择节点</span></p><span>已有一条活动申请；请在此查看状态，无需重复提交。</span></div><span class="active-card__number">01 <small>申请中</small></span></div><button type="button" class="text-button return-button">返回未申请预览 ↗</button></div>
     </article>
 
-    <article class="concept concept-b" data-concept="b" aria-labelledby="title-b" hidden>
-      <div class="b-hero"><h1 id="title-b">申请服务器</h1><div class="b-hero__rule"><span>01 <b>游戏与玩法</b></span><span>02 <b>节点选择</b></span><span>03 <b>提交申请</b></span></div></div>
-      <div class="application-view b-column">
-        <section class="b-section" aria-labelledby="b-game-title"><div class="b-section__side"><span class="b-number">01</span><p>游廊游戏<br>ArcadeGame</p></div><div class="b-section__main"><div class="b-section__heading"><h2 id="b-game-title">选择游廊游戏</h2></div><label class="b-game-row"><input type="radio" name="b-game" checked><span class="b-game-row__symbol">✦</span><span><strong>星潮远征</strong><small>协作 · 探索 · 守点</small></span><span class="b-row-end">已选择 <span aria-hidden="true">↗</span></span></label><div class="b-game-row b-game-row--disabled"><span class="b-game-row__symbol">◇</span><span><strong>遗迹守卫</strong><small>内容更新中，暂不可申请</small></span><span class="paused-pill">维护中</span></div><p class="b-maintenance">内容维护提示 / 遗迹守卫暂停新申请；其他游戏正常。</p></div></section>
-        <section class="b-section" aria-labelledby="b-preset-title"><div class="b-section__side"><span class="b-number">02</span><p>玩法预设<br>GamePreset</p></div><div class="b-section__main"><div class="b-section__heading"><h2 id="b-preset-title">选择玩法与难度</h2><span>星潮远征</span></div><div class="b-presets"><label><input type="radio" name="b-preset" checked><strong>N6</strong><span>平衡挑战</span><small>最多 4 人</small></label><label><input type="radio" name="b-preset"><strong>N7</strong><span>进阶挑战</span><small>最多 4 人</small></label><label><input type="radio" name="b-preset"><strong>Solo</strong><span>单人练习</span><small>仅限 1 人</small></label></div></div></section>
-        <section class="b-section" aria-labelledby="b-node-title"><div class="b-section__side"><span class="b-number">03</span><p>队伍与节点<br>Party / Node</p></div><div class="b-section__main"><div class="b-section__heading"><h2 id="b-node-title">确认申请方式</h2><span>默认自动安排</span></div><div class="b-facts"><div><span>当前队伍</span><strong>仅自己 <small>· 1 人</small></strong></div><div><span>节点选择</span><strong data-node-summary>自动选择可用节点 <span class="tiny-check">✓</span></strong></div></div><details class="manual-disclosure manual-disclosure--b"><summary>手动指定节点 <small>高级选项</small><span aria-hidden="true">⌄</span></summary><p>指定后只等待该节点，不会自动切换。</p><div class="node-list"><label><input type="radio" name="b-node"><span class="node-state available"></span><span>青岚一号 <small>可用 · 2 / 4 空位 · 28 ms</small></span></label><label><input type="radio" name="b-node"><span class="node-state tight"></span><span>松影二号 <small>容量紧张 · 1 / 4 空位 · 35 ms</small></span></label><div class="node-disabled"><span class="node-state maintenance"></span><span>云阶三号 <small>维护 · 暂不接新申请</small></span></div><div class="node-disabled"><span class="node-state offline"></span><span>溪谷四号 <small>离线 · 暂不接新申请</small></span></div></div></details><div class="b-submit"><div><strong>星潮远征 <span>／</span> <span data-preset-summary>N6</span></strong><small>单人队伍 · <span data-node-summary>自动选择节点</span></small></div><button type="button" class="primary-button request-button">申请服务器 <span aria-hidden="true">↗</span></button></div><p class="b-after-note">如已有活动申请，这里将显示现有状态。</p></div></section>
-      </div>
-      <div class="active-view active-card active-card--b"><div class="active-card__label"><span class="pulse-dot"></span>当前活动申请</div><h2>你的申请，正在等待资源。</h2><p>星潮远征 / <span data-active-preset>N6</span> / 仅自己 / <span data-active-node>自动选择节点</span></p><div class="active-card__bottom"><span>状态：等待服务器资源<br><small>无需再次申请；这里会优先呈现当前状态。</small></span><button type="button" class="text-button return-button">返回未申请预览 ↗</button></div></div>
-    </article>
-
-    <article class="concept concept-c" data-concept="c" aria-labelledby="title-c" hidden>
-      <div class="c-heading"><h1 id="title-c">申请服务器</h1></div>
-      <div class="application-view c-layout">
-        <div class="c-workspace"><section class="c-panel" aria-labelledby="c-game-title"><div class="c-panel__head"><span>01</span><div><h2 id="c-game-title">游廊游戏</h2><p>ArcadeGame</p></div></div><div class="c-games"><label><input type="radio" name="c-game" checked><span class="c-game-symbol">✦</span><span><strong>星潮远征</strong><small>协作 · 探索 · 守点</small></span><span class="choice-check">✓</span></label><div class="c-games__disabled"><span class="c-game-symbol">◇</span><span><strong>遗迹守卫</strong><small>内容更新中</small></span><span class="paused-pill">维护中</span></div></div><p class="content-note"><span aria-hidden="true">●</span> 遗迹守卫暂停新申请；星潮远征正常。</p></section>
-          <section class="c-panel" aria-labelledby="c-preset-title"><div class="c-panel__head"><span>02</span><div><h2 id="c-preset-title">玩法预设</h2><p>GamePreset · 星潮远征</p></div></div><div class="c-preset-row"><label><input type="radio" name="c-preset" checked><strong>N6</strong><small>平衡挑战 · 最多 4 人</small></label><label><input type="radio" name="c-preset"><strong>N7</strong><small>进阶挑战 · 最多 4 人</small></label><label><input type="radio" name="c-preset"><strong>Solo</strong><small>单人练习 · 仅限 1 人</small></label></div></section>
-          <section class="c-panel c-node-panel" aria-labelledby="c-node-title"><div class="c-panel__head"><span>03</span><div><h2 id="c-node-title">节点方式</h2><p>Node · 默认自动</p></div></div><div class="c-auto"><span class="c-auto__glyph" aria-hidden="true">↗</span><div><strong>自动选择节点</strong><small>系统会在可用节点中安排</small></div><span class="choice-check">✓</span></div><details class="manual-disclosure manual-disclosure--c"><summary>手动指定节点 <small>高级选项</small><span aria-hidden="true">⌄</span></summary><p>手动指定后只等待该节点。</p><div class="node-list"><label><input type="radio" name="c-node"><span class="node-state available"></span><span>青岚一号 <small>可用 · 2 / 4 空位 · 28 ms</small></span></label><label><input type="radio" name="c-node"><span class="node-state tight"></span><span>松影二号 <small>容量紧张 · 1 / 4 空位 · 35 ms</small></span></label><div class="node-disabled"><span class="node-state maintenance"></span><span>云阶三号 <small>维护 · 暂不接新申请</small></span></div><div class="node-disabled"><span class="node-state offline"></span><span>溪谷四号 <small>离线 · 暂不接新申请</small></span></div></div></details></section></div>
-        <aside class="c-summary" aria-label="申请摘要"><h2>申请摘要</h2><div class="c-summary__facts"><div><span>游廊游戏</span><strong>星潮远征</strong></div><div><span>玩法预设</span><strong data-preset-summary>N6 · 平衡挑战</strong></div><div><span>当前队伍</span><strong>仅自己 · 1 人</strong></div><div><span>节点</span><strong data-node-summary>自动选择 <span class="tiny-check">✓</span></strong></div></div><button type="button" class="primary-button request-button">申请服务器 <span aria-hidden="true">↗</span></button><p>已有活动申请时，优先显示当前状态。</p></aside>
-      </div>
-      <div class="active-view active-card active-card--c"><div class="active-card__label"><span class="pulse-dot"></span>当前活动申请</div><div class="c-active-grid"><div><h2>正在等待<br>服务器资源。</h2><p>申请已经存在，状态会在这里优先显示。</p><button type="button" class="text-button return-button">返回未申请预览 ↗</button></div><dl><div><dt>游戏</dt><dd>星潮远征</dd></div><div><dt>玩法</dt><dd data-active-preset>N6 · 平衡挑战</dd></div><div><dt>队伍</dt><dd>仅自己</dd></div><div><dt>节点</dt><dd data-active-node>自动选择</dd></div></dl></div></div>
-    </article>
   </main>
 </body>
 </html>

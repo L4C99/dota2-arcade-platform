@@ -28,3 +28,11 @@
 @media(max-width:410px){.admin-preset-choice-list,.admin-binding-list{grid-template-columns:1fr}}
 @media(max-width:900px){.admin-entry-grid{grid-template-columns:1fr}}
 @media(max-width:700px){.admin-instance__actions{align-items:flex-start}.admin-entry{padding:15px}}
+@media(max-width:700px){
+  .admin-page{min-width:0}
+  .admin-demo__inner>div{min-width:0;overflow-x:visible;flex-wrap:wrap}
+  .admin-demo__inner>div>a,.admin-demo__inner>div>button{max-width:100%;white-space:normal;text-align:left}
+  .admin-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}
+  .admin-tabs button{min-width:0;white-space:normal;text-align:center}
+}
+.admin-instance__body .admin-instance__meta{margin-top:5px;color:var(--muted);font-size:11px}
