@@ -1,0 +1,79 @@
+package config
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
+)
+
+type buildManifest struct {
+	Version   string `json:"version"`
+	GitCommit string `json:"gitCommit"`
+}
+
+type contentMetadata struct {
+	WorkshopID       string `json:"workshopId"`
+	ContentVersionID string `json:"contentVersionId"`
+	ReleasePath      string `json:"releasePath"`
+}
+
+// Facts reports only local files that the Controller can read back. Core
+// protocolVersion remains zero until P0D establishes the local client link.
+func (c Config) Facts(controllerVersion string, coreProtocolVersion int) nodev1.Heartbeat {
+	h := nodev1.Heartbeat{OS: runtime.GOOS, ControllerVersion: controllerVersion, NodeAPIVersion: nodev1.APIVersion,
+		D2CoreVersion: "unknown", D2CoreCommit: "unknown", D2CoreProtocolVersion: coreProtocolVersion,
+		HardMaxInstances: c.HardMaxInstances, Network: c.Network, Content: make([]nodev1.ContentFact, 0, len(c.ContentBindings))}
+	if raw, err := os.ReadFile(c.D2CoreBuildFile); err == nil {
+		var manifest buildManifest
+		if json.Unmarshal(raw, &manifest) == nil && manifest.Version != "" && manifest.GitCommit != "" {
+			h.D2CoreVersion = manifest.Version
+			h.D2CoreCommit = manifest.GitCommit
+		}
+	}
+	for _, binding := range c.ContentBindings {
+		h.Content = append(h.Content, readContentFact(binding))
+	}
+	return h
+}
+
+func readContentFact(binding ContentBinding) nodev1.ContentFact {
+	fact := nodev1.ContentFact{WorkshopID: binding.WorkshopID, State: "unknown"}
+	raw, err := os.ReadFile(binding.MetadataPath)
+	if err != nil {
+		return fact
+	}
+	var metadata contentMetadata
+	if json.Unmarshal(raw, &metadata) != nil || metadata.WorkshopID != binding.WorkshopID ||
+		metadata.ContentVersionID == "" || !filepath.IsAbs(metadata.ReleasePath) {
+		return fact
+	}
+	linkTarget, err := filepath.EvalSymlinks(binding.CurrentLinkPath)
+	if err != nil {
+		return fact
+	}
+	releaseTarget, err := filepath.EvalSymlinks(metadata.ReleasePath)
+	if err != nil {
+		return fact
+	}
+	if !samePath(linkTarget, releaseTarget) {
+		return fact
+	}
+	if info, err := os.Stat(filepath.Join(releaseTarget, "pak01_dir.vpk")); err != nil || info.IsDir() {
+		return fact
+	}
+	fact.ContentVersionID = metadata.ContentVersionID
+	fact.State = "confirmed"
+	return fact
+}
+
+func samePath(a, b string) bool {
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}

@@ -19,3 +19,5 @@ go build ./cmd/platform-server ./cmd/node-controller
 开发与未来正式部署使用独立的数据库、数据目录、Node Secret 和运行配置。源码工作树不是生产运行目录；正式部署使用独立构建产物与部署目录。真实凭据、节点配置和游戏资产不纳入 Git。
 
 P0B 起，`platform-server` 提供 `migrate`、`serve`、`admin create <username>`、`admin reset-password <username>` 和 `version`。管理员密码从 stdin 管道输入，不作为命令参数。服务启动会先校验并应用显式 migration；失败则拒绝监听。环境变量示例位于 [configs/examples/](configs/examples/)，开发实例只绑定本机回环地址，正式实例默认要求 HTTPS 公网 origin 与 Secure Cookie。
+
+P0C 的 [Node API v1](docs/node-protocol.md) 提供预置节点认证、事实心跳与 durable NodeJob claim/prepare/report。`platform-server node register <name> <windows|linux>` 登记节点并仅输出一次 Secret。`node-controller heartbeat|run --config <绝对路径>` 读取本机配置和独立 Secret 文件；在 P0D 完成真实 d2core 本地连接前，Controller 如实上报协议未验证并不领取任务。

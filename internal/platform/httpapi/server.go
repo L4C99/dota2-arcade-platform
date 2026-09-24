@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/L4C99/dota2-arcade-platform/internal/platform/store"
 )
 
@@ -54,6 +55,12 @@ func NewHandler(s *store.Store, c Config) (http.Handler, error) {
 	mux.HandleFunc("POST /api/v1/admin/login", a.adminLogin)
 	mux.HandleFunc("GET /api/v1/admin/me", a.adminMe)
 	mux.HandleFunc("POST /api/v1/admin/logout", a.adminLogout)
+	mux.HandleFunc("POST "+nodev1.APIPath+"/heartbeat", a.nodeHeartbeat)
+	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/open", a.nodeOpenJobs)
+	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/claim", a.nodeClaimJob)
+	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/{id}", a.nodeGetJob)
+	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/prepare", a.nodePrepareJob)
+	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/report", a.nodeReportJob)
 	return mux, nil
 }
 

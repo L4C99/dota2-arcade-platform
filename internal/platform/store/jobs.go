@@ -20,6 +20,8 @@ type FrozenCreate struct {
 	FingerprintSHA []byte `json:"-"`
 }
 
+var ErrJobConflict = errors.New("node job conflict")
+
 func CoreIdempotencyKey(nodeJobID string) string {
 	return "nodejob-" + strings.ReplaceAll(nodeJobID, "-", "")
 }
@@ -55,7 +57,7 @@ func (s *Store) CreateIntegrationJob(ctx context.Context, nodeID, kind, instance
 // call. A repeated prepare must match the previously frozen request exactly.
 func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template string, port int) (FrozenCreate, error) {
 	if template == "" || port < 0 || port > 65535 {
-		return FrozenCreate{}, fmt.Errorf("invalid create request")
+		return FrozenCreate{}, fmt.Errorf("%w: invalid create request", ErrJobConflict)
 	}
 	key := CoreIdempotencyKey(jobID)
 	fingerprint := createFingerprint(key, template, port)
@@ -70,7 +72,7 @@ func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template strin
 		return FrozenCreate{}, err
 	}
 	if kind != "create" || state == "pending" || state == "succeeded" || state == "rejected_no_effect" || state == "failed_with_effect" {
-		return FrozenCreate{}, fmt.Errorf("job cannot be prepared in state %s", state)
+		return FrozenCreate{}, fmt.Errorf("%w: job cannot be prepared in state %s", ErrJobConflict, state)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO node_job_executions(node_job_id,core_idempotency_key,resolved_template_path,requested_port,request_fingerprint)
         VALUES($1,$2,$3,$4,$5) ON CONFLICT (node_job_id) DO NOTHING`, jobID, key, template, port, fingerprint[:])
@@ -86,7 +88,7 @@ func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template strin
 		return FrozenCreate{}, err
 	}
 	if frozen.IdempotencyKey != key || frozen.TemplatePath != template || frozen.Port != port || !bytes.Equal(frozen.FingerprintSHA, fingerprint[:]) {
-		return FrozenCreate{}, errors.New("frozen create request conflict")
+		return FrozenCreate{}, fmt.Errorf("%w: frozen create request changed", ErrJobConflict)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return FrozenCreate{}, err

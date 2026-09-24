@@ -72,6 +72,30 @@ func run(args []string) error {
 		}
 		fmt.Println("admin account updated")
 		return nil
+	case "node":
+		if len(args) == 4 && args[1] == "register" {
+			id, secret, err := s.RegisterNode(ctx, args[2], args[3])
+			if err != nil {
+				return err
+			}
+			fmt.Printf("node_id=%s\nnode_secret=%s\n", id, secret)
+			return nil
+		}
+		if len(args) >= 4 && args[1] == "integration-job" {
+			instanceID := ""
+			if len(args) == 5 {
+				instanceID = args[4]
+			} else if len(args) != 4 {
+				return errors.New("invalid integration job arguments")
+			}
+			id, err := s.CreateIntegrationJob(ctx, args[2], args[3], instanceID)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("node_job_id=%s\n", id)
+			return nil
+		}
+		return errors.New("usage: platform-server node register <name> <windows|linux> | node integration-job <node-id> create|stop [instance-id]")
 	case "serve":
 		if len(args) != 1 {
 			return errors.New("usage: platform-server serve")
@@ -114,15 +138,13 @@ func serve(s *store.Store) error {
 	if address == "" {
 		address = "127.0.0.1:8080"
 	}
-	if config.Development {
-		host, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return err
-		}
-		ip := net.ParseIP(host)
-		if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			return errors.New("development listener must bind to loopback")
-		}
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	ip := net.ParseIP(host)
+	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return errors.New("platform-server must bind to loopback behind the HTTPS proxy")
 	}
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
