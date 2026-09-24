@@ -1,8 +1,9 @@
 (() => {
   const $ = (selector) => document.querySelector(selector);
   const state = {
-    loggedIn: false, tab: 'overview', selectedNode: 'a', globalAccept: true, maintenanceMessage: '今晚 22:00 起暂停申请服务器。', noticeEnabled: true, noticeLevel: 'warning',
+    loggedIn: false, tab: 'overview', selectedNode: 'a', selectedGame: 'star', globalAccept: true, maintenanceMessage: '今晚 22:00 起暂停申请服务器。', noticeEnabled: true, noticeLevel: 'warning',
     gameEnabled: true, gameAccept: true, presetEnabled: true, presetAccept: true,
+    harborGameEnabled: true, harborGameAccept: true, harborPresetEnabled: true, harborPresetAccept: true,
     published: 'v2', reported: 'v2', versionVerified: false, bindingAccept: true, nodeAccept: true, drain: false,
     priority: 10, desired: 3, revision: 7, steamVerified: true, steamEnabled: true,
     chinaVerified: false, chinaEnabled: false, waiting: true, running: 'running', quarantined: true
@@ -30,6 +31,11 @@
     ['a', 'b', 'c'].forEach((node) => { $(`#node-detail-${node}`).hidden = node !== state.selectedNode; });
   }
 
+  function renderGameSelection() {
+    document.querySelectorAll('[data-game]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.game === state.selectedGame)); });
+    ['star', 'harbor'].forEach((game) => { $(`#game-detail-${game}`).hidden = game !== state.selectedGame; });
+  }
+
   function render() {
     $('#admin-login').hidden = state.loggedIn;
     $('#admin-app').hidden = !state.loggedIn;
@@ -43,6 +49,7 @@
     });
     ['overview', 'content', 'nodes', 'instances'].forEach((tab) => { $(`#tab-${tab}`).hidden = tab !== state.tab; });
     renderNodeSelection();
+    renderGameSelection();
     $('#admin-alert').textContent = state.globalAccept
       ? '全站允许玩家申请服务器；各地图和玩法仍按各自设置生效。'
       : `全站暂停申请服务器；等待申请暂停调度，恢复后按原提交时间继续排队。已分配的服务器不会因此停止。${state.maintenanceMessage ? ` 玩家提示：${state.maintenanceMessage}` : ''}`;
@@ -57,8 +64,17 @@
     $('#game-accept').checked = state.gameAccept;
     $('#preset-enabled').checked = state.presetEnabled;
     $('#preset-accept').checked = state.presetAccept;
+    $('#harbor-game-enabled').checked = state.harborGameEnabled;
+    $('#harbor-game-accept').checked = state.harborGameAccept;
+    $('#harbor-preset-enabled').checked = state.harborPresetEnabled;
+    $('#harbor-preset-accept').checked = state.harborPresetAccept;
+    $('#game-state-star').textContent = !state.gameEnabled ? '已下架' : state.gameAccept ? '可申请' : '暂不可申请';
+    $('#game-state-star').classList.toggle('admin-pill--warm', !state.gameEnabled || !state.gameAccept);
+    $('#game-state-harbor').textContent = !state.harborGameEnabled ? '已下架' : state.harborGameAccept ? '可申请' : '暂不可申请';
+    $('#game-state-harbor').classList.toggle('admin-pill--warm', !state.harborGameEnabled || !state.harborGameAccept);
 
     $('#published-version').textContent = state.published;
+    $('#game-summary-star-version').textContent = state.published;
     const canPublish = state.published !== 'v3' && state.reported === 'v3' && state.versionVerified && state.bindingAccept && state.nodeAccept && !state.drain && state.desired > 0;
     $('#candidate-version-row').hidden = state.published === 'v3';
     $('#publish-version').hidden = state.published === 'v3';
@@ -132,6 +148,7 @@
   $('#demo-reset').addEventListener('click', () => window.location.reload());
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.tab = button.dataset.tab; render(); }));
   document.querySelectorAll('[data-node]').forEach((button) => button.addEventListener('click', () => { state.selectedNode = button.dataset.node; renderNodeSelection(); }));
+  document.querySelectorAll('[data-game]').forEach((button) => button.addEventListener('click', () => { state.selectedGame = button.dataset.game; renderGameSelection(); }));
 
   $('#save-global').addEventListener('click', () => { state.globalAccept = $('#global-accept').checked; state.maintenanceMessage = $('#maintenance-message').value.trim(); render(); notify(state.globalAccept ? '全站已允许申请服务器（模拟）。' : '全站已暂停申请服务器；等待申请不会被取消（模拟）。'); });
   $('#save-notice').addEventListener('click', () => { state.noticeEnabled = $('#notice-enabled').checked; state.noticeLevel = $('#notice-level').value; render(); notify('站点公告已更新（模拟）。'); });
@@ -142,12 +159,24 @@
     render();
     notify(state.gameEnabled ? '地图设置已更新（模拟）。' : '地图已下架；还在排队的申请已结束（模拟）。');
   });
+  $('#save-harbor-game').addEventListener('click', () => {
+    state.harborGameEnabled = $('#harbor-game-enabled').checked;
+    state.harborGameAccept = $('#harbor-game-accept').checked;
+    render();
+    notify('雾港守卫的地图设置已更新，不影响星潮远征（模拟）。');
+  });
   $('#save-preset').addEventListener('click', () => {
     state.presetEnabled = $('#preset-enabled').checked;
     state.presetAccept = $('#preset-accept').checked;
     if (!state.presetEnabled) state.waiting = false;
     render();
     notify('N6 玩法设置已更新（模拟）。');
+  });
+  $('#save-harbor-preset').addEventListener('click', () => {
+    state.harborPresetEnabled = $('#harbor-preset-enabled').checked;
+    state.harborPresetAccept = $('#harbor-preset-accept').checked;
+    render();
+    notify('雾港守卫的标准玩法设置已更新（模拟）。');
   });
   $('#publish-version').addEventListener('click', () => {
     if (state.published === 'v3' || state.reported !== 'v3' || !state.versionVerified || !state.bindingAccept || !state.nodeAccept || state.drain || state.desired === 0) return;
