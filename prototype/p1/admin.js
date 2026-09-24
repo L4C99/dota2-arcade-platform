@@ -39,7 +39,7 @@
     ['overview', 'content', 'nodes', 'instances'].forEach((tab) => { $(`#tab-${tab}`).hidden = tab !== state.tab; });
     $('#admin-alert').textContent = state.globalAccept
       ? '全站允许玩家申请服务器；各地图和玩法仍按各自设置生效。'
-      : `全站暂停申请服务器；等待中的申请保留原排队时间，已分配的服务器不会因此停止。${state.maintenanceMessage ? ` 玩家提示：${state.maintenanceMessage}` : ''}`;
+      : `全站暂停申请服务器；等待申请暂停调度，恢复后按原提交时间继续排队。已分配的服务器不会因此停止。${state.maintenanceMessage ? ` 玩家提示：${state.maintenanceMessage}` : ''}`;
     $('#admin-alert').dataset.warn = String(!state.globalAccept);
     $('#global-state').textContent = state.globalAccept ? '允许新申请' : '暂停新申请';
     $('#global-state').classList.toggle('admin-pill--warm', !state.globalAccept);
@@ -118,7 +118,7 @@
   $('#demo-reset').addEventListener('click', () => window.location.reload());
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.tab = button.dataset.tab; render(); }));
 
-  $('#save-global').addEventListener('click', () => { state.globalAccept = $('#global-accept').checked; state.maintenanceMessage = $('#maintenance-message').value.trim(); render(); notify(state.globalAccept ? '全站已允许申请服务器（模拟）。' : '全站已暂停申请服务器；等待申请保留排队时间（模拟）。'); });
+  $('#save-global').addEventListener('click', () => { state.globalAccept = $('#global-accept').checked; state.maintenanceMessage = $('#maintenance-message').value.trim(); render(); notify(state.globalAccept ? '全站已允许申请服务器（模拟）。' : '全站已暂停申请服务器；等待申请不会被取消（模拟）。'); });
   $('#save-notice').addEventListener('click', () => { state.noticeEnabled = $('#notice-enabled').checked; state.noticeLevel = $('#notice-level').value; render(); notify('站点公告已更新（模拟）。'); });
   $('#save-game').addEventListener('click', () => {
     state.gameEnabled = $('#game-enabled').checked;
