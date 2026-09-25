@@ -76,7 +76,11 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 		if mode == "manual" {
 			nodeRows, err = tx.Query(ctx, `SELECT id FROM nodes WHERE id=$1 FOR UPDATE`, manualNodeID)
 		} else {
-			nodeRows, err = tx.Query(ctx, `SELECT id FROM nodes ORDER BY priority DESC,id FOR UPDATE`)
+			// A proven no-effect attempt may be retried on a different Node.
+			// Never immediately repeat the same rejected NodeJob in a loop.
+			nodeRows, err = tx.Query(ctx, `SELECT n.id FROM nodes n WHERE NOT EXISTS (
+				SELECT 1 FROM allocations a WHERE a.server_request_id=$1 AND a.node_id=n.id
+				AND a.state='released_no_effect') ORDER BY n.priority DESC,n.id FOR UPDATE OF n`, requestID)
 		}
 		if err != nil {
 			return false, err
@@ -95,6 +99,20 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 			return false, err
 		}
 		nodeRows.Close()
+		if mode == "auto" && len(nodeIDs) == 0 {
+			var hadNoEffectAttempt bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM allocations
+				WHERE server_request_id=$1 AND state='released_no_effect')`, requestID).Scan(&hadNoEffectAttempt); err != nil {
+				return false, err
+			}
+			if hadNoEffectAttempt {
+				_, err := tx.Exec(ctx, `UPDATE server_requests SET state='unavailable',updated_at=now() WHERE id=$1`, requestID)
+				if err != nil {
+					return false, err
+				}
+				return true, tx.Commit(ctx)
+			}
+		}
 		var selected *NodeEligibility
 		for _, nodeID := range nodeIDs {
 			// Read after acquiring the node lock so concurrent heartbeat and

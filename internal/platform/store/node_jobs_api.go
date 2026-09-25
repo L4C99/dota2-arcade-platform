@@ -21,8 +21,8 @@ func (s *Store) ClaimNextJob(ctx context.Context, nodeID string) (*nodev1.Job, e
 	err = tx.QueryRow(ctx, `SELECT j.id FROM node_jobs j
         JOIN nodes n ON n.id=j.node_id JOIN node_reports r ON r.node_id=n.id
         WHERE j.node_id=$1 AND j.state='pending' AND n.enabled AND r.compatibility_status='compatible'
-        AND n.last_heartbeat > now() - interval '2 minutes'
-        ORDER BY j.created_at,j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1`, nodeID).Scan(&jobID)
+        AND n.last_heartbeat > $2
+        ORDER BY j.created_at,j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1`, nodeID, time.Now().UTC().Add(-nodeOnlineWindow)).Scan(&jobID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -213,8 +213,10 @@ func (f FrozenCreate) Contract() nodev1.FrozenCreate {
 
 func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, nodeID, kind, state, instanceID, errorCode string,
 	join *nodev1.JoinInfo, joinErrorCode string) error {
-	var requestID string
-	if err := tx.QueryRow(ctx, `SELECT server_request_id FROM allocations WHERE id=$1 FOR UPDATE`, allocationID).Scan(&requestID); err != nil {
+	var requestID, selectionMode string
+	if err := tx.QueryRow(ctx, `SELECT a.server_request_id,r.node_selection_mode FROM allocations a
+		JOIN server_requests r ON r.id=a.server_request_id WHERE a.id=$1 FOR UPDATE OF a`, allocationID).
+		Scan(&requestID, &selectionMode); err != nil {
 		return err
 	}
 	at := time.Now().UTC()
@@ -230,6 +232,9 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 			allocationState, requestState = "running", "running"
 		case "rejected_no_effect":
 			allocationState, requestState = "released_no_effect", "unavailable"
+			if selectionMode == "auto" {
+				requestState = "waiting"
+			}
 		case "failed_with_effect":
 			allocationState, requestState = "failed_unreclaimed", "failed_unreclaimed"
 		}

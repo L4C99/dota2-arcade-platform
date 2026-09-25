@@ -17,7 +17,7 @@ describe('player state', () => {
   })
   it('explains manual waiting without promising a switch or an ETA', () => {
     const manual: ServerRequest = { ...request, state: 'waiting', nodeSelectionMode: 'manual', manualNodeId: 'node' }
-    const node: NodeChoice = { id: 'node', displayName: '选定节点', status: 'full', reason: 'full', availableSlots: 0, selectable: true }
+    const node: NodeChoice = { id: 'node', displayName: '选定节点', status: 'full', connectivity: 'online', reason: 'full', availableSlots: 0, selectable: true }
     expect(statusFor(manual, null, [node]).description).toContain('等待所选节点容量')
     expect(statusFor(manual, null, [{ ...node, status: 'unavailable', reason: 'unreachable' }]).description).toContain('暂不可达')
     expect(statusFor({ ...manual, state: 'cancelled' }, null).phase).toBe('ended')

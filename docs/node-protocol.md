@@ -34,6 +34,12 @@ Controller 后续把 hard 降低时，历史 desired 可以暂时高于 hard；�
 
 拥有 Platform 数据库访问权限的运维人员可使用 `platform-server node priority <node-id>` 查看节点的调度优先级，或使用 `platform-server node priority <node-id> <integer>` 设置它。默认值为 0；仅自动申请在全部 eligibility 条件成立后使用 priority，数值越高越优先，平局按 Node ID 稳定排序。手动申请始终只等待指定节点。priority 不改变 Controller 报告的节点事实，也不覆盖容量、内容、心跳或维护限制。
 
+## P3C 心跳可用性与恢复
+
+Platform 以服务端记录的最新心跳时间判定 Node `online`（小于 2 分钟）、`stale`（2 到小于 5 分钟）、`offline`（至少 5 分钟或从无心跳）。只有 `online` Node 可接收新 Allocation 和待领取的 NodeJob。此阈值是 P3 调度/领取阈值，与 P4 的异常隔离计时无关。变成 stale/offline 不改变已有 Allocation、NodeJob 或 occupied，也不推断 d2core instance 已停止。
+
+Controller 恢复联系后仍先执行 d2core list，再读取本 Node 的 open durable jobs、已冻结 create 参数，并通过 operation/status 对账；可能有副作用的 unknown create 始终保留原 Node 和容量。只有明确的 `rejected_no_effect` 才释放该 attempt。自动请求随后可在另一个 eligible Node 生成顺序递增的新 attempt，并重新快照当前内容版本；曾明确拒绝该请求的 Node 不会立即重复尝试。手动请求不改派到其他 Node。若全部已尝试 Node 均明确无副作用地拒绝，申请进入 `unavailable`，避免无限重试。完整 P4 quarantine/玩家脱困流程不在 P3C。
+
 ## Controller 本地配置
 
 Controller 使用显式绝对路径 JSON 配置，其中包含 Platform URL、Node ID、Secret 文件路径、d2core `BUILD.json` 和 data-dir、端口映射、硬上限、逻辑模板到本机绝对路径的绑定，以及可选内容 metadata/当前链接位置。所有 d2core 关键路径须为 ASCII 绝对路径。节点 Secret、真实节点路径、端口和部署参数保存在仓库外的开发或生产专用目录。源码工作树不作为生产运行目录。

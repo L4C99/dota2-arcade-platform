@@ -23,9 +23,25 @@ type NodeChoice struct {
 	ID             string `json:"id"`
 	DisplayName    string `json:"displayName"`
 	Status         string `json:"status"`
+	Connectivity   string `json:"connectivity"`
 	Reason         string `json:"reason"`
 	AvailableSlots int    `json:"availableSlots"`
 	Selectable     bool   `json:"selectable"`
+}
+
+const nodeOnlineWindow = 2 * time.Minute
+const nodeOfflineWindow = 5 * time.Minute
+
+// Node connectivity is derived from the server-recorded heartbeat time. It
+// does not change Allocation state or prove an old d2core instance stopped.
+func NodeConnectivity(last *time.Time, now time.Time) string {
+	if last == nil || now.Sub(*last) >= nodeOfflineWindow {
+		return "offline"
+	}
+	if now.Sub(*last) >= nodeOnlineWindow {
+		return "stale"
+	}
+	return "online"
 }
 
 const nodeEligibilitySQL = `SELECT n.id,n.display_name,n.priority,n.enabled,n.accepting_new_requests,n.draining,
@@ -54,7 +70,7 @@ func (n NodeEligibility) Reason(contentID string, now time.Time) string {
 	if !n.Enabled || !n.Accepting || n.Draining {
 		return "maintenance"
 	}
-	if n.LastHeartbeat == nil || now.Sub(*n.LastHeartbeat) >= 2*time.Minute {
+	if NodeConnectivity(n.LastHeartbeat, now) != "online" {
 		return "unreachable"
 	}
 	if n.Compatibility != "compatible" {
@@ -82,7 +98,7 @@ func (n NodeEligibility) Choice(contentID string, now time.Time) NodeChoice {
 	} else if reason == "full" {
 		status = "full"
 	}
-	return NodeChoice{ID: n.ID, DisplayName: n.DisplayName, Status: status, Reason: reason,
+	return NodeChoice{ID: n.ID, DisplayName: n.DisplayName, Status: status, Connectivity: NodeConnectivity(n.LastHeartbeat, now), Reason: reason,
 		AvailableSlots: max(0, min(n.Hard, n.Desired)-n.Occupied), Selectable: n.Enabled}
 }
 

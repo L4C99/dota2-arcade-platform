@@ -39,6 +39,7 @@ export interface NodeChoice {
   id: string
   displayName: string
   status: 'available' | 'full' | 'maintenance' | 'unavailable'
+  connectivity: 'online' | 'stale' | 'offline'
   reason: string
   availableSlots: number
   selectable: boolean
