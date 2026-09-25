@@ -35,6 +35,14 @@ export interface ServerRequest {
   manualNodeId?: string
 }
 
+export interface NextGameIntent {
+  sourceRequestId: string
+  state: 'pending' | 'paused' | 'consumed'
+  newRequestId?: string
+  createdAt: string
+  consumedAt?: string
+}
+
 export interface NodeChoice {
   id: string
   displayName: string
@@ -134,6 +142,8 @@ export const api = {
     request<ServerRequest>('/server-requests', 'POST', { arcadeGameId, gamePresetId, nodeSelectionMode, manualNodeId }),
   allocation: (id: string) => request<Allocation | null>(`/server-requests/${encodeURIComponent(id)}/allocation`),
   stop: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/stop`, 'POST'),
+  nextGame: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/next-game`, 'POST'),
+  nextGameIntent: (id: string) => request<NextGameIntent | null>(`/server-requests/${encodeURIComponent(id)}/next-game`),
   abandon: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/abandon`, 'POST', { confirm: true }),
   cancel: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/cancel`, 'POST'),
 }

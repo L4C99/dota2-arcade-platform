@@ -237,6 +237,14 @@ func (s *Store) UserRequestAllocation(ctx context.Context, userID, requestID str
 // running allocation. The instance ID is read from the create job, never from
 // the browser. Capacity remains occupied until the stop report proves reclaim.
 func (s *Store) StopUserRequest(ctx context.Context, userID, requestID string) (ServerRequest, error) {
+	return s.stopUserRequest(ctx, userID, requestID, false)
+}
+
+func (s *Store) NextGameUserRequest(ctx context.Context, userID, requestID string) (ServerRequest, error) {
+	return s.stopUserRequest(ctx, userID, requestID, true)
+}
+
+func (s *Store) stopUserRequest(ctx context.Context, userID, requestID string, nextGame bool) (ServerRequest, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return ServerRequest{}, err
@@ -266,6 +274,15 @@ func (s *Store) StopUserRequest(ctx context.Context, userID, requestID string) (
 		return ServerRequest{}, err
 	}
 	if r.State == "stopping" || r.State == "ended" {
+		if nextGame {
+			var hasIntent bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents WHERE source_request_id=$1)`, requestID).Scan(&hasIntent); err != nil {
+				return ServerRequest{}, err
+			}
+			if !hasIntent {
+				return ServerRequest{}, fmt.Errorf("%w: ordinary stop already in progress", ErrJobConflict)
+			}
+		}
 		return r, tx.Commit(ctx)
 	}
 	if r.State != "running" {
@@ -281,6 +298,13 @@ func (s *Store) StopUserRequest(ctx context.Context, userID, requestID string) (
 	}
 	if instanceID == "" {
 		return ServerRequest{}, fmt.Errorf("%w: missing instance identity", ErrJobConflict)
+	}
+	if nextGame {
+		_, err = tx.Exec(ctx, `INSERT INTO next_game_intents(source_request_id,source_allocation_id)
+			VALUES($1,$2)`, requestID, allocationID)
+		if err != nil {
+			return ServerRequest{}, err
+		}
 	}
 	jobID, err := NewID()
 	if err != nil {

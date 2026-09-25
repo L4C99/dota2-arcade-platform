@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Allocation, NodeChoice, ServerRequest } from './api'
+import type { Allocation, NextGameIntent, NodeChoice, ServerRequest } from './api'
 import { statusFor } from './state'
 
 const request = { id: 'one', arcadeGameId: 'game', gamePresetId: 'preset', state: 'running', requestedAt: '', updatedAt: '', nodeSelectionMode: 'auto' } satisfies ServerRequest
@@ -14,6 +14,13 @@ describe('player state', () => {
   it('keeps stopping distinct from ended', () => {
     expect(statusFor({ ...request, state: 'stopping' }, allocation).phase).toBe('stopping')
     expect(statusFor({ ...request, state: 'ended' }, allocation).phase).toBe('ended')
+  })
+  it('shows durable next-game progress and quarantine pause', () => {
+    const intent: NextGameIntent = { sourceRequestId: request.id, state: 'pending', createdAt: '' }
+    expect(statusFor({ ...request, state: 'stopping' }, allocation, [], intent).title).toContain('下一局已记录')
+    const paused: NextGameIntent = { ...intent, state: 'paused' }
+    expect(statusFor({ ...request, state: 'quarantined' }, { ...allocation, state: 'quarantined' }, [], paused).title).toContain('下一局暂停')
+    expect(statusFor({ ...request, state: 'quarantined' }, { ...allocation, state: 'reclaimed' }, [], paused).description).toContain('完整回收')
   })
   it('explains manual waiting without promising a switch or an ETA', () => {
     const manual: ServerRequest = { ...request, state: 'waiting', nodeSelectionMode: 'manual', manualNodeId: 'node' }

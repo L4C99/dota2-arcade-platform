@@ -236,6 +236,56 @@ func (a *api) abandonPlayerRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a *api) nextGamePlayerRequest(w http.ResponseWriter, r *http.Request) {
+	if !a.checkOrigin(w, r) {
+		return
+	}
+	userID, ok := a.playerUser(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if !nodeIDPattern.MatchString(id) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	request, err := a.store.NextGameUserRequest(r.Context(), userID, id)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		http.Error(w, "not found", http.StatusNotFound)
+	case errors.Is(err, store.ErrPartyForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "leader_required", "message": "只有队长可以开始下一局。"})
+	case errors.Is(err, store.ErrJobConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "next_game_unavailable", "message": "当前服务器状态无法开始下一局。"})
+	case err != nil:
+		http.Error(w, "next game unavailable", http.StatusServiceUnavailable)
+	default:
+		writeJSON(w, http.StatusOK, request)
+	}
+}
+
+func (a *api) playerNextGameIntent(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.playerUser(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if !nodeIDPattern.MatchString(id) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	intent, err := a.store.UserNextGameIntent(r.Context(), userID, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "next game unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, intent)
+}
+
 func (a *api) playerAllocation(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.playerUser(w, r)
 	if !ok {

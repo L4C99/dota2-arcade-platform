@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ApiError, api } from './api'
-import type { Allocation, Catalog, NodeChoice, Party, PartyInvite, ServerRequest } from './api'
+import type { Allocation, Catalog, NextGameIntent, NodeChoice, Party, PartyInvite, ServerRequest } from './api'
 import { maintenanceFor, statusFor } from './state'
 import { inviteTokenFromHash, partyInviteLink, tokenFromInviteInput } from './partyInvite'
 
@@ -22,6 +22,7 @@ const partyNotice = ref('')
 const copiedInvite = ref(false)
 const currentRequest = ref<ServerRequest | null>(null)
 const allocation = ref<Allocation | null>(null)
+const nextGameIntent = ref<NextGameIntent | null>(null)
 const gameId = ref('')
 const presetId = ref('')
 const nodes = ref<NodeChoice[]>([])
@@ -33,7 +34,7 @@ let polling = false
 const game = computed(() => catalog.value?.games.find((item) => item.id === (currentRequest.value?.arcadeGameId || gameId.value)))
 const preset = computed(() => catalog.value?.presets.find((item) => item.id === (currentRequest.value?.gamePresetId || presetId.value)))
 const selectedPresets = computed(() => catalog.value?.presets.filter((item) => item.arcadeGameId === gameId.value) || [])
-const state = computed(() => statusFor(currentRequest.value, allocation.value, nodes.value))
+const state = computed(() => statusFor(currentRequest.value, allocation.value, nodes.value, nextGameIntent.value))
 const selectedNode = computed(() => nodes.value.find((item) => item.id === (currentRequest.value?.manualNodeId || manualNodeId.value)))
 const assignedNodeName = computed(() => allocation.value?.nodeDisplayName || (currentRequest.value?.nodeSelectionMode === 'manual' ? selectedNode.value?.displayName : '') || '等待分配')
 const selectionName = computed(() => currentRequest.value?.nodeSelectionMode === 'manual'
@@ -119,7 +120,8 @@ async function refresh(): Promise<void> {
     if (request) {
       localStorage.setItem(savedRequestKey, request.id)
       allocation.value = await api.allocation(request.id)
-    } else allocation.value = null
+      nextGameIntent.value = await api.nextGameIntent(request.id)
+    } else { allocation.value = null; nextGameIntent.value = null }
     error.value = ''
   } catch (cause) { error.value = describeError(cause) }
   finally { polling = false }
@@ -158,10 +160,24 @@ async function stop(): Promise<void> {
   await refresh()
 }
 
+async function nextGame(): Promise<void> {
+  const request = currentRequest.value
+  if (!request || request.state !== 'running' || busy.value || !isLeader.value) return
+  busy.value = true
+  error.value = ''
+  try { currentRequest.value = await api.nextGame(request.id) }
+  catch (cause) { error.value = describeError(cause) }
+  finally { busy.value = false }
+  await refresh()
+}
+
 async function abandonQuarantined(): Promise<void> {
   const request = currentRequest.value
+  const recovered = allocation.value?.state === 'reclaimed' && nextGameIntent.value?.state === 'paused'
   if (!request || request.state !== 'quarantined' || busy.value || !isLeader.value ||
-    !window.confirm('确定放弃此异常服务器并继续？旧 Dota 可能仍在运行，原节点容量不会释放；管理员之后仍需确认并清理旧资源。')) return
+    !window.confirm(recovered
+      ? '旧服务器已完整回收。确定继续下一局并创建一份新申请吗？新申请会按当前时间正常排队。'
+      : '确定放弃此异常服务器并继续？旧 Dota 可能仍在运行，原节点容量不会释放；管理员之后仍需确认并清理旧资源。')) return
   busy.value = true
   error.value = ''
   try {
@@ -266,6 +282,7 @@ function newRequest(): void {
   if (!currentRequest.value || !['ended', 'cancelled', 'abandoned'].includes(currentRequest.value.state)) return
   currentRequest.value = null
   allocation.value = null
+  nextGameIntent.value = null
   localStorage.removeItem(savedRequestKey)
   error.value = ''
 }
@@ -415,7 +432,8 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         <div class="status-actions">
           <button v-if="currentRequest.state === 'waiting' && !allocation && isLeader" type="button" class="secondary-button" :disabled="busy" @click="cancelWaiting">取消等待申请</button>
           <button v-if="currentRequest.state === 'running' && isLeader" type="button" class="secondary-button danger" :disabled="busy" @click="stop">{{ busy ? '正在提交…' : '结束服务器' }}</button>
-          <button v-if="currentRequest.state === 'quarantined' && isLeader" type="button" class="secondary-button danger" :disabled="busy" @click="abandonQuarantined">放弃此异常服务器并继续</button>
+          <button v-if="currentRequest.state === 'running' && isLeader" type="button" class="primary-button" :disabled="busy" @click="nextGame">下一局 <span aria-hidden="true">↗</span></button>
+          <button v-if="currentRequest.state === 'quarantined' && isLeader" type="button" class="secondary-button danger" :disabled="busy" @click="abandonQuarantined">{{ allocation?.state === 'reclaimed' && nextGameIntent?.state === 'paused' ? '继续下一局' : '放弃此异常服务器并继续' }}</button>
           <p v-if="currentRequest.state === 'quarantined' && !isLeader" class="action-hint">只有队长可以放弃异常服务器；旧资源仍需管理员处理。</p>
           <button v-if="state.phase === 'ended'" type="button" class="secondary-button" @click="newRequest">重新申请</button>
         </div>
@@ -435,7 +453,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         <p class="join-note">结束服务器会停止当前游戏并等待完整回收。</p>
       </aside>
       <aside v-else-if="state.phase === 'unavailable'" class="panel side-panel"><span class="eyebrow">连接状态</span><h2>暂时无法给出连接地址</h2><p>服务器仍在运行。当前端口映射信息不足或已变化，页面不会显示未经确认的命令。你可以稍后刷新或结束服务器。</p></aside>
-      <aside v-else-if="state.phase === 'quarantined'" class="panel side-panel"><span class="eyebrow">异常隔离</span><h2>旧资源仍被保留</h2><p>放弃后只解除申请阻塞，不代表旧服务器已停止、端口空闲或容量释放。管理员确认完整回收后才会释放原节点资源。</p></aside>
+      <aside v-else-if="state.phase === 'quarantined'" class="panel side-panel"><span class="eyebrow">{{ allocation?.state === 'reclaimed' ? '资源已回收' : '异常隔离' }}</span><h2>{{ allocation?.state === 'reclaimed' ? '下一局等待你继续' : '旧资源仍被保留' }}</h2><p>{{ allocation?.state === 'reclaimed' ? '旧服务器已完成回收。队长确认后才会创建下一局的新申请，并按新申请时间正常排队。' : '放弃后只解除申请阻塞，不代表旧服务器已停止、端口空闲或容量释放。管理员确认完整回收后才会释放原节点资源。' }}</p></aside>
       <aside v-else-if="state.phase === 'unknown'" class="panel side-panel"><span class="eyebrow">等待对账</span><h2>不会重复开服</h2><p>节点恢复后，平台会核对原来的任务和实例。请稍后回来查看；当前申请和容量仍被保留。</p></aside>
       <aside v-else-if="state.phase === 'ended'" class="panel side-panel"><span class="eyebrow">{{ currentRequest.state === 'cancelled' ? '申请已取消' : '本局已结束' }}</span><h2>{{ currentRequest.state === 'cancelled' ? '未占用服务器' : currentRequest.state === 'abandoned' ? '旧资源仍待清理' : '服务器已回收' }}</h2><p>{{ currentRequest.state === 'abandoned' ? '旧异常服务器仍占用原节点容量。你可以新建申请，管理员会另行处理旧资源。' : '点击左侧“重新申请”即可回到地图、玩法和节点选择。刷新页面仍能看到此次申请的结束状态。' }}</p></aside>
       <aside v-else class="panel side-panel"><span class="eyebrow">申请已保存</span><h2>可以稍后回来</h2><p>关闭浏览器或刷新页面后，这台服务器的状态仍会保留在当前匿名会话中。</p></aside>

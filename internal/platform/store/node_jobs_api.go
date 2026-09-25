@@ -263,6 +263,18 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 			allocationState, requestState = "stopping", "stopping"
 		case "succeeded":
 			allocationState, requestState = "reclaimed", "ended"
+			if currentAllocationState == "quarantined" {
+				var pausedIntent bool
+				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents
+					WHERE source_request_id=$1 AND state='paused')`, requestID).Scan(&pausedIntent); err != nil {
+					return err
+				}
+				if pausedIntent {
+					// A paused next-game intent still needs the owner to
+					// decide whether to continue after quarantine.
+					requestState = "quarantined"
+				}
+			}
 		case "failed_with_effect":
 			allocationState, requestState = "quarantined", "quarantined"
 		}
@@ -304,6 +316,16 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 	_, err = tx.Exec(ctx, `UPDATE server_requests SET state=$2,updated_at=$3 WHERE id=$1 AND state <> 'abandoned'`, requestID, requestState, at)
 	if err != nil {
 		return err
+	}
+	if allocationState == "quarantined" {
+		if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
+			return err
+		}
+	}
+	if kind == "stop" && state == "succeeded" && currentAllocationState != "quarantined" {
+		if err := consumeNextGameIntent(ctx, tx, requestID, false); err != nil {
+			return err
+		}
 	}
 	if kind == "create" && state == "failed_with_effect" && instanceID != "" && errorCode != "IDENTITY_UNVERIFIED" {
 		stopJobID, err := NewID()

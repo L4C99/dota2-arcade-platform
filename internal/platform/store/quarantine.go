@@ -56,6 +56,9 @@ func (s *Store) QuarantineOneUnreachable(ctx context.Context) (bool, error) {
 		WHERE id=$1 AND state <> 'abandoned'`, requestID); err != nil {
 		return false, err
 	}
+	if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
+		return false, err
+	}
 	return true, tx.Commit(ctx)
 }
 
@@ -94,6 +97,9 @@ func (s *Store) MarkAllocationQuarantined(ctx context.Context, allocationID stri
 	}
 	if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now()
 		WHERE id=$1 AND state <> 'abandoned'`, requestID); err != nil {
+		return err
+	}
+	if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -141,7 +147,12 @@ func (s *Store) AbandonQuarantinedUserRequest(ctx context.Context, userID, reque
 		ORDER BY attempt_sequence DESC LIMIT 1 FOR UPDATE`, requestID).Scan(&allocationState); err != nil {
 		return ServerRequest{}, err
 	}
-	if allocationState != "quarantined" {
+	var pausedIntent bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents
+		WHERE source_request_id=$1 AND state='paused')`, requestID).Scan(&pausedIntent); err != nil {
+		return ServerRequest{}, err
+	}
+	if allocationState != "quarantined" && !(allocationState == "reclaimed" && pausedIntent) {
 		return ServerRequest{}, fmt.Errorf("%w: Allocation is not quarantined", ErrJobConflict)
 	}
 	at := time.Now().UTC()
@@ -150,5 +161,8 @@ func (s *Store) AbandonQuarantinedUserRequest(ctx context.Context, userID, reque
 		return ServerRequest{}, err
 	}
 	r.State, r.UpdatedAt = "abandoned", at
+	if err := consumeNextGameIntent(ctx, tx, requestID, true); err != nil {
+		return ServerRequest{}, err
+	}
 	return r, tx.Commit(ctx)
 }

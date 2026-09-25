@@ -130,7 +130,7 @@ func TestP4BUpgradeFromP3ClosurePreservesHistory(t *testing.T) {
 		t.Fatal(fmt.Sprintf("P3 history changed: %s %s %s %s", oldNode, oldVersion, oldJob, oldRequestState))
 	}
 	var version int
-	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 11 {
+	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 12 {
 		t.Fatalf("migration version=%d: %v", version, err)
 	}
 }
