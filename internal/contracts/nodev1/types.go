@@ -114,9 +114,32 @@ type JoinInfo struct {
 }
 
 var workshopIDPattern = regexp.MustCompile(`^[0-9]{1,20}$`)
-var domainPattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$`)
 var coreTokenPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 var revisionPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+func validConnectHost(host string) bool {
+	if net.ParseIP(host) != nil {
+		return true
+	}
+	if len(host) == 0 || len(host) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if len(label) == 0 || len(label) > 63 || !asciiAlnum(label[0]) || !asciiAlnum(label[len(label)-1]) {
+			return false
+		}
+		for i := 1; i < len(label)-1; i++ {
+			if !asciiAlnum(label[i]) && label[i] != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func asciiAlnum(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
+}
 
 // EntryConfigRevision covers the complete potential port set and entry
 // configuration. Mapping order in a local JSON file does not affect it.
@@ -138,8 +161,7 @@ func EntryConfigRevision(n NetworkFacts) string {
 
 func (j JoinInfo) Validate() error {
 	if j.LocalPort < 1 || j.LocalPort > 65535 || j.PublicPort < 1 || j.PublicPort > 65535 ||
-		j.ConnectHost == "" || len(j.ConnectHost) > 253 ||
-		(net.ParseIP(j.ConnectHost) == nil && (!domainPattern.MatchString(j.ConnectHost) || strings.Contains(j.ConnectHost, ".."))) ||
+		!validConnectHost(j.ConnectHost) ||
 		(j.ProtocolIP != "" && net.ParseIP(j.ProtocolIP) == nil) || !revisionPattern.MatchString(j.EntryConfigRevision) {
 		return fmt.Errorf("invalid JoinInfo")
 	}
@@ -219,8 +241,10 @@ func (h Heartbeat) Validate() error {
 }
 
 func (n NetworkFacts) Validate(hardMax int) error {
-	if n.ConnectHost == "" || len(n.ConnectHost) > 253 ||
-		(net.ParseIP(n.ConnectHost) == nil && (!domainPattern.MatchString(n.ConnectHost) || strings.Contains(n.ConnectHost, ".."))) {
+	if hardMax < 0 {
+		return fmt.Errorf("invalid hard max")
+	}
+	if !validConnectHost(n.ConnectHost) {
 		return fmt.Errorf("invalid connect host")
 	}
 	if n.ProtocolIP != "" && net.ParseIP(n.ProtocolIP) == nil {

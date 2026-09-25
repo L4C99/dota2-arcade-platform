@@ -24,3 +24,23 @@ func TestJoinInfoUsesActualPort(t *testing.T) {
 		t.Fatalf("identity mapping: %+v %q", join, code)
 	}
 }
+
+func TestP3EVendorDomainAndAsymmetricMapping(t *testing.T) {
+	facts := nodev1.NetworkFacts{ConnectHost: "vendor-nat.example.cn", LocalPortMin: 28000, LocalPortMax: 28001,
+		MappingMode: "explicit", Mappings: []nodev1.PortMapping{{Local: 28000, Public: 45123}, {Local: 28001, Public: 46781}}}
+	join, code := JoinInfo(facts, 28001)
+	if code != "" || join == nil || join.LocalPort != 28001 || join.PublicPort != 46781 ||
+		join.ConnectHost != "vendor-nat.example.cn" || join.ProtocolIP != "" {
+		t.Fatalf("asymmetric domain mapping: %+v %q", join, code)
+	}
+	facts.ProtocolIP = "203.0.113.8"
+	join, code = JoinInfo(facts, 28000)
+	if code != "" || join == nil || join.PublicPort != 45123 || join.ProtocolIP != "203.0.113.8" {
+		t.Fatalf("separate protocol IP: %+v %q", join, code)
+	}
+	facts.Mappings[1].Local = 28002
+	join, code = JoinInfo(facts, 28001)
+	if join != nil || code != "PORT_MAPPING_UNAVAILABLE" {
+		t.Fatalf("unmapped actual port: %+v %q", join, code)
+	}
+}

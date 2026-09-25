@@ -12,6 +12,8 @@ Controller 在首次真正连接 d2core 之前上报 `d2coreProtocolVersion=0`�
 
 网络事实包含 `connectHost`、可选 `protocolIp`、本地游戏端口范围、`identity` 或完整 `explicit` 端口映射，以及 A2S 部署声明。Controller 与服务端都验证映射覆盖范围、重复公网端口和 `hardMaxInstances <= 端口池大小`。本地端口范围必须与 d2core serve 的 `--port-min/--port-max` 来自同一部署配置；P0/P5 安装验收还要核对实际服务参数。心跳不会自动改防火墙/NAT。
 
+P3E 的 `connectHost` 可是节点的直连 IP、自有域名或厂商 NAT 域名；域名按完整 DNS label 校验，但不推断其公网可达性。`protocolIp` 只接受显式 IP，可以留空；Controller 不会把 NAT 域名解析成 Steam URI 所需的 IP。`identity` 将 d2core 实际本地端口映射到同号公网端口，`explicit` 必须逐一覆盖本地池并保持公网端口唯一。JoinInfo 使用该实例由 d2core `status` 报告的实际端口，未覆盖时返回 `PORT_MAPPING_UNAVAILABLE` 且实例继续占容量。网络事实变更会改变 entry revision，使旧 JoinInfo 不再展示。固定 d2core v0.1.1 API 不能读取管理器当前 serve 端口范围，部署时必须从同一配置生成 Controller 与 serve 参数并核对运行中的参数；不声称从本地 API 自动发现。
+
 内容事实只在 Controller 能同时读回当前目录链接、metadata 指向和 VPK 文件时报告 `confirmed`；读不到或不一致时报告 `unknown`。P0C 保存原始节点事实快照供诊断；P1B 将建立正式 `NodeContentBinding` 调度模型。Web/Admin 不能通过节点 API 伪造这些事实。
 
 ## durable NodeJob
