@@ -62,6 +62,8 @@ type fakeCore struct {
 	err         error
 	op          core.Operation
 	instance    core.Instance
+	opErr       error
+	statusErr   error
 	historyDays int
 	events      *[]string
 	keys        []nodev1.FrozenCreate
@@ -76,8 +78,10 @@ func (c *fakeCore) Stop(context.Context, string) (core.Accepted, error) {
 	c.stops++
 	return c.result, c.err
 }
-func (c *fakeCore) Operation(context.Context, string) (core.Operation, error) { return c.op, nil }
-func (c *fakeCore) Status(context.Context, string) (core.Instance, error)     { return c.instance, nil }
+func (c *fakeCore) Operation(context.Context, string) (core.Operation, error) { return c.op, c.opErr }
+func (c *fakeCore) Status(context.Context, string) (core.Instance, error) {
+	return c.instance, c.statusErr
+}
 func (c *fakeCore) List(context.Context) (core.ListResult, error) {
 	if c.events != nil {
 		*c.events = append(*c.events, "list")
@@ -307,5 +311,76 @@ func TestStopLostResponseFindsExistingStopOperation(t *testing.T) {
 	}
 	if p.job.State != "succeeded" || p.job.OperationID != "o_stop" || c.stops != 0 {
 		t.Fatalf("stop reconciliation: %+v %+v", p, c)
+	}
+}
+
+func TestStopTerminalMatrix(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		opStatus string
+		instance core.Instance
+		want     string
+		code     string
+	}{
+		{"accepted-then-reclaimed", "succeeded", core.Instance{Lifecycle: "reclaimed", Process: "stopped", Cleanup: "complete"}, "succeeded", ""},
+		{"failed-but-reclaimed", "failed", core.Instance{Lifecycle: "reclaimed", Process: "stopped", Cleanup: "complete"}, "succeeded", ""},
+		{"cleanup-failed", "succeeded", core.Instance{Lifecycle: "failed", Process: "stopped", Cleanup: "failed"}, "failed_with_effect", "CLEANUP_FAILED"},
+		{"identity-unknown", "succeeded", core.Instance{Lifecycle: "failed", Process: "unknown", Cleanup: "pending"}, "failed_with_effect", "IDENTITY_UNVERIFIED"},
+		{"stop-failed", "failed", core.Instance{Lifecycle: "failed", Process: "running", Cleanup: "pending"}, "failed_with_effect", "STOP_FAILED"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &fakePlatform{job: nodev1.Job{ID: "12345678-1234-1234-1234-1234567890ab", Kind: "stop", State: "accepted", InstanceID: "i_1", OperationID: "o_1"}}
+			tc.instance.InstanceID = "i_1"
+			c := &fakeCore{op: core.Operation{OperationID: "o_1", Kind: "stop", InstanceID: "i_1", Status: tc.opStatus,
+				Error: &core.CoreError{Code: "STOP_FAILED", Stage: "stop"}}, instance: tc.instance}
+			r := Runner{Platform: p, Core: c}
+			if err := r.Step(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if p.job.State != tc.want || c.stops != 0 || len(p.reports) != 1 || p.reports[0].ErrorCode != tc.code {
+				t.Fatalf("stop convergence: job=%+v reports=%+v core=%+v", p.job, p.reports, c)
+			}
+		})
+	}
+}
+
+func TestStopStatusTransportLossRemainsOpen(t *testing.T) {
+	p := &fakePlatform{job: nodev1.Job{ID: "12345678-1234-1234-1234-1234567890ab", Kind: "stop", State: "unknown", InstanceID: "i_1"}}
+	c := &fakeCore{statusErr: errors.New("lost status response")}
+	r := Runner{Platform: p, Core: c}
+	if err := r.Step(context.Background()); err == nil || p.job.State != "unknown" || c.stops != 0 || len(p.reports) != 0 {
+		t.Fatalf("transport loss was converted to a terminal result: err=%v job=%+v reports=%+v", err, p.job, p.reports)
+	}
+}
+
+func TestStopIdentityErrorQuarantinesWithoutRetry(t *testing.T) {
+	p := &fakePlatform{job: nodev1.Job{ID: "12345678-1234-1234-1234-1234567890ab", Kind: "stop", State: "unknown", InstanceID: "i_1"}}
+	c := &fakeCore{statusErr: &core.CoreError{Code: "IDENTITY_UNVERIFIED", Stage: "recover"}}
+	r := Runner{Platform: p, Core: c}
+	if err := r.Step(context.Background()); err != nil || p.job.State != "failed_with_effect" || c.stops != 0 || p.reports[0].ErrorCode != "IDENTITY_UNVERIFIED" {
+		t.Fatalf("untrusted identity was retried or released: err=%v job=%+v reports=%+v", err, p.job, p.reports)
+	}
+}
+
+func TestStructuredStopFailureIsTerminal(t *testing.T) {
+	p := &fakePlatform{job: nodev1.Job{ID: "12345678-1234-1234-1234-1234567890ab", Kind: "stop", State: "pending", InstanceID: "i_1"}}
+	c := &fakeCore{instance: core.Instance{InstanceID: "i_1", Lifecycle: "active", Process: "running", Cleanup: "pending"},
+		err: &core.CoreError{Code: "STOP_FAILED", Stage: "stop"}}
+	r := Runner{Platform: p, Core: c}
+	if err := r.Step(context.Background()); err != nil || p.job.State != "failed_with_effect" || c.stops != 1 ||
+		p.reports[0].ErrorCode != "STOP_FAILED" {
+		t.Fatalf("structured stop failure: err=%v job=%+v reports=%+v", err, p.job, p.reports)
+	}
+}
+
+func TestAcceptedCreateUntrustedIdentityDoesNotRetry(t *testing.T) {
+	p := &fakePlatform{job: testJob()}
+	p.job.State, p.job.InstanceID, p.job.OperationID = "accepted", "i_1", "o_1"
+	c := &fakeCore{op: core.Operation{OperationID: "o_1", Kind: "create", InstanceID: "i_1", Status: "failed"},
+		statusErr: &core.CoreError{Code: "IDENTITY_UNVERIFIED", Stage: "recover"}}
+	r := Runner{Platform: p, Core: c}
+	if err := r.Step(context.Background()); err != nil || p.job.State != "failed_with_effect" || c.creates != 0 ||
+		p.reports[0].ErrorCode != "IDENTITY_UNVERIFIED" {
+		t.Fatalf("untrusted create identity: err=%v job=%+v reports=%+v", err, p.job, p.reports)
 	}
 }

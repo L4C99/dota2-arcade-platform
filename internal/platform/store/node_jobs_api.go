@@ -164,6 +164,13 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 		if kind != "create" || instanceID != "" || operationID != "" || report.ErrorCode == "" {
 			return nodev1.Job{}, fmt.Errorf("%w: no-effect rejection lacks proof", ErrJobConflict)
 		}
+		// A later validation rejection cannot erase an earlier transport loss.
+		// Reconciliation must explicitly assert that the original operation
+		// produced no instance; the Controller currently leaves ambiguous
+		// unknown calls open instead of making that assertion.
+		if oldState == "unknown" && (report.ErrorCode != "RECONCILED_NO_EFFECT" || report.ErrorStage != "reconcile") {
+			return nodev1.Job{}, fmt.Errorf("%w: ambiguous create cannot be released by rejection", ErrJobConflict)
+		}
 	}
 	if report.State == "failed_with_effect" && instanceID == "" && operationID == "" {
 		return nodev1.Job{}, fmt.Errorf("%w: effectful failure lacks core IDs", ErrJobConflict)
@@ -236,7 +243,11 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 				requestState = "waiting"
 			}
 		case "failed_with_effect":
-			allocationState, requestState = "failed_unreclaimed", "failed_unreclaimed"
+			if errorCode == "IDENTITY_UNVERIFIED" {
+				allocationState, requestState = "quarantined", "quarantined"
+			} else {
+				allocationState, requestState = "failed_unreclaimed", "failed_unreclaimed"
+			}
 		}
 	case "stop":
 		switch state {
@@ -285,7 +296,7 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 	if err != nil {
 		return err
 	}
-	if kind == "create" && state == "failed_with_effect" && instanceID != "" {
+	if kind == "create" && state == "failed_with_effect" && instanceID != "" && errorCode != "IDENTITY_UNVERIFIED" {
 		stopJobID, err := NewID()
 		if err != nil {
 			return err

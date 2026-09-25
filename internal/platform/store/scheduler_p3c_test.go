@@ -129,7 +129,7 @@ func TestP3CUnknownBlocksUntilNoEffectThenNewAttempt(t *testing.T) {
 	if _, err := s.RecordHeartbeat(ctx, a, p1TestHeartbeat("test-v1")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ReportJob(ctx, a, job.ID, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "VALIDATION_REJECTED", ErrorStage: "validate"}); err != nil {
+	if _, err := s.ReportJob(ctx, a, job.ID, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "RECONCILED_NO_EFFECT", ErrorStage: "reconcile"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Pool.Exec(ctx, `INSERT INTO content_versions(id,arcade_game_id,content_sha256) VALUES('test-v2',$1,$2)`, gameID, strings.Repeat("b", 64)); err != nil {

@@ -147,10 +147,19 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 	}
 	instance, err := r.Core.Status(ctx, job.InstanceID)
 	if err != nil {
+		if terminalCoreFailure(err) || coreIdentityFailure(err) {
+			code := coreFailureCode(err)
+			if code == "NOT_FOUND" {
+				code = "IDENTITY_UNVERIFIED"
+			}
+			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: code, ErrorStage: coreFailureStage(err)})
+		}
 		return err
 	}
 	if instance.InstanceID != job.InstanceID {
-		return fmt.Errorf("core status identity mismatch for stop job %s", job.ID)
+		return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+			OperationID: job.OperationID, ErrorCode: "IDENTITY_UNVERIFIED", ErrorStage: "recover"})
 	}
 	if instance.CurrentOperationID != "" {
 		op, err := r.Core.Operation(ctx, instance.CurrentOperationID)
@@ -158,7 +167,8 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 			return err
 		}
 		if op.InstanceID != job.InstanceID {
-			return fmt.Errorf("core operation identity mismatch for stop job %s", job.ID)
+			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: "IDENTITY_UNVERIFIED", ErrorStage: "recover"})
 		}
 		if op.Kind == "stop" {
 			job.OperationID = op.OperationID
@@ -170,6 +180,14 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 	}
 	accepted, err := r.Core.Stop(ctx, job.InstanceID)
 	if err != nil {
+		if terminalCoreFailure(err) || coreIdentityFailure(err) {
+			code := coreFailureCode(err)
+			if code == "NOT_FOUND" {
+				code = "IDENTITY_UNVERIFIED"
+			}
+			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: code, ErrorStage: coreFailureStage(err)})
+		}
 		report := nodev1.ReportRequest{State: "unknown", InstanceID: job.InstanceID}
 		var e *core.CoreError
 		if errors.As(err, &e) && (e.InstanceID == "" || e.InstanceID == job.InstanceID) {
@@ -193,20 +211,61 @@ func (r *Runner) observe(ctx context.Context, job nodev1.Job) error {
 	}
 	op, err := r.Core.Operation(ctx, job.OperationID)
 	if err != nil {
+		if job.Kind == "stop" && (terminalCoreFailure(err) || coreIdentityFailure(err)) {
+			code := coreFailureCode(err)
+			if code == "NOT_FOUND" {
+				code = "IDENTITY_UNVERIFIED"
+			}
+			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: code, ErrorStage: coreFailureStage(err)})
+		}
+		if job.Kind == "create" && coreIdentityFailure(err) {
+			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: "IDENTITY_UNVERIFIED", ErrorStage: "recover"})
+		}
 		return err
 	}
 	if op.InstanceID != job.InstanceID || op.Kind != job.Kind {
-		return fmt.Errorf("core operation identity mismatch for job %s", job.ID)
+		return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+			OperationID: job.OperationID, ErrorCode: "IDENTITY_UNVERIFIED", ErrorStage: "recover"})
 	}
 	if op.Status == "running" {
 		return nil
 	}
 	instance, err := r.Core.Status(ctx, job.InstanceID)
 	if err != nil {
+		if job.Kind == "stop" && (terminalCoreFailure(err) || coreIdentityFailure(err)) {
+			code := coreFailureCode(err)
+			if code == "NOT_FOUND" {
+				code = "IDENTITY_UNVERIFIED"
+			}
+			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: code, ErrorStage: coreFailureStage(err)})
+		}
+		if job.Kind == "create" && coreIdentityFailure(err) {
+			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: "IDENTITY_UNVERIFIED", ErrorStage: "recover"})
+		}
 		return err
 	}
 	if instance.InstanceID != job.InstanceID {
-		return fmt.Errorf("core status identity mismatch for job %s", job.ID)
+		return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+			OperationID: job.OperationID, ErrorCode: "IDENTITY_UNVERIFIED", ErrorStage: "recover"})
+	}
+	// Resource reclamation is a status fact, independent of whether the
+	// operation itself reported success. A failed operation can still have
+	// completed reclaim; conversely a succeeded operation cannot release a
+	// reservation while cleanup is incomplete.
+	if job.Kind == "stop" && reclaimed(instance) {
+		return r.report(ctx, job, nodev1.ReportRequest{State: "succeeded", InstanceID: job.InstanceID, OperationID: job.OperationID})
+	}
+	if job.Kind == "stop" && (instance.Cleanup == "failed" || instance.Process == "unknown") {
+		code := "IDENTITY_UNVERIFIED"
+		if instance.Cleanup == "failed" {
+			code = "CLEANUP_FAILED"
+		}
+		return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+			OperationID: job.OperationID, ErrorCode: code, ErrorStage: "cleanup"})
 	}
 	if op.Status == "succeeded" {
 		if job.Kind == "create" && instance.Lifecycle == "active" && instance.Process == "running" && instance.Room == "ready" {
@@ -220,9 +279,40 @@ func (r *Runner) observe(ctx context.Context, job nodev1.Job) error {
 		return nil
 	}
 	if op.Status == "failed" || op.Status == "cancelled" {
-		return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID, OperationID: job.OperationID})
+		code, stage := "", ""
+		if op.Error != nil {
+			code, stage = op.Error.Code, op.Error.Stage
+		}
+		return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+			OperationID: job.OperationID, ErrorCode: code, ErrorStage: stage})
 	}
 	return fmt.Errorf("unknown core operation status %q", op.Status)
+}
+
+func terminalCoreFailure(err error) bool {
+	var e *core.CoreError
+	return errors.As(err, &e) && (e.Code == "IDENTITY_UNVERIFIED" || e.Code == "CLEANUP_FAILED" || e.Code == "STOP_FAILED")
+}
+
+func coreIdentityFailure(err error) bool {
+	var e *core.CoreError
+	return errors.As(err, &e) && (e.Code == "IDENTITY_UNVERIFIED" || e.Code == "NOT_FOUND")
+}
+
+func coreFailureCode(err error) string {
+	var e *core.CoreError
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return ""
+}
+
+func coreFailureStage(err error) string {
+	var e *core.CoreError
+	if errors.As(err, &e) {
+		return e.Stage
+	}
+	return ""
 }
 
 func reclaimed(i core.Instance) bool {
