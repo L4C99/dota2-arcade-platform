@@ -31,12 +31,16 @@ func (s *Store) CreateUserSession(ctx context.Context) (userID, token string, er
 	if err != nil {
 		return "", "", err
 	}
+	displayName, err := newDisplayName()
+	if err != nil {
+		return "", "", err
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return "", "", err
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, "INSERT INTO users(id) VALUES($1)", userID); err != nil {
+	if _, err := tx.Exec(ctx, "INSERT INTO users(id,display_name) VALUES($1,$2)", userID, displayName); err != nil {
 		return "", "", err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO user_sessions(id,user_id,token_hash,expires_at)

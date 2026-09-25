@@ -22,9 +22,10 @@ var (
 )
 
 type PartyMember struct {
-	UserID   string    `json:"userId"`
-	Role     string    `json:"role"`
-	JoinedAt time.Time `json:"joinedAt"`
+	UserID      string    `json:"userId"`
+	DisplayName string    `json:"displayName"`
+	Role        string    `json:"role"`
+	JoinedAt    time.Time `json:"joinedAt"`
 }
 
 type Party struct {
@@ -108,7 +109,7 @@ func (s *Store) CurrentParty(ctx context.Context, userID string) (*Party, error)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT user_id,role,joined_at FROM party_members WHERE party_id=$1 ORDER BY joined_at,user_id`, p.ID)
+	rows, err := s.Pool.Query(ctx, `SELECT m.user_id,u.display_name,m.role,m.joined_at FROM party_members m JOIN users u ON u.id=m.user_id WHERE m.party_id=$1 ORDER BY m.joined_at,m.user_id`, p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +117,7 @@ func (s *Store) CurrentParty(ctx context.Context, userID string) (*Party, error)
 	p.Members = []PartyMember{}
 	for rows.Next() {
 		var m PartyMember
-		if err := rows.Scan(&m.UserID, &m.Role, &m.JoinedAt); err != nil {
+		if err := rows.Scan(&m.UserID, &m.DisplayName, &m.Role, &m.JoinedAt); err != nil {
 			return nil, err
 		}
 		p.Members = append(p.Members, m)

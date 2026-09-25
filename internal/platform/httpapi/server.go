@@ -139,13 +139,22 @@ func (a *api) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (a *api) writeUserIdentity(w http.ResponseWriter, r *http.Request, status int, id string) {
+	name, err := a.store.UserDisplayName(r.Context(), id)
+	if err != nil {
+		http.Error(w, "session unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, status, map[string]string{"userId": id, "displayName": name})
+}
+
 func (a *api) createSession(w http.ResponseWriter, r *http.Request) {
 	if !a.checkOrigin(w, r) {
 		return
 	}
 	if cookie, err := r.Cookie(a.userCookieName()); err == nil {
 		if id, err := a.store.UserForToken(r.Context(), cookie.Value); err == nil {
-			writeJSON(w, http.StatusOK, map[string]string{"userId": id})
+			a.writeUserIdentity(w, r, http.StatusOK, id)
 			return
 		}
 	}
@@ -155,7 +164,7 @@ func (a *api) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.setCookie(w, a.userCookieName(), token, 90*24*time.Hour)
-	writeJSON(w, http.StatusCreated, map[string]string{"userId": id})
+	a.writeUserIdentity(w, r, http.StatusCreated, id)
 }
 
 func (a *api) me(w http.ResponseWriter, r *http.Request) {
@@ -169,7 +178,7 @@ func (a *api) me(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"userId": id})
+	a.writeUserIdentity(w, r, http.StatusOK, id)
 }
 
 func (a *api) logout(w http.ResponseWriter, r *http.Request) {

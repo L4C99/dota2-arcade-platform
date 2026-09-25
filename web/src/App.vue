@@ -13,6 +13,7 @@ const copied = ref(false)
 const copiedConsole = ref(false)
 const catalog = ref<Catalog | null>(null)
 const userId = ref('')
+const displayName = ref('')
 const party = ref<Party | null>(null)
 const invite = ref<PartyInvite | null>(null)
 const inviteToken = ref(inviteTokenFromHash(window.location.hash))
@@ -45,9 +46,15 @@ function describeError(cause: unknown): string {
 
 async function ensureSession(): Promise<void> {
   try {
-    userId.value = (await api.me()).userId
+    const me = await api.me()
+    userId.value = me.userId
+    displayName.value = me.displayName
   } catch (cause) {
-    if (cause instanceof ApiError && cause.status === 401) userId.value = (await api.session()).userId
+    if (cause instanceof ApiError && cause.status === 401) {
+      const me = await api.session()
+      userId.value = me.userId
+      displayName.value = me.displayName
+    }
     else throw cause
   }
 }
@@ -141,7 +148,7 @@ async function joinByInvite(): Promise<void> {
 }
 
 async function resetInvite(): Promise<void> {
-  if (busy.value) return
+  if (busy.value || !window.confirm('确定重置邀请链接？旧链接会立即失效，已加入的成员不受影响。')) return
   busy.value = true
   error.value = ''
   try { invite.value = await api.resetInvite(); partyNotice.value = '邀请链接已重置，旧链接已失效。' }
@@ -158,12 +165,18 @@ async function copyInvite(): Promise<void> {
   } catch { error.value = '复制失败。请手动选中并复制邀请链接。' }
 }
 
-async function removeMember(id: string): Promise<void> {
-  await partyAction(() => api.removeMember(id), '成员已移出队伍；当前服务器不会因此停止。')
+async function removeMember(member: Party['members'][number]): Promise<void> {
+  if (!window.confirm(`确定将「${member.displayName}」移出队伍？当前服务器不会因此停止，也不会将其踢出 Dota。`)) return
+  await partyAction(() => api.removeMember(member.userId), `已将「${member.displayName}」移出队伍；当前服务器继续运行。`)
+}
+
+async function leaveParty(): Promise<void> {
+  if (!window.confirm('确定退出队伍？当前服务器会继续运行；退出队伍不会将你踢出已经进入的 Dota 游戏。')) return
+  await partyAction(() => api.leaveParty(), '已退出队伍；当前服务器继续运行。')
 }
 
 async function disband(): Promise<void> {
-  if (!party.value || blockingParty.value || !window.confirm('确定解散队伍？队伍邀请链接将失效。')) return
+  if (!party.value || blockingParty.value || !window.confirm('确定解散队伍？所有成员将退出，邀请链接立即失效。')) return
   await partyAction(() => api.disbandParty(), '队伍已解散。')
 }
 
@@ -221,7 +234,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
   <header class="site-header">
     <div class="header-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true"><i/><i/><i/><i/></span><span>Dota 2 <strong>游廊联机</strong></span></div>
-      <span class="identity"><span class="identity-dot"/> 匿名玩家 · 此浏览器会保留申请</span>
+      <span class="identity"><span class="identity-dot"/> {{ displayName || '匿名玩家' }}<span class="identity-note">· 此浏览器会保留申请</span></span>
     </div>
   </header>
 
@@ -249,8 +262,8 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         <section v-else class="panel party-card">
           <div class="party-card-heading"><div><span class="eyebrow">当前队伍</span><h2>当前成员</h2></div><span class="party-count">{{ party.members.length }} / {{ party.maxSize }} 人</span></div>
           <p class="party-lead">队伍会保留；结束一局服务器不会解散队伍。{{ party.currentRole === 'leader' ? '你是队长，可以申请和结束服务器。' : '你是队员，可查看当前服务器并随时退出。' }}</p>
-          <div class="party-members" aria-label="队伍成员"><div v-for="(member, index) in party.members" :key="member.userId" class="party-member"><span class="party-avatar">{{ member.userId === userId ? '我' : String(index + 1).padStart(2, '0') }}</span><span class="party-member-name"><strong>{{ member.userId === userId ? '你' : `匿名成员 ${index + 1}` }}</strong><small>{{ member.role === 'leader' ? '队长' : '队员' }}</small></span><span class="party-role">{{ member.role === 'leader' ? '队长' : '队员' }}</span><button v-if="party.currentRole === 'leader' && member.role !== 'leader'" type="button" class="party-text-button warm" :disabled="busy" @click="removeMember(member.userId)">移除</button></div></div>
-          <div class="party-manage"><button v-if="party.currentRole === 'member'" type="button" class="secondary-button" :disabled="busy" @click="partyAction(() => api.leaveParty(), '已退出队伍；队伍服务器仍会继续运行。')">退出队伍</button><button v-else type="button" class="secondary-button danger" :disabled="busy || blockingParty" @click="disband">解散队伍</button><span v-if="party.currentRole === 'leader' && blockingParty">当前有活动申请或服务器，完整回收后才可解散；V1 不支持队长退队或转让。</span></div>
+          <div class="party-members" aria-label="队伍成员"><div v-for="member in party.members" :key="member.userId" class="party-member"><span class="party-avatar">{{ Array.from(member.displayName)[0] }}</span><span class="party-member-name"><strong>{{ member.displayName }}<span v-if="member.userId === userId" class="party-self">（你）</span></strong><small>{{ member.role === 'leader' ? '队长' : '队员' }}</small></span><span class="party-role">{{ member.role === 'leader' ? '队长' : '队员' }}</span><button v-if="party.currentRole === 'leader' && member.role !== 'leader'" type="button" class="party-text-button warm" :disabled="busy" @click="removeMember(member)">移除</button></div></div>
+          <div class="party-manage"><button v-if="party.currentRole === 'member'" type="button" class="secondary-button" :disabled="busy" @click="leaveParty">退出队伍</button><button v-else type="button" class="secondary-button danger" :disabled="busy || blockingParty" @click="disband">解散队伍</button><span v-if="party.currentRole === 'leader' && blockingParty">当前有活动申请或服务器，完整回收后才可解散；V1 不支持队长退队或转让。</span></div>
         </section>
         <section v-if="party?.currentRole === 'leader' && invite" class="panel party-card party-invite-card">
           <span class="eyebrow">邀请朋友</span><h2>分享队伍邀请</h2><p class="party-lead">复制链接发给朋友。重置后旧链接立即失效；活动服务器期间也可以邀请新成员，直到达到队伍人数上限。</p>

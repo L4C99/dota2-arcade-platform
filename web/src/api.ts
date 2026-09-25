@@ -35,6 +35,7 @@ export interface ServerRequest {
 
 export interface PartyMember {
   userId: string
+  displayName: string
   role: 'leader' | 'member'
   joinedAt: string
 }
@@ -102,8 +103,8 @@ async function request<T>(path: string, method = 'GET', body?: object): Promise<
 }
 
 export const api = {
-  me: () => request<{ userId: string }>('/me'),
-  session: () => request<{ userId: string }>('/session', 'POST'),
+  me: () => request<{ userId: string; displayName: string }>('/me'),
+  session: () => request<{ userId: string; displayName: string }>('/session', 'POST'),
   catalog: () => request<Catalog>('/catalog'),
   party: () => request<Party | null>('/party'),
   createParty: () => request<Party>('/party', 'POST'),

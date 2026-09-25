@@ -252,7 +252,8 @@ footer{color:#647a6d;letter-spacing:.04em}
 .party-member{display:flex;align-items:center;gap:12px;min-height:72px;padding:10px 0;border-bottom:1px solid #dce2d8}
 .party-avatar{display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:50%;background:#d9e6d8;color:#173d34;font-size:12px;font-weight:800}
 .party-member-name{display:flex;flex-direction:column;gap:3px;min-width:0}
-.party-member-name strong{font-size:14px}
+.party-member-name strong{font-size:14px;overflow-wrap:anywhere}
+.party-self{font-size:12px;color:#75867c;font-weight:500}
 .party-member-name small,.party-role{color:#75867c;font-size:12px}
 .party-role{margin-left:auto;white-space:nowrap}
 .party-text-button{border:0;background:transparent;color:#173d34;padding:4px 0;font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
@@ -277,6 +278,7 @@ footer{color:#647a6d;letter-spacing:.04em}
 .party-notice{grid-column:1/-1;margin:0;padding:11px 14px;border:1px solid #cbdccf;border-radius:12px;background:#f3f8f2;color:#32664a;font-size:13px}
 @media(max-width:900px){.party-layout{grid-template-columns:minmax(0,1.35fr) minmax(265px,1fr)}.party-card{padding:23px}}
 @media(max-width:700px){.party-layout{grid-template-columns:1fr;gap:12px}.party-main-column{gap:12px}.party-card{padding:22px}.party-card h2{font-size:27px}.party-lead{font-size:13px}.party-link{align-items:stretch;flex-direction:column}.party-link .secondary-button{align-self:flex-start}}
+@media(max-width:700px){.identity{font-size:11px}.identity-note{display:none}}
 @media(max-width:410px){.page-tabs{width:100%}.page-tabs button{flex:1}.party-card{padding:19px}.party-join-form>div{flex-direction:column}.party-join-form .secondary-button{align-self:flex-start}}
 @media(max-width:410px){
   .section-panel,.owner-panel,.apply-panel,.status-panel,.join-panel,.side-panel{padding:19px}

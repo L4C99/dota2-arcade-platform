@@ -68,11 +68,20 @@ func newPartyBrowser(t *testing.T, base string) (partyBrowser, string) {
 	}
 	b := partyBrowser{client: &http.Client{Jar: jar}, base: base}
 	var session struct {
-		UserID string `json:"userId"`
+		UserID      string `json:"userId"`
+		DisplayName string `json:"displayName"`
 	}
 	b.call(t, http.MethodPost, "/api/v1/session", nil, http.StatusCreated, &session)
-	if session.UserID == "" {
-		t.Fatal("session did not create User")
+	if session.UserID == "" || session.DisplayName == "" {
+		t.Fatal("session did not create named User")
+	}
+	var recovered struct {
+		UserID      string `json:"userId"`
+		DisplayName string `json:"displayName"`
+	}
+	b.call(t, http.MethodGet, "/api/v1/me", nil, http.StatusOK, &recovered)
+	if recovered.UserID != session.UserID || recovered.DisplayName != session.DisplayName {
+		t.Fatal("Session name changed on recovery")
 	}
 	return b, session.UserID
 }
@@ -154,6 +163,11 @@ func TestP2DPartyHTTPAuthorizationWithIndependentSessions(t *testing.T) {
 	var invite store.PartyInvite
 	a.call(t, http.MethodGet, "/api/v1/party/invite", nil, http.StatusOK, &invite)
 	b.call(t, http.MethodPost, "/api/v1/party/join", map[string]string{"token": invite.Token}, http.StatusOK, &store.Party{})
+	var namedParty store.Party
+	a.call(t, http.MethodGet, "/api/v1/party", nil, http.StatusOK, &namedParty)
+	if len(namedParty.Members) != 2 || namedParty.Members[0].DisplayName == "" || namedParty.Members[1].DisplayName == "" {
+		t.Fatalf("Party member names unavailable: %+v", namedParty.Members)
+	}
 	b.call(t, http.MethodGet, "/api/v1/party/invite", nil, http.StatusForbidden, nil)
 	requestBody := map[string]string{"arcadeGameId": gameID, "gamePresetId": presetID}
 	b.call(t, http.MethodPost, "/api/v1/server-requests", requestBody, http.StatusForbidden, nil)

@@ -114,6 +114,12 @@ func (s *Store) ApplyMigrations(ctx context.Context) error {
 			_ = tx.Rollback(ctx)
 			return fmt.Errorf("apply migration %d: %w", version, err)
 		}
+		if version == 9 {
+			if err := backfillUserDisplayNames(ctx, tx); err != nil {
+				_ = tx.Rollback(ctx)
+				return fmt.Errorf("backfill migration 9: %w", err)
+			}
+		}
 		if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations(version, checksum) VALUES($1,$2)", version, checksum); err != nil {
 			_ = tx.Rollback(ctx)
 			return err

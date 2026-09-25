@@ -4,10 +4,10 @@ All routes are same-origin `/api/v1` JSON routes. A server-issued anonymous Sess
 
 | Method | Route | Session-derived behavior |
 | --- | --- | --- |
-| POST | `/session` | Create or restore an anonymous User Session |
-| GET | `/me` | Return current User ID |
+| POST | `/session` | Create or restore an anonymous User Session; return `userId` and stable `displayName` |
+| GET | `/me` | Return current User ID and `displayName` |
 | GET | `/catalog` | Current ArcadeGame/GamePreset catalog and maintenance facts |
-| GET | `/party` | Current Party, members, persisted roles and `maxSize`, or `null` |
+| GET | `/party` | Current Party, members with `displayName`, persisted roles and `maxSize`, or `null` |
 | POST | `/party` | Create a persistent Party; caller becomes its leader and member |
 | GET | `/party/invite` | Leader only; retrieve current high-entropy invite credential |
 | POST | `/party/invite/reset` | Leader only; revoke old credential and return replacement |
@@ -22,5 +22,7 @@ All routes are same-origin `/api/v1` JSON routes. A server-issued anonymous Sess
 | POST | `/server-requests/{id}/stop` | Solo owner or current Party leader; existing durable stop/reclaim path |
 
 Party owner is held on `ServerRequest.owner_party_id` and never rewritten after members change. Ordinary members can read the same Party request and valid JoinInfo. A former member loses that access. Duplicate leader POSTs return the existing blocking Party request. A Party larger than the selected GamePreset's `max_players` receives `409 party_exceeds_preset` before any ServerRequest, Allocation or NodeJob is created. `PlatformSettings.max_party_size` is the separate membership limit and must be explicitly configured as a positive integer through `PLATFORM_MAX_PARTY_SIZE` before serving P2 traffic.
+
+`users.display_name` is a persistent, presentation-only anonymous name. Migration 9 backfills existing Users without changing their IDs, Sessions or Party membership. New Users receive a name in the same transaction as their Session; `/me` and `/session` return it and Party member rows expose it for display. Duplicate names are allowed. Session/User ID, never the name, determines ownership and authorization. There is no edit, search or profile API for names.
 
 Invite credentials contain 32 random bytes. The formal Web shares them in a URL fragment (`#invite=...`) so page requests and Referer headers do not carry the credential. The leader-only invite response is intentionally sensitive: do not log, publish, or put it in validation documents. Reset serializes with consume; after reset commits, old credentials are invalid. Party discovery, public Party listing, matchmaking, leader transfer, direct Web-to-d2core calls, and P3/P4 controls are outside this API stage.
