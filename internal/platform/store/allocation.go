@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// TryAllocateOne performs the P1 single-node dispatch. The request row and
-// selected node row remain locked through the capacity count and reservation.
-// A future multi-node scheduler can reuse this reservation boundary.
+// TryAllocateOne locks eligible nodes in stable order and reserves one slot
+// before committing the Allocation and its create job. Every scheduler path
+// must use this same transactional reservation boundary.
 func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -60,7 +60,7 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 		AND r.compatibility_status='compatible'
 		AND c.reported_state='confirmed' AND c.reported_content_version_id=$3
 		AND c.accepting_new_allocations
-		ORDER BY n.id FOR UPDATE OF n LIMIT 2`, revisionID, gameID, contentID)
+		ORDER BY n.id FOR UPDATE OF n`, revisionID, gameID, contentID)
 	if err != nil {
 		return false, err
 	}
@@ -85,19 +85,47 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 	if len(nodes) == 0 {
 		return false, nil
 	}
-	if len(nodes) != 1 {
-		return false, fmt.Errorf("P1 requires exactly one eligible node")
+	var selected *node
+	for i := range nodes {
+		n := &nodes[i]
+		// The candidate query may have waited for a concurrent heartbeat's
+		// node lock. Re-read all Controller-reported eligibility and hard
+		// capacity after the lock is ours, using a fresh READ COMMITTED
+		// statement, before counting or reserving a slot.
+		err := tx.QueryRow(ctx, `SELECT b.binding_key,n.desired_max_instances,r.hard_max_instances
+			FROM nodes n JOIN node_reports r ON r.node_id=n.id
+			JOIN node_template_bindings b ON b.node_id=n.id AND b.template_revision_id=$2
+			JOIN node_content_bindings c ON c.node_id=n.id AND c.arcade_game_id=$3
+			WHERE n.id=$1 AND n.enabled AND n.accepting_new_requests AND NOT n.draining
+			AND n.last_heartbeat > now() - interval '2 minutes'
+			AND r.compatibility_status='compatible'
+			AND c.reported_state='confirmed' AND c.reported_content_version_id=$4
+			AND c.accepting_new_allocations`, n.id, revisionID, gameID, contentID).
+			Scan(&n.key, &n.desired, &n.hard)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		limit := min(n.hard, n.desired)
+		if limit <= 0 {
+			continue
+		}
+		var occupied int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM allocations WHERE node_id=$1
+			AND state NOT IN ('reclaimed','released_no_effect')`, n.id).Scan(&occupied); err != nil {
+			return false, err
+		}
+		if occupied < limit {
+			selected = n
+			break
+		}
 	}
-	n := nodes[0]
-	limit := min(n.hard, n.desired)
-	var occupied int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM allocations WHERE node_id=$1
-		AND state NOT IN ('reclaimed','released_no_effect')`, n.id).Scan(&occupied); err != nil {
-		return false, err
-	}
-	if occupied >= limit {
+	if selected == nil {
 		return false, nil
 	}
+	n := selected
 	var sequence int
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(attempt_sequence),0)+1 FROM allocations
 		WHERE server_request_id=$1`, requestID).Scan(&sequence); err != nil {

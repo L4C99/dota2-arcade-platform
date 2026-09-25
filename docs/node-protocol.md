@@ -24,6 +24,12 @@ Controller 在首次真正连接 d2core 之前上报 `d2coreProtocolVersion=0`�
 
 P0 的任务明确标记 `integration_only=true`，由本地管理员流程创建；P1 才引入 ServerRequest / Allocation 关联、排队和容量业务。timeout 或响应丢失必须报告 unknown 并对账，不能把它当作无副作用失败。d2core `accepted` 不是完成；Controller 必须再查 operation 与 status。
 
+## P3A 节点容量运维控制
+
+`hard_max_instances` 仍只来自 Controller 心跳中的本地部署事实。具有 Platform 数据库访问权限的运维人员可在 Platform 主机运行 `platform-server node capacity <node-id>` 查看最近报告的 hard、平台 desired、当前 occupied 和有效上限；`platform-server node capacity <node-id> <desired>` 设置平台调度上限。设置值必须在 `0..hard` 内，尚无有效心跳报告的节点不可设置。此命令不改变 Controller 本地配置。
+
+Controller 后续把 hard 降低时，历史 desired 可以暂时高于 hard；调度始终使用两者的较小值。occupied 包含除 `reclaimed`、`released_no_effect` 外的所有 Allocation attempt。这个控制面只依赖本地主机既有数据库权限，不向玩家提供容量写入入口。
+
 ## Controller 本地配置
 
 Controller 使用显式绝对路径 JSON 配置，其中包含 Platform URL、Node ID、Secret 文件路径、d2core `BUILD.json` 和 data-dir、端口映射、硬上限、逻辑模板到本机绝对路径的绑定，以及可选内容 metadata/当前链接位置。所有 d2core 关键路径须为 ASCII 绝对路径。节点 Secret、真实节点路径、端口和部署参数保存在仓库外的开发或生产专用目录。源码工作树不作为生产运行目录。

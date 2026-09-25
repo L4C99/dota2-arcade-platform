@@ -74,6 +74,24 @@ func run(args []string) error {
 		fmt.Println("admin account updated")
 		return nil
 	case "node":
+		if (len(args) == 3 || len(args) == 4) && args[1] == "capacity" {
+			if len(args) == 4 {
+				desired, err := strconv.Atoi(args[3])
+				if err != nil {
+					return errors.New("desired capacity must be an integer")
+				}
+				if err := s.SetDesiredCapacity(ctx, args[2], desired); err != nil {
+					return err
+				}
+			}
+			capacity, err := s.Capacity(ctx, args[2])
+			if err != nil {
+				return err
+			}
+			fmt.Printf("node_id=%s hard=%d desired=%d occupied=%d effective=%d\n",
+				capacity.NodeID, capacity.Hard, capacity.Desired, capacity.Occupied, min(capacity.Hard, capacity.Desired))
+			return nil
+		}
 		if len(args) == 4 && args[1] == "register" {
 			id, secret, err := s.RegisterNode(ctx, args[2], args[3])
 			if err != nil {
@@ -112,7 +130,7 @@ func run(args []string) error {
 			fmt.Printf("node_job_id=%s\n", id)
 			return nil
 		}
-		return errors.New("usage: platform-server node register <name> <windows|linux> | node integration-job <node-id> create <template-binding> [port] | node integration-job <node-id> stop <instance-id>")
+		return errors.New("usage: platform-server node register <name> <windows|linux> | node capacity <node-id> [desired] | node integration-job <node-id> create <template-binding> [port] | node integration-job <node-id> stop <instance-id>")
 	case "serve":
 		if len(args) != 1 {
 			return errors.New("usage: platform-server serve")
@@ -190,7 +208,7 @@ func serve(s *store.Store) error {
 			_, err := s.TryAllocateOne(cycle)
 			done()
 			if err != nil && stop.Err() == nil {
-				log.Printf("P1 allocation cycle: %v", err)
+				log.Printf("allocation cycle: %v", err)
 			}
 			select {
 			case <-stop.Done():
