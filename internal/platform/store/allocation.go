@@ -170,7 +170,9 @@ func (s *Store) UserRequestAllocation(ctx context.Context, userID, requestID str
 		COALESCE(c.steamchina_entry_verified,false),COALESCE(c.steamchina_entry_enabled,false)
 		FROM allocations a JOIN server_requests r ON r.id=a.server_request_id JOIN nodes n ON n.id=a.node_id
 		LEFT JOIN node_entry_capabilities c ON c.node_id=a.node_id
-		WHERE r.owner_user_id=$1 AND r.id=$2 ORDER BY a.attempt_sequence DESC LIMIT 1`, userID, requestID).
+		WHERE r.id=$2 AND ((r.owner_user_id=$1 AND NOT EXISTS (SELECT 1 FROM party_members WHERE user_id=$1))
+		OR EXISTS (SELECT 1 FROM party_members m WHERE m.user_id=$1 AND m.party_id=r.owner_party_id))
+		ORDER BY a.attempt_sequence DESC LIMIT 1`, userID, requestID).
 		Scan(&a.ID, &a.ServerRequestID, &a.AttemptSequence, &a.NodeID, &a.NodeDisplayName, &a.ContentVersionID,
 			&a.State, &a.AssignedAt, &a.CreateStartedAt, &a.ReadyAt, &a.JoinInfoAvailableAt, &a.ReclaimedAt, &a.ErrorCode,
 			&localPort, &publicPort, &connectHost, &protocolIP, &joinRevision, &a.JoinInfoErrorCode, &currentRevision,
@@ -206,8 +208,26 @@ func (s *Store) StopUserRequest(ctx context.Context, userID, requestID string) (
 		return ServerRequest{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockUser(ctx, tx, userID); err != nil {
+		return ServerRequest{}, err
+	}
+	var partyID, leaderID string
+	err = tx.QueryRow(ctx, `SELECT party_id FROM party_members WHERE user_id=$1`, userID).Scan(&partyID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return ServerRequest{}, err
+	}
+	ownerField, ownerID := "owner_user_id", userID
+	if err == nil {
+		if err := tx.QueryRow(ctx, `SELECT leader_user_id FROM parties WHERE id=$1 AND dissolved_at IS NULL FOR UPDATE`, partyID).Scan(&leaderID); err != nil {
+			return ServerRequest{}, err
+		}
+		if leaderID != userID {
+			return ServerRequest{}, ErrPartyForbidden
+		}
+		ownerField, ownerID = "owner_party_id", partyID
+	}
 	r, err := scanServerRequest(tx.QueryRow(ctx, `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
-		FROM server_requests WHERE id=$1 AND owner_user_id=$2 FOR UPDATE`, requestID, userID))
+		FROM server_requests WHERE id=$1 AND `+ownerField+`=$2 FOR UPDATE`, requestID, ownerID))
 	if err != nil {
 		return ServerRequest{}, err
 	}

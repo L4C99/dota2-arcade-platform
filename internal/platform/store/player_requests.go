@@ -9,6 +9,7 @@ import (
 )
 
 var ErrInvalidSelection = errors.New("invalid game or preset selection")
+var ErrPresetPartyTooLarge = errors.New("party exceeds game preset max_players")
 
 type MaintenanceError struct {
 	Scope   string
@@ -103,9 +104,20 @@ func scanServerRequest(row requestScanner) (ServerRequest, error) {
 
 const currentRequestSQL = `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
 	FROM server_requests WHERE owner_user_id=$1 AND state IN ('waiting','allocating','creating','running','stopping','failed_unreclaimed','quarantined')`
+const currentPartyRequestSQL = `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
+	FROM server_requests WHERE owner_party_id=$1 AND state IN ('waiting','allocating','creating','running','stopping','failed_unreclaimed','quarantined')`
 
 func (s *Store) CurrentUserRequest(ctx context.Context, userID string) (*ServerRequest, error) {
-	r, err := scanServerRequest(s.Pool.QueryRow(ctx, currentRequestSQL, userID))
+	var partyID string
+	err := s.Pool.QueryRow(ctx, `SELECT party_id FROM party_members WHERE user_id=$1`, userID).Scan(&partyID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	query, ownerID := currentRequestSQL, userID
+	if err == nil {
+		query, ownerID = currentPartyRequestSQL, partyID
+	}
+	r, err := scanServerRequest(s.Pool.QueryRow(ctx, query, ownerID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -117,7 +129,9 @@ func (s *Store) CurrentUserRequest(ctx context.Context, userID string) (*ServerR
 
 func (s *Store) UserRequest(ctx context.Context, userID, requestID string) (ServerRequest, error) {
 	return scanServerRequest(s.Pool.QueryRow(ctx, `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
-		FROM server_requests WHERE id=$1 AND owner_user_id=$2`, requestID, userID))
+		FROM server_requests r WHERE id=$1 AND
+		((owner_user_id=$2 AND NOT EXISTS (SELECT 1 FROM party_members WHERE user_id=$2))
+		OR EXISTS (SELECT 1 FROM party_members m WHERE m.user_id=$2 AND m.party_id=r.owner_party_id))`, requestID, userID))
 }
 
 // The user row serializes submissions from every Session of the same owner.
@@ -128,24 +142,39 @@ func (s *Store) CreateUserRequest(ctx context.Context, userID, gameID, presetID 
 		return ServerRequest{}, false, err
 	}
 	defer tx.Rollback(ctx)
-	var lockedID string
-	if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, userID).Scan(&lockedID); err != nil {
+	if err := lockUser(ctx, tx, userID); err != nil {
 		return ServerRequest{}, false, err
 	}
-	if r, err := scanServerRequest(tx.QueryRow(ctx, currentRequestSQL, userID)); err == nil {
+	var partyID, leaderID string
+	err = tx.QueryRow(ctx, `SELECT party_id FROM party_members WHERE user_id=$1`, userID).Scan(&partyID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return ServerRequest{}, false, err
+	}
+	query, ownerID := currentRequestSQL, userID
+	if err == nil {
+		if err := tx.QueryRow(ctx, `SELECT leader_user_id FROM parties WHERE id=$1 AND dissolved_at IS NULL FOR UPDATE`, partyID).Scan(&leaderID); err != nil {
+			return ServerRequest{}, false, err
+		}
+		if leaderID != userID {
+			return ServerRequest{}, false, ErrPartyForbidden
+		}
+		query, ownerID = currentPartyRequestSQL, partyID
+	}
+	if r, err := scanServerRequest(tx.QueryRow(ctx, query, ownerID)); err == nil {
 		return r, false, tx.Commit(ctx)
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return ServerRequest{}, false, err
 	}
 	var globalAccept, gameEnabled, gameAccept, presetEnabled, presetAccept bool
+	var maxPlayers int
 	var globalMessage, gameMessage, presetMessage string
 	err = tx.QueryRow(ctx, `SELECT s.accepting_new_requests,s.maintenance_message,
 		g.enabled,g.accepting_new_requests,g.maintenance_message,
-		p.enabled,p.accepting_new_requests,p.maintenance_message
+		p.enabled,p.accepting_new_requests,p.maintenance_message,p.max_players
 		FROM platform_settings s JOIN arcade_games g ON g.id=$1
 		JOIN game_presets p ON p.id=$2 AND p.arcade_game_id=g.id
 		WHERE s.singleton=true FOR SHARE OF s,g,p`, gameID, presetID).
-		Scan(&globalAccept, &globalMessage, &gameEnabled, &gameAccept, &gameMessage, &presetEnabled, &presetAccept, &presetMessage)
+		Scan(&globalAccept, &globalMessage, &gameEnabled, &gameAccept, &gameMessage, &presetEnabled, &presetAccept, &presetMessage, &maxPlayers)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ServerRequest{}, false, ErrInvalidSelection
 	}
@@ -161,13 +190,26 @@ func (s *Store) CreateUserRequest(ctx context.Context, userID, gameID, presetID 
 	if !presetEnabled || !presetAccept {
 		return ServerRequest{}, false, &MaintenanceError{Scope: "gamePreset", Message: presetMessage}
 	}
+	if partyID != "" {
+		var members int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM party_members WHERE party_id=$1`, partyID).Scan(&members); err != nil {
+			return ServerRequest{}, false, err
+		}
+		if members > maxPlayers {
+			return ServerRequest{}, false, ErrPresetPartyTooLarge
+		}
+	}
 	id, err := NewID()
 	if err != nil {
 		return ServerRequest{}, false, err
 	}
 	requestedAt := time.Now().UTC()
-	r, err := scanServerRequest(tx.QueryRow(ctx, `INSERT INTO server_requests(id,owner_user_id,arcade_game_id,game_preset_id,requested_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$5) RETURNING id,arcade_game_id,game_preset_id,state,requested_at,updated_at`, id, userID, gameID, presetID, requestedAt))
+	var ownerUser, ownerParty any = userID, nil
+	if partyID != "" {
+		ownerUser, ownerParty = nil, partyID
+	}
+	r, err := scanServerRequest(tx.QueryRow(ctx, `INSERT INTO server_requests(id,owner_user_id,owner_party_id,arcade_game_id,game_preset_id,requested_at,updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$6) RETURNING id,arcade_game_id,game_preset_id,state,requested_at,updated_at`, id, ownerUser, ownerParty, gameID, presetID, requestedAt))
 	if err != nil {
 		return ServerRequest{}, false, err
 	}

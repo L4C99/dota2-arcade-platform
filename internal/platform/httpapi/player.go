@@ -57,6 +57,10 @@ func (a *api) createPlayerRequest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "maintenance", "scope": maintenance.Scope, "message": maintenance.Message})
 	case errors.Is(err, store.ErrInvalidSelection):
 		http.Error(w, "game or preset unavailable", http.StatusNotFound)
+	case errors.Is(err, store.ErrPartyForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "leader_required", "message": "只有队长可以为队伍申请服务器。"})
+	case errors.Is(err, store.ErrPresetPartyTooLarge):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "party_exceeds_preset", "message": "队伍人数超过该玩法的人数上限，请选择其他玩法。"})
 	case err != nil:
 		http.Error(w, "request unavailable", http.StatusServiceUnavailable)
 	default:
@@ -119,6 +123,10 @@ func (a *api) stopPlayerRequest(w http.ResponseWriter, r *http.Request) {
 	request, err := a.store.StopUserRequest(r.Context(), userID, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, store.ErrPartyForbidden) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "leader_required", "message": "只有队长可以结束队伍服务器。"})
 		return
 	}
 	if errors.Is(err, store.ErrJobConflict) {
