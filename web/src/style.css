@@ -234,6 +234,50 @@ footer{color:#647a6d;letter-spacing:.04em}
   .status-panel h2,.join-panel h2,.side-panel h2{font-size:28px}
   .status-description{font-size:13px}
 }
+
+/* P2 Party uses the accepted P1 palette and the P-1 Party card hierarchy. */
+.page-heading-with-nav{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.page-tabs{display:flex;align-items:center;gap:5px;border:1px solid #dce2d8;border-radius:12px;background:#fffefa;padding:4px}
+.page-tabs button{border:0;border-radius:9px;background:transparent;color:#647a6d;padding:9px 13px;font-size:13px;font-weight:700}
+.page-tabs button.selected{background:#eaf4e9;color:#173d34}
+.tab-count{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-left:6px;border-radius:999px;background:#d4e8d8;font-size:11px}
+.party-layout{display:grid;grid-template-columns:minmax(0,1.63fr) minmax(320px,1fr);gap:18px;align-items:start}
+.party-main-column{display:grid;gap:18px}
+.party-card{padding:30px}
+.party-card h2{font-size:30px;line-height:1.3;margin:13px 0 9px}
+.party-lead{font-size:14px;line-height:1.7;color:#587268;margin:0 0 22px}
+.party-card-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.party-count,.party-pill{border-radius:999px;background:#e5efe5;color:#32664a;padding:6px 11px;font-size:12px;font-weight:700;white-space:nowrap}
+.party-members{border-top:1px solid #dce2d8}
+.party-member{display:flex;align-items:center;gap:12px;min-height:72px;padding:10px 0;border-bottom:1px solid #dce2d8}
+.party-avatar{display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:50%;background:#d9e6d8;color:#173d34;font-size:12px;font-weight:800}
+.party-member-name{display:flex;flex-direction:column;gap:3px;min-width:0}
+.party-member-name strong{font-size:14px}
+.party-member-name small,.party-role{color:#75867c;font-size:12px}
+.party-role{margin-left:auto;white-space:nowrap}
+.party-text-button{border:0;background:transparent;color:#173d34;padding:4px 0;font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.party-text-button.warm{color:#9a633a}
+.party-manage{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin-top:20px}
+.party-manage span{font-size:12px;line-height:1.5;color:#75867c}
+.party-link{display:flex;align-items:center;gap:12px;border:1px solid #d4e3d5;border-radius:14px;background:#f3f8f2;padding:12px;margin-bottom:15px}
+.party-link code{flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px;color:#173d34;user-select:all}
+.party-link .secondary-button{flex:none;background:#fffefa}
+.party-join-form{border-top:1px solid #dce2d8;margin-top:26px;padding-top:22px}
+.party-join-form label{display:block;margin-bottom:9px;font-size:13px;font-weight:700}
+.party-join-form>div{display:flex;gap:9px}
+.party-join-form input{flex:1;min-width:0;border:1px solid #bdd2c2;border-radius:10px;background:#fff;padding:10px 12px;color:#173d34;font-size:13px}
+.party-join-form small{display:block;margin-top:10px;color:#75867c;font-size:12px;line-height:1.5}
+.party-create{width:fit-content;min-width:190px}
+.party-server-card h2{margin-top:24px}
+.party-facts{border-top:1px solid #dce2d8;margin:20px 0}
+.party-facts div{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #dce2d8;font-size:13px}
+.party-facts span{color:#75867c}
+.party-facts strong{text-align:right}
+.party-connect{border:1px solid #d4e3d5;border-radius:10px;background:#f3f8f2;padding:11px;overflow-wrap:anywhere;font-size:12px}
+.party-notice{grid-column:1/-1;margin:0;padding:11px 14px;border:1px solid #cbdccf;border-radius:12px;background:#f3f8f2;color:#32664a;font-size:13px}
+@media(max-width:900px){.party-layout{grid-template-columns:minmax(0,1.35fr) minmax(265px,1fr)}.party-card{padding:23px}}
+@media(max-width:700px){.party-layout{grid-template-columns:1fr;gap:12px}.party-main-column{gap:12px}.party-card{padding:22px}.party-card h2{font-size:27px}.party-lead{font-size:13px}.party-link{align-items:stretch;flex-direction:column}.party-link .secondary-button{align-self:flex-start}}
+@media(max-width:410px){.page-tabs{width:100%}.page-tabs button{flex:1}.party-card{padding:19px}.party-join-form>div{flex-direction:column}.party-join-form .secondary-button{align-self:flex-start}}
 @media(max-width:410px){
   .section-panel,.owner-panel,.apply-panel,.status-panel,.join-panel,.side-panel{padding:19px}
   .game-grid{gap:8px}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ApiError, api } from './api'
-import type { Allocation, Catalog, ServerRequest } from './api'
+import type { Allocation, Catalog, Party, PartyInvite, ServerRequest } from './api'
 import { maintenanceFor, statusFor } from './state'
 
 const savedRequestKey = 'arcade.lastRequestId'
@@ -11,6 +11,13 @@ const error = ref('')
 const copied = ref(false)
 const copiedConsole = ref(false)
 const catalog = ref<Catalog | null>(null)
+const userId = ref('')
+const party = ref<Party | null>(null)
+const invite = ref<PartyInvite | null>(null)
+const inviteToken = ref(new URLSearchParams(window.location.search).get('invite') || '')
+const partyView = ref(!!inviteToken.value)
+const partyNotice = ref('')
+const copiedInvite = ref(false)
 const currentRequest = ref<ServerRequest | null>(null)
 const allocation = ref<Allocation | null>(null)
 const gameId = ref('')
@@ -23,7 +30,12 @@ const preset = computed(() => catalog.value?.presets.find((item) => item.id === 
 const selectedPresets = computed(() => catalog.value?.presets.filter((item) => item.arcadeGameId === gameId.value) || [])
 const state = computed(() => statusFor(currentRequest.value, allocation.value))
 const maintenance = computed(() => catalog.value ? maintenanceFor(catalog.value, gameId.value, presetId.value) : '')
-const canSubmit = computed(() => !!gameId.value && !!presetId.value && !maintenance.value && !busy.value)
+const isLeader = computed(() => !party.value || party.value.currentRole === 'leader')
+const partyOverPreset = computed(() => !!party.value && !!preset.value && party.value.members.length > preset.value.maxPlayers)
+const blockingParty = computed(() => !!party.value && !!currentRequest.value &&
+  ['waiting', 'allocating', 'creating', 'running', 'stopping', 'failed_unreclaimed', 'quarantined'].includes(currentRequest.value.state))
+const inviteLink = computed(() => invite.value ? `${window.location.origin}/?invite=${encodeURIComponent(invite.value.token)}` : '')
+const canSubmit = computed(() => !!gameId.value && !!presetId.value && !maintenance.value && !busy.value && isLeader.value && !partyOverPreset.value)
 
 function describeError(cause: unknown): string {
   if (cause instanceof ApiError) return cause.message.trim() || `服务暂时不可用 (${cause.status})`
@@ -32,17 +44,25 @@ function describeError(cause: unknown): string {
 
 async function ensureSession(): Promise<void> {
   try {
-    await api.me()
+    userId.value = (await api.me()).userId
   } catch (cause) {
-    if (cause instanceof ApiError && cause.status === 401) await api.session()
+    if (cause instanceof ApiError && cause.status === 401) userId.value = (await api.session()).userId
     else throw cause
   }
+}
+
+async function refreshParty(): Promise<void> {
+  party.value = await api.party()
+  if (party.value?.currentRole === 'leader') {
+    if (!invite.value || invite.value.partyId !== party.value.id) invite.value = await api.currentInvite()
+  } else invite.value = null
 }
 
 async function refresh(): Promise<void> {
   if (polling || busy.value) return
   polling = true
   try {
+    await refreshParty()
     let request = await api.current()
     if (!request) {
       const lastId = localStorage.getItem(savedRequestKey)
@@ -84,13 +104,71 @@ async function start(): Promise<void> {
 
 async function stop(): Promise<void> {
   const request = currentRequest.value
-  if (!request || request.state !== 'running' || busy.value) return
+  if (!request || request.state !== 'running' || busy.value || !isLeader.value) return
   busy.value = true
   error.value = ''
   try { currentRequest.value = await api.stop(request.id) }
   catch (cause) { error.value = describeError(cause) }
   finally { busy.value = false }
   await refresh()
+}
+
+async function partyAction(action: () => Promise<unknown>, notice: string): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  partyNotice.value = ''
+  let actionError = ''
+  try {
+    await action()
+    partyNotice.value = notice
+    invite.value = null
+  } catch (cause) { actionError = describeError(cause) }
+  finally { busy.value = false }
+  await refresh()
+  if (actionError) error.value = actionError
+}
+
+function tokenFromInput(value: string): string {
+  try { return new URL(value).searchParams.get('invite') || value.trim() }
+  catch { return value.trim() }
+}
+
+async function joinByInvite(): Promise<void> {
+  const token = tokenFromInput(inviteToken.value)
+  if (!token) { error.value = '请粘贴有效的邀请链接。'; return }
+  await partyAction(async () => {
+    await api.joinParty(token)
+    inviteToken.value = ''
+    window.history.replaceState(null, '', window.location.pathname)
+  }, '已加入队伍。')
+}
+
+async function resetInvite(): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try { invite.value = await api.resetInvite(); partyNotice.value = '邀请链接已重置，旧链接已失效。' }
+  catch (cause) { error.value = describeError(cause) }
+  finally { busy.value = false }
+}
+
+async function copyInvite(): Promise<void> {
+  if (!inviteLink.value) return
+  try {
+    await navigator.clipboard.writeText(inviteLink.value)
+    copiedInvite.value = true
+    window.setTimeout(() => { copiedInvite.value = false }, 2500)
+  } catch { error.value = '复制失败。请手动选中并复制邀请链接。' }
+}
+
+async function removeMember(id: string): Promise<void> {
+  await partyAction(() => api.removeMember(id), '成员已移出队伍；当前服务器不会因此停止。')
+}
+
+async function disband(): Promise<void> {
+  if (!party.value || blockingParty.value || !window.confirm('确定解散队伍？队伍邀请链接将失效。')) return
+  await partyAction(() => api.disbandParty(), '队伍已解散。')
 }
 
 async function copyConnect(): Promise<void> {
@@ -147,10 +225,36 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
       <strong>平台维护</strong><span>{{ catalog.globalMaintenanceMessage || '暂不接受新申请。' }}</span>
     </div>
 
-    <header class="page-heading"><h1>{{ currentRequest ? '当前服务器' : '申请服务器' }}</h1></header>
+    <header class="page-heading page-heading-with-nav">
+      <h1>{{ partyView ? '我的队伍' : (currentRequest ? '当前服务器' : '申请服务器') }}</h1>
+      <nav class="page-tabs" aria-label="玩家页面"><button type="button" :class="{ selected: !partyView }" @click="partyView = false">服务器</button><button type="button" :class="{ selected: partyView }" @click="partyView = true">我的队伍<span v-if="party" class="tab-count">{{ party.members.length }}</span></button></nav>
+    </header>
 
     <div v-if="loading" class="panel loading-panel" role="status">正在恢复你的会话与申请…</div>
     <div v-else-if="!catalog" class="panel loading-panel">页面暂时无法连接平台。刷新后会继续恢复当前申请。</div>
+    <div v-else-if="partyView" class="party-layout">
+      <div class="party-main-column">
+        <section v-if="!party" class="panel party-card">
+          <span class="eyebrow">当前队伍</span><h2>还没有加入队伍</h2>
+          <p class="party-lead">你可以单人申请服务器，也可以创建一个会长期保留的队伍。</p>
+          <button type="button" class="primary-button party-create" :disabled="busy" @click="partyAction(() => api.createParty(), '队伍已创建，可以邀请朋友加入。')">创建队伍 <span aria-hidden="true">↗</span></button>
+          <div class="party-join-form"><label for="invite-token">通过邀请链接加入</label><div><input id="invite-token" v-model="inviteToken" type="text" autocomplete="off" placeholder="粘贴队伍邀请链接" /><button type="button" class="secondary-button" :disabled="busy || !inviteToken.trim()" @click="joinByInvite">加入队伍</button></div><small>邀请链接由队长私下分享；每个匿名用户同一时间只能加入一个队伍。</small></div>
+        </section>
+        <section v-else class="panel party-card">
+          <div class="party-card-heading"><div><span class="eyebrow">当前队伍</span><h2>当前成员</h2></div><span class="party-count">{{ party.members.length }} / {{ party.maxSize }} 人</span></div>
+          <p class="party-lead">队伍会保留；结束一局服务器不会解散队伍。{{ party.currentRole === 'leader' ? '你是队长，可以申请和结束服务器。' : '你是队员，可查看当前服务器并随时退出。' }}</p>
+          <div class="party-members" aria-label="队伍成员"><div v-for="(member, index) in party.members" :key="member.userId" class="party-member"><span class="party-avatar">{{ member.userId === userId ? '我' : String(index + 1).padStart(2, '0') }}</span><span class="party-member-name"><strong>{{ member.userId === userId ? '你' : `匿名成员 ${index + 1}` }}</strong><small>{{ member.role === 'leader' ? '队长' : '队员' }}</small></span><span class="party-role">{{ member.role === 'leader' ? '队长' : '队员' }}</span><button v-if="party.currentRole === 'leader' && member.role !== 'leader'" type="button" class="party-text-button warm" :disabled="busy" @click="removeMember(member.userId)">移除</button></div></div>
+          <div class="party-manage"><button v-if="party.currentRole === 'member'" type="button" class="secondary-button" :disabled="busy" @click="partyAction(() => api.leaveParty(), '已退出队伍；队伍服务器仍会继续运行。')">退出队伍</button><button v-else type="button" class="secondary-button danger" :disabled="busy || blockingParty" @click="disband">解散队伍</button><span v-if="party.currentRole === 'leader' && blockingParty">当前有活动申请或服务器，完整回收后才可解散；V1 不支持队长退队或转让。</span></div>
+        </section>
+        <section v-if="party?.currentRole === 'leader' && invite" class="panel party-card party-invite-card">
+          <span class="eyebrow">邀请朋友</span><h2>分享队伍邀请</h2><p class="party-lead">复制链接发给朋友。重置后旧链接立即失效；活动服务器期间也可以邀请新成员，直到达到队伍人数上限。</p>
+          <div class="party-link"><code>{{ inviteLink }}</code><button type="button" class="secondary-button" @click="copyInvite">{{ copiedInvite ? '已复制' : '复制链接' }}</button></div>
+          <button type="button" class="party-text-button" :disabled="busy" @click="resetInvite">重置邀请链接</button>
+        </section>
+      </div>
+      <aside class="panel party-card party-server-card"><div class="party-card-heading"><span class="eyebrow">当前服务器</span><span class="party-pill">{{ state.title }}</span></div><h2>{{ currentRequest ? '队伍服务器' : '暂无活动服务器' }}</h2><p class="party-lead">{{ currentRequest ? state.description : (party ? '队长可以到“服务器”页面选择地图与玩法并申请。' : '加入或创建队伍后，这里会显示共同的服务器状态。') }}</p><div v-if="currentRequest" class="party-facts"><div><span>地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div><div><span>玩法</span><strong>{{ preset?.displayName || '加载中' }}</strong></div><div><span>节点</span><strong>{{ allocation?.nodeDisplayName || '等待分配' }}</strong></div></div><p v-if="allocation?.joinInfo" class="party-connect"><code>{{ allocation.joinInfo.connectCommand }}</code></p><button type="button" class="secondary-button" @click="partyView = false">{{ allocation?.joinInfo ? '查看连接方式' : '前往服务器页面' }}</button></aside>
+      <p v-if="partyNotice" class="party-notice" role="status">{{ partyNotice }}</p>
+    </div>
     <div v-else-if="!currentRequest" class="request-layout">
       <div class="selection-stack">
         <section class="panel section-panel">
@@ -180,7 +284,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
       </div>
 
       <aside class="application-sidebar" aria-label="申请摘要">
-        <section class="panel owner-panel"><span class="eyebrow">当前申请人</span><div class="owner-line"><span class="owner-avatar" aria-hidden="true">我</span><span><strong>仅自己</strong><small>匿名玩家 · 单人申请</small></span><span class="owner-count">1 人</span></div></section>
+        <section class="panel owner-panel"><span class="eyebrow">当前申请人</span><div class="owner-line"><span class="owner-avatar" aria-hidden="true">{{ party ? '队' : '我' }}</span><span><strong>{{ party ? '当前队伍' : '仅自己' }}</strong><small>{{ party ? (party.currentRole === 'leader' ? '你是队长 · 可申请' : '你是队员 · 只读状态') : '匿名玩家 · 单人申请' }}</small></span><span class="owner-count">{{ party?.members.length || 1 }} 人</span></div></section>
         <section class="panel apply-panel">
           <span class="eyebrow">03 / 申请服务器</span>
           <h2>申请确认</h2>
@@ -190,6 +294,8 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
           <div class="summary-row"><span>人数上限</span><strong>{{ preset?.maxPlayers ?? '—' }} 人</strong></div>
           <div class="assignment-note"><span class="assignment-icon" aria-hidden="true">↗</span><span><strong>系统分配节点</strong><small>根据当前内容与容量确认</small></span><span class="assignment-check" aria-hidden="true">✓</span></div>
           <p v-if="maintenance" class="maintenance-callout" role="status">{{ maintenance }}</p>
+          <p v-if="partyOverPreset" class="maintenance-callout" role="status">当前队伍 {{ party?.members.length }} 人，超过此玩法最多 {{ preset?.maxPlayers }} 人；选择其他玩法后再申请。</p>
+          <p v-if="party && !isLeader" class="maintenance-callout" role="status">只有队长可以申请服务器。队员可查看状态与连接信息。</p>
           <button class="primary-button" type="button" :disabled="!canSubmit" @click="start">{{ busy ? '正在提交…' : '申请服务器' }} <span aria-hidden="true">↗</span></button>
           <p class="footnote">已有活动申请时，会优先显示当前状态。</p>
         </section>
@@ -204,7 +310,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
         <div class="facts" aria-label="申请内容">
           <div><span>游廊地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div>
           <div><span>游戏模式</span><strong>{{ preset?.displayName || '加载中' }}</strong></div>
-          <div><span>申请人</span><strong>仅自己</strong></div>
+          <div><span>申请人</span><strong>{{ party ? `当前队伍 · ${party.members.length} 人` : '仅自己' }}</strong></div>
           <div><span>服务器节点</span><strong>{{ allocation?.nodeDisplayName || '等待分配' }}</strong></div>
         </div>
         <ol class="progress" aria-label="开服进度">
@@ -214,7 +320,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
         </ol>
         <p v-if="allocation?.errorCode || allocation?.joinInfoErrorCode" class="diagnostic">诊断代码：{{ allocation.joinInfoErrorCode || allocation.errorCode }}</p>
         <div class="status-actions">
-          <button v-if="currentRequest.state === 'running'" type="button" class="secondary-button danger" :disabled="busy" @click="stop">{{ busy ? '正在提交…' : '结束服务器' }}</button>
+          <button v-if="currentRequest.state === 'running' && isLeader" type="button" class="secondary-button danger" :disabled="busy" @click="stop">{{ busy ? '正在提交…' : '结束服务器' }}</button>
           <button v-if="state.phase === 'ended'" type="button" class="secondary-button" @click="newRequest">重新申请</button>
         </div>
       </section>

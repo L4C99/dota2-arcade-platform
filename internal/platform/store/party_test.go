@@ -47,6 +47,19 @@ func TestP2APartyMembershipAndInvite(t *testing.T) {
 	if _, err := s.JoinParty(ctx, member, invite.Token); err != nil {
 		t.Fatal(err)
 	}
+	var leaderRole, memberRole string
+	if err := s.Pool.QueryRow(ctx, `SELECT role FROM party_members WHERE user_id=$1`, leader).Scan(&leaderRole); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Pool.QueryRow(ctx, `SELECT role FROM party_members WHERE user_id=$1`, member).Scan(&memberRole); err != nil {
+		t.Fatal(err)
+	}
+	if leaderRole != "leader" || memberRole != "member" {
+		t.Fatalf("persisted roles: %q %q", leaderRole, memberRole)
+	}
+	if _, err := s.Pool.Exec(ctx, `UPDATE party_members SET role='member' WHERE user_id=$1`, leader); err == nil {
+		t.Fatal("live Party leader role removed")
+	}
 	if _, err := s.CurrentInvite(ctx, member); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("member invite access: %v", err)
 	}

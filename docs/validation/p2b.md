@@ -16,4 +16,4 @@ Date: 2026-09-25. P2A checkpoint: `7c8bf955b42814a6fc9b4c2711529f8c2b38159a` (Gi
 - Development PostgreSQL disposable-schema store suite: PASS, including solo/Party owner exclusivity, member create/stop denial, foreign request denial, shared current request, duplicate Party POST, disband guard, GamePreset size precheck, and prior P1 lifecycle tests.
 - Web lint, typecheck, test, build: PASS. No P2 Web UI change is claimed at this checkpoint.
 
-The real Party-owned d2core lifecycle and UI remain for P2C/P2D. GitHub CI result and the complete P2B checkpoint SHA are recorded after push.
+P2B checkpoint `dc06e130a877c70c15f6eb2d9148938d0304c67c` was pushed to `origin/main`; GitHub CI run `36131181708` completed SUCCESS. The real Party-owned d2core lifecycle and UI remain for P2C/P2D.

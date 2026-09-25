@@ -33,6 +33,26 @@ export interface ServerRequest {
   updatedAt: string
 }
 
+export interface PartyMember {
+  userId: string
+  role: 'leader' | 'member'
+  joinedAt: string
+}
+
+export interface Party {
+  id: string
+  leaderUserId: string
+  currentRole: 'leader' | 'member'
+  maxSize: number
+  members: PartyMember[]
+  createdAt: string
+}
+
+export interface PartyInvite {
+  partyId: string
+  token: string
+}
+
 export interface JoinInfo {
   connectCommand: string
   connectHost: string
@@ -85,6 +105,14 @@ export const api = {
   me: () => request<{ userId: string }>('/me'),
   session: () => request<{ userId: string }>('/session', 'POST'),
   catalog: () => request<Catalog>('/catalog'),
+  party: () => request<Party | null>('/party'),
+  createParty: () => request<Party>('/party', 'POST'),
+  currentInvite: () => request<PartyInvite>('/party/invite'),
+  resetInvite: () => request<PartyInvite>('/party/invite/reset', 'POST'),
+  joinParty: (token: string) => request<Party>('/party/join', 'POST', { token }),
+  leaveParty: () => request<void>('/party/leave', 'POST'),
+  removeMember: (id: string) => request<void>(`/party/members/${encodeURIComponent(id)}/remove`, 'POST'),
+  disbandParty: () => request<void>('/party/disband', 'POST'),
   current: () => request<ServerRequest | null>('/server-requests/current'),
   getRequest: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}`),
   createRequest: (arcadeGameId: string, gamePresetId: string) =>

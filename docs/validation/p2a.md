@@ -15,4 +15,4 @@ Date: 2026-09-25. Start SHA: `93cbc4f70ab7268f0953d57f3bc9f9745a53b8fa`.
 - Cross-compiled store integration tests ran as `arcadedev` against disposable schemas in the authorized isolated PostgreSQL development database. Migration upgrade, P1 regressions, P2A model/invite, last-slot concurrent join and multi-Party membership: PASS.
 - The project owner explicitly supplied development `max_party_size=10`. It has **not yet been written to the persistent development PlatformSettings** at this checkpoint; migration and development deployment remain pending.
 
-GitHub CI result and the complete checkpoint SHA are recorded after push. Real Party-owned request, UI, and active-instance validation belong to P2B–P2D.
+P2A checkpoint `7c8bf955b42814a6fc9b4c2711529f8c2b38159a` was pushed to `origin/main`; GitHub CI run `36130778400` completed SUCCESS. Real Party-owned request, UI, and active-instance validation belong to P2B–P2D.

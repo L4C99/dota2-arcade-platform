@@ -97,23 +97,18 @@ func blockingSolo(ctx context.Context, tx pgx.Tx, userID string) (bool, error) {
 
 func (s *Store) CurrentParty(ctx context.Context, userID string) (*Party, error) {
 	var p Party
-	err := s.Pool.QueryRow(ctx, `SELECT p.id,p.leader_user_id,p.created_at,s.max_party_size
+	err := s.Pool.QueryRow(ctx, `SELECT p.id,p.leader_user_id,m.role,p.created_at,s.max_party_size
 		FROM party_members m JOIN parties p ON p.id=m.party_id
 		JOIN platform_settings s ON s.singleton=true
 		WHERE m.user_id=$1 AND p.dissolved_at IS NULL`, userID).
-		Scan(&p.ID, &p.LeaderUserID, &p.CreatedAt, &p.MaxSize)
+		Scan(&p.ID, &p.LeaderUserID, &p.CurrentRole, &p.CreatedAt, &p.MaxSize)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if p.LeaderUserID == userID {
-		p.CurrentRole = "leader"
-	} else {
-		p.CurrentRole = "member"
-	}
-	rows, err := s.Pool.Query(ctx, `SELECT user_id,joined_at FROM party_members WHERE party_id=$1 ORDER BY joined_at,user_id`, p.ID)
+	rows, err := s.Pool.Query(ctx, `SELECT user_id,role,joined_at FROM party_members WHERE party_id=$1 ORDER BY joined_at,user_id`, p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,12 +116,8 @@ func (s *Store) CurrentParty(ctx context.Context, userID string) (*Party, error)
 	p.Members = []PartyMember{}
 	for rows.Next() {
 		var m PartyMember
-		if err := rows.Scan(&m.UserID, &m.JoinedAt); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Role, &m.JoinedAt); err != nil {
 			return nil, err
-		}
-		m.Role = "member"
-		if m.UserID == p.LeaderUserID {
-			m.Role = "leader"
 		}
 		p.Members = append(p.Members, m)
 	}
@@ -162,7 +153,7 @@ func (s *Store) CreateParty(ctx context.Context, userID string) (string, error) 
 	if _, err := tx.Exec(ctx, `INSERT INTO parties(id,leader_user_id) VALUES($1,$2)`, id, userID); err != nil {
 		return "", err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO party_members(party_id,user_id) VALUES($1,$2)`, id, userID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO party_members(party_id,user_id,role) VALUES($1,$2,'leader')`, id, userID); err != nil {
 		return "", err
 	}
 	inviteID, err := NewID()
