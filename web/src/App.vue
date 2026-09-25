@@ -193,7 +193,17 @@ function newRequest(): void {
   error.value = ''
 }
 
+function syncInviteHash(): void {
+  const token = inviteTokenFromHash(window.location.hash)
+  if (token && !party.value) {
+    inviteToken.value = token
+    partyView.value = true
+    error.value = ''
+  }
+}
+
 onMounted(async () => {
+  window.addEventListener('hashchange', syncInviteHash)
   try {
     await ensureSession()
     catalog.value = await api.catalog()
@@ -204,7 +214,7 @@ onMounted(async () => {
   finally { loading.value = false }
   timer = window.setInterval(refresh, 2500)
 })
-onUnmounted(() => { if (timer) window.clearInterval(timer) })
+onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventListener('hashchange', syncInviteHash) })
 </script>
 
 <template>
