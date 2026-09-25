@@ -9,6 +9,7 @@ import (
 )
 
 var ErrInvalidSelection = errors.New("invalid game or preset selection")
+var ErrInvalidNodeSelection = errors.New("invalid node selection")
 var ErrPresetPartyTooLarge = errors.New("party exceeds game preset max_players")
 
 type MaintenanceError struct {
@@ -86,25 +87,28 @@ func (s *Store) PlayerCatalog(ctx context.Context) (Catalog, error) {
 }
 
 type ServerRequest struct {
-	ID           string    `json:"id"`
-	ArcadeGameID string    `json:"arcadeGameId"`
-	GamePresetID string    `json:"gamePresetId"`
-	State        string    `json:"state"`
-	RequestedAt  time.Time `json:"requestedAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID                string    `json:"id"`
+	ArcadeGameID      string    `json:"arcadeGameId"`
+	GamePresetID      string    `json:"gamePresetId"`
+	State             string    `json:"state"`
+	RequestedAt       time.Time `json:"requestedAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+	NodeSelectionMode string    `json:"nodeSelectionMode"`
+	ManualNodeID      *string   `json:"manualNodeId,omitempty"`
 }
 
 type requestScanner interface{ Scan(...any) error }
 
 func scanServerRequest(row requestScanner) (ServerRequest, error) {
 	var r ServerRequest
-	err := row.Scan(&r.ID, &r.ArcadeGameID, &r.GamePresetID, &r.State, &r.RequestedAt, &r.UpdatedAt)
+	err := row.Scan(&r.ID, &r.ArcadeGameID, &r.GamePresetID, &r.State, &r.RequestedAt, &r.UpdatedAt,
+		&r.NodeSelectionMode, &r.ManualNodeID)
 	return r, err
 }
 
-const currentRequestSQL = `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
+const currentRequestSQL = `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at,node_selection_mode,manual_node_id
 	FROM server_requests WHERE owner_user_id=$1 AND state IN ('waiting','allocating','creating','running','stopping','failed_unreclaimed','quarantined')`
-const currentPartyRequestSQL = `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
+const currentPartyRequestSQL = `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at,node_selection_mode,manual_node_id
 	FROM server_requests WHERE owner_party_id=$1 AND state IN ('waiting','allocating','creating','running','stopping','failed_unreclaimed','quarantined')`
 
 func (s *Store) CurrentUserRequest(ctx context.Context, userID string) (*ServerRequest, error) {
@@ -128,7 +132,7 @@ func (s *Store) CurrentUserRequest(ctx context.Context, userID string) (*ServerR
 }
 
 func (s *Store) UserRequest(ctx context.Context, userID, requestID string) (ServerRequest, error) {
-	return scanServerRequest(s.Pool.QueryRow(ctx, `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
+	return scanServerRequest(s.Pool.QueryRow(ctx, `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at,node_selection_mode,manual_node_id
 		FROM server_requests r WHERE id=$1 AND
 		((owner_user_id=$2 AND NOT EXISTS (SELECT 1 FROM party_members WHERE user_id=$2))
 		OR EXISTS (SELECT 1 FROM party_members m WHERE m.user_id=$2 AND m.party_id=r.owner_party_id))`, requestID, userID))
@@ -137,6 +141,14 @@ func (s *Store) UserRequest(ctx context.Context, userID, requestID string) (Serv
 // The user row serializes submissions from every Session of the same owner.
 // The partial unique index is a second, database-level guard against duplicates.
 func (s *Store) CreateUserRequest(ctx context.Context, userID, gameID, presetID string) (ServerRequest, bool, error) {
+	return s.CreateUserRequestSelected(ctx, userID, gameID, presetID, "auto", "")
+}
+
+func (s *Store) CreateUserRequestSelected(ctx context.Context, userID, gameID, presetID, mode, manualNodeID string) (ServerRequest, bool, error) {
+	if (mode != "auto" && mode != "manual") || (mode == "auto" && manualNodeID != "") ||
+		(mode == "manual" && manualNodeID == "") {
+		return ServerRequest{}, false, ErrInvalidNodeSelection
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return ServerRequest{}, false, err
@@ -199,6 +211,17 @@ func (s *Store) CreateUserRequest(ctx context.Context, userID, gameID, presetID 
 			return ServerRequest{}, false, ErrPresetPartyTooLarge
 		}
 	}
+	var selectedNode any
+	if mode == "manual" {
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM nodes WHERE id=$1 AND enabled)`, manualNodeID).Scan(&exists); err != nil {
+			return ServerRequest{}, false, err
+		}
+		if !exists {
+			return ServerRequest{}, false, ErrInvalidNodeSelection
+		}
+		selectedNode = manualNodeID
+	}
 	id, err := NewID()
 	if err != nil {
 		return ServerRequest{}, false, err
@@ -208,8 +231,9 @@ func (s *Store) CreateUserRequest(ctx context.Context, userID, gameID, presetID 
 	if partyID != "" {
 		ownerUser, ownerParty = nil, partyID
 	}
-	r, err := scanServerRequest(tx.QueryRow(ctx, `INSERT INTO server_requests(id,owner_user_id,owner_party_id,arcade_game_id,game_preset_id,requested_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,$6) RETURNING id,arcade_game_id,game_preset_id,state,requested_at,updated_at`, id, ownerUser, ownerParty, gameID, presetID, requestedAt))
+	r, err := scanServerRequest(tx.QueryRow(ctx, `INSERT INTO server_requests(id,owner_user_id,owner_party_id,arcade_game_id,game_preset_id,requested_at,updated_at,node_selection_mode,manual_node_id)
+		VALUES($1,$2,$3,$4,$5,$6,$6,$7,$8) RETURNING id,arcade_game_id,game_preset_id,state,requested_at,updated_at,node_selection_mode,manual_node_id`,
+		id, ownerUser, ownerParty, gameID, presetID, requestedAt, mode, selectedNode))
 	if err != nil {
 		return ServerRequest{}, false, err
 	}

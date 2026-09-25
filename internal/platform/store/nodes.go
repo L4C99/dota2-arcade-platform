@@ -16,6 +16,23 @@ import (
 
 var ErrNodeUnauthorized = errors.New("node unauthorized")
 
+func (s *Store) SetNodePriority(ctx context.Context, nodeID string, priority int) error {
+	command, err := s.Pool.Exec(ctx, `UPDATE nodes SET priority=$2 WHERE id=$1`, nodeID, priority)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() != 1 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) NodePriority(ctx context.Context, nodeID string) (int, error) {
+	var priority int
+	err := s.Pool.QueryRow(ctx, `SELECT priority FROM nodes WHERE id=$1`, nodeID).Scan(&priority)
+	return priority, err
+}
+
 // RegisterNode is called only from the local administrator CLI. The raw
 // secret is returned once and only its SHA-256 verifier is stored.
 func (s *Store) RegisterNode(ctx context.Context, name, osName string) (nodeID, secret string, err error) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ApiError, api } from './api'
-import type { Allocation, Catalog, Party, PartyInvite, ServerRequest } from './api'
+import type { Allocation, Catalog, NodeChoice, Party, PartyInvite, ServerRequest } from './api'
 import { maintenanceFor, statusFor } from './state'
 import { inviteTokenFromHash, partyInviteLink, tokenFromInviteInput } from './partyInvite'
 
@@ -24,13 +24,27 @@ const currentRequest = ref<ServerRequest | null>(null)
 const allocation = ref<Allocation | null>(null)
 const gameId = ref('')
 const presetId = ref('')
+const nodes = ref<NodeChoice[]>([])
+const nodeSelectionMode = ref<'auto' | 'manual'>('auto')
+const manualNodeId = ref('')
 let timer: number | undefined
 let polling = false
 
 const game = computed(() => catalog.value?.games.find((item) => item.id === (currentRequest.value?.arcadeGameId || gameId.value)))
 const preset = computed(() => catalog.value?.presets.find((item) => item.id === (currentRequest.value?.gamePresetId || presetId.value)))
 const selectedPresets = computed(() => catalog.value?.presets.filter((item) => item.arcadeGameId === gameId.value) || [])
-const state = computed(() => statusFor(currentRequest.value, allocation.value))
+const state = computed(() => statusFor(currentRequest.value, allocation.value, nodes.value))
+const selectedNode = computed(() => nodes.value.find((item) => item.id === (currentRequest.value?.manualNodeId || manualNodeId.value)))
+const assignedNodeName = computed(() => allocation.value?.nodeDisplayName || (currentRequest.value?.nodeSelectionMode === 'manual' ? selectedNode.value?.displayName : '') || '等待分配')
+const selectionName = computed(() => currentRequest.value?.nodeSelectionMode === 'manual'
+  ? (selectedNode.value?.displayName || '所选节点') : '自动选择')
+const nodeStatus = (node: NodeChoice): string => node.status === 'available'
+  ? `可申请 · ${node.availableSlots} 个空位`
+  : node.status === 'full' ? '满载 · 可排队'
+    : node.reason === 'maintenance' ? '维护中 · 可等待恢复'
+      : node.reason === 'unreachable' ? '暂不可达 · 可等待恢复'
+        : node.reason === 'content_unready' || node.reason === 'template_unready' ? '内容尚未就绪'
+          : '暂不可申请'
 const serverCardTitle = computed(() => {
   if (!currentRequest.value) return '暂无活动服务器'
   if (currentRequest.value.state === 'ended' || currentRequest.value.state === 'cancelled') return '本局已结束'
@@ -50,7 +64,8 @@ const partyOverPreset = computed(() => !!party.value && !!preset.value && party.
 const blockingParty = computed(() => !!party.value && !!currentRequest.value &&
   ['waiting', 'allocating', 'creating', 'running', 'stopping', 'failed_unreclaimed', 'quarantined'].includes(currentRequest.value.state))
 const inviteLink = computed(() => invite.value ? partyInviteLink(window.location.origin, invite.value.token) : '')
-const canSubmit = computed(() => !!gameId.value && !!presetId.value && !maintenance.value && !busy.value && isLeader.value && !partyOverPreset.value)
+const canSubmit = computed(() => !!gameId.value && !!presetId.value && !maintenance.value && !busy.value && isLeader.value && !partyOverPreset.value &&
+  (nodeSelectionMode.value === 'auto' || !!manualNodeId.value))
 
 function describeError(cause: unknown): string {
   if (cause instanceof ApiError) return cause.message.trim() || `服务暂时不可用 (${cause.status})`
@@ -93,6 +108,9 @@ async function refresh(): Promise<void> {
       }
     }
     currentRequest.value = request
+    const choiceGame = request?.arcadeGameId || gameId.value
+    const choicePreset = request?.gamePresetId || presetId.value
+    if (choiceGame && choicePreset) nodes.value = await api.nodes(choiceGame, choicePreset)
     if (request) {
       localStorage.setItem(savedRequestKey, request.id)
       allocation.value = await api.allocation(request.id)
@@ -107,7 +125,8 @@ async function start(): Promise<void> {
   busy.value = true
   error.value = ''
   try {
-    const request = await api.createRequest(gameId.value, presetId.value)
+    const request = await api.createRequest(gameId.value, presetId.value, nodeSelectionMode.value,
+      nodeSelectionMode.value === 'manual' ? manualNodeId.value : '')
     currentRequest.value = request
     allocation.value = null
     localStorage.setItem(savedRequestKey, request.id)
@@ -129,6 +148,17 @@ async function stop(): Promise<void> {
   busy.value = true
   error.value = ''
   try { currentRequest.value = await api.stop(request.id) }
+  catch (cause) { error.value = describeError(cause) }
+  finally { busy.value = false }
+  await refresh()
+}
+
+async function cancelWaiting(): Promise<void> {
+  const request = currentRequest.value
+  if (!request || request.state !== 'waiting' || allocation.value || busy.value || !isLeader.value) return
+  busy.value = true
+  error.value = ''
+  try { currentRequest.value = await api.cancel(request.id) }
   catch (cause) { error.value = describeError(cause) }
   finally { busy.value = false }
   await refresh()
@@ -284,7 +314,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
           <button type="button" class="party-text-button" :disabled="busy" @click="resetInvite">重置邀请链接</button>
         </section>
       </div>
-      <aside class="panel party-card party-server-card"><div class="party-card-heading"><span class="eyebrow">当前服务器</span><span class="party-pill">{{ state.title }}</span></div><h2>{{ serverCardTitle }}</h2><p class="party-lead">{{ serverCardDescription }}</p><div v-if="currentRequest" class="party-facts"><div><span>地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div><div><span>玩法</span><strong>{{ preset?.displayName || '加载中' }}</strong></div><div><span>节点</span><strong>{{ allocation?.nodeDisplayName || '等待分配' }}</strong></div></div><button type="button" class="secondary-button" @click="partyView = false">{{ allocation?.joinInfo ? '查看连接方式' : '前往服务器页面' }}</button></aside>
+      <aside class="panel party-card party-server-card"><div class="party-card-heading"><span class="eyebrow">当前服务器</span><span class="party-pill">{{ state.title }}</span></div><h2>{{ serverCardTitle }}</h2><p class="party-lead">{{ serverCardDescription }}</p><div v-if="currentRequest" class="party-facts"><div><span>地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div><div><span>玩法</span><strong>{{ preset?.displayName || '加载中' }}</strong></div><div><span>节点</span><strong>{{ assignedNodeName }}</strong></div></div><button type="button" class="secondary-button" @click="partyView = false">{{ allocation?.joinInfo ? '查看连接方式' : '前往服务器页面' }}</button></aside>
       <p v-if="partyNotice" class="party-notice" role="status">{{ partyNotice }}</p>
     </div>
     <div v-else-if="!currentRequest" class="request-layout">
@@ -319,16 +349,17 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         <section class="panel apply-panel">
           <span class="eyebrow">03 / 申请服务器</span>
           <h2>申请确认</h2>
-          <p>平台会检查当前开发节点的内容和空位，再分配服务器。</p>
+          <p>平台会检查节点内容和空位，再分配服务器。</p>
           <div class="summary-row"><span>地图</span><strong>{{ game?.displayName || '未选择' }}</strong></div>
           <div class="summary-row"><span>玩法</span><strong>{{ preset?.displayName || '未选择' }}</strong></div>
           <div class="summary-row"><span>人数上限</span><strong>{{ preset?.maxPlayers ?? '—' }} 人</strong></div>
-          <div class="assignment-note"><span class="assignment-icon" aria-hidden="true">↗</span><span><strong>系统分配节点</strong><small>根据当前内容与容量确认</small></span><span class="assignment-check" aria-hidden="true">✓</span></div>
+          <label class="assignment-note node-auto-choice" :class="{ selected: nodeSelectionMode === 'auto' }"><input v-model="nodeSelectionMode" type="radio" name="node-mode" value="auto" /><span class="assignment-icon" aria-hidden="true">↗</span><span><strong>自动选择节点</strong><small>优先选择当前可用节点</small></span><span v-if="nodeSelectionMode === 'auto'" class="assignment-check" aria-hidden="true">✓</span></label>
+          <details class="manual-disclosure"><summary>高级选项：手动指定节点 <span aria-hidden="true">⌄</span></summary><p>手动指定后只等待该节点；满载、维护或暂不可达时不会自动换到其他节点。</p><div class="node-list"><label v-for="node in nodes" :key="node.id" :class="{ selected: nodeSelectionMode === 'manual' && manualNodeId === node.id, disabled: !node.selectable }"><input v-model="manualNodeId" type="radio" name="manual-node" :value="node.id" :disabled="!node.selectable" @change="nodeSelectionMode = 'manual'" /><span class="node-state" :class="node.status" aria-hidden="true" /><span><strong>{{ node.displayName }}</strong><small>{{ nodeStatus(node) }}</small></span></label><p v-if="nodes.length === 0">暂无已登记节点，请使用自动选择并等待。</p></div></details>
           <p v-if="maintenance" class="maintenance-callout" role="status">{{ maintenance }}</p>
           <p v-if="partyOverPreset" class="maintenance-callout" role="status">当前队伍 {{ party?.members.length }} 人，超过此玩法最多 {{ preset?.maxPlayers }} 人；选择其他玩法后再申请。</p>
           <p v-if="party && !isLeader" class="maintenance-callout" role="status">只有队长可以申请服务器。队员可查看状态与连接信息。</p>
           <button class="primary-button" type="button" :disabled="!canSubmit" @click="start">{{ busy ? '正在提交…' : '申请服务器' }} <span aria-hidden="true">↗</span></button>
-          <p class="footnote">已有活动申请时，会优先显示当前状态。</p>
+          <p class="footnote">{{ nodeSelectionMode === 'manual' ? '改选节点需在安全等待阶段取消旧申请，再提交新申请。' : '已有活动申请时，会优先显示当前状态。' }}</p>
         </section>
       </aside>
     </div>
@@ -342,8 +373,9 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
           <div><span>游廊地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div>
           <div><span>游戏模式</span><strong>{{ preset?.displayName || '加载中' }}</strong></div>
           <div><span>申请人</span><strong>{{ party ? `当前队伍 · ${party.members.length} 人` : '仅自己' }}</strong></div>
-          <div><span>服务器节点</span><strong>{{ allocation?.nodeDisplayName || '等待分配' }}</strong></div>
+          <div><span>服务器节点</span><strong>{{ assignedNodeName }}</strong></div>
         </div>
+        <p v-if="currentRequest.state === 'waiting'" class="queue-note">{{ selectionName }} · 申请时间 {{ new Date(currentRequest.requestedAt).toLocaleString('zh-CN') }}。等待不会计入服务器启动时间。</p>
         <ol class="progress" aria-label="开服进度">
           <li :class="{ active: state.phase === 'waiting', done: ['allocating', 'creating', 'ready', 'unavailable', 'stopping', 'ended'].includes(state.phase) }"><span>01</span>等待资源</li>
           <li :class="{ active: ['allocating', 'creating'].includes(state.phase), done: ['ready', 'unavailable', 'stopping', 'ended'].includes(state.phase) }"><span>02</span>分配并启动</li>
@@ -351,6 +383,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         </ol>
         <p v-if="allocation?.errorCode || allocation?.joinInfoErrorCode" class="diagnostic">诊断代码：{{ allocation.joinInfoErrorCode || allocation.errorCode }}</p>
         <div class="status-actions">
+          <button v-if="currentRequest.state === 'waiting' && !allocation && isLeader" type="button" class="secondary-button" :disabled="busy" @click="cancelWaiting">取消等待申请</button>
           <button v-if="currentRequest.state === 'running' && isLeader" type="button" class="secondary-button danger" :disabled="busy" @click="stop">{{ busy ? '正在提交…' : '结束服务器' }}</button>
           <button v-if="state.phase === 'ended'" type="button" class="secondary-button" @click="newRequest">重新申请</button>
         </div>
@@ -370,9 +403,9 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         <p class="join-note">结束服务器会停止当前游戏并等待完整回收。</p>
       </aside>
       <aside v-else-if="state.phase === 'unavailable'" class="panel side-panel"><span class="eyebrow">连接状态</span><h2>暂时无法给出连接地址</h2><p>服务器仍在运行。当前端口映射信息不足或已变化，页面不会显示未经确认的命令。你可以稍后刷新或结束服务器。</p></aside>
-      <aside v-else-if="state.phase === 'ended'" class="panel side-panel"><span class="eyebrow">本局已结束</span><h2>服务器已回收</h2><p>点击左侧“重新申请”即可回到地图和玩法选择。刷新页面仍能看到本局的结束状态。</p></aside>
+      <aside v-else-if="state.phase === 'ended'" class="panel side-panel"><span class="eyebrow">{{ currentRequest.state === 'cancelled' ? '申请已取消' : '本局已结束' }}</span><h2>{{ currentRequest.state === 'cancelled' ? '未占用服务器' : '服务器已回收' }}</h2><p>点击左侧“重新申请”即可回到地图、玩法和节点选择。刷新页面仍能看到此次申请的结束状态。</p></aside>
       <aside v-else class="panel side-panel"><span class="eyebrow">申请已保存</span><h2>可以稍后回来</h2><p>关闭浏览器或刷新页面后，这台服务器的状态仍会保留在当前匿名会话中。</p></aside>
     </div>
   </main>
-  <footer><span>Dota 2 Arcade Platform</span><span>玩家专服 · P1</span></footer>
+  <footer><span>Dota 2 Arcade Platform</span><span>玩家专服</span></footer>
 </template>

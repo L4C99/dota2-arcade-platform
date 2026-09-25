@@ -20,142 +20,130 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	defer tx.Rollback(ctx)
-	var requestID string
-	err = tx.QueryRow(ctx, `SELECT id FROM server_requests WHERE state='waiting'
-		ORDER BY requested_at,id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&requestID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
+	// A single Platform instance runs the background loop, but tests and
+	// operator invocations may overlap it. Serialize cycles so a later
+	// request cannot win a shared last slot while an earlier one is checked.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(60566257581002)`); err != nil {
+		return false, err
 	}
+	rows, err := tx.Query(ctx, `SELECT id FROM server_requests WHERE state='waiting'
+		ORDER BY requested_at,id FOR UPDATE`)
 	if err != nil {
 		return false, err
 	}
-	var gameID, contentID, revisionID string
-	var globalAccept, gameEnabled, gameAccept, presetEnabled, presetAccept bool
-	err = tx.QueryRow(ctx, `SELECT r.arcade_game_id,COALESCE(g.current_content_version_id,''),p.template_revision_id,
-		s.accepting_new_requests,g.enabled,g.accepting_new_requests,p.enabled,p.accepting_new_requests
-		FROM server_requests r JOIN arcade_games g ON g.id=r.arcade_game_id
-		JOIN game_presets p ON p.id=r.game_preset_id
-		JOIN platform_settings s ON s.singleton=true WHERE r.id=$1 FOR SHARE OF s,g,p`, requestID).
-		Scan(&gameID, &contentID, &revisionID, &globalAccept, &gameEnabled, &gameAccept, &presetEnabled, &presetAccept)
-	if err != nil {
-		return false, err
-	}
-	if !gameEnabled || !presetEnabled {
-		at := time.Now().UTC()
-		_, err = tx.Exec(ctx, `UPDATE server_requests SET state='unavailable',updated_at=$2 WHERE id=$1`, requestID, at)
-		if err != nil {
-			return false, err
-		}
-		return true, tx.Commit(ctx)
-	}
-	if !globalAccept || !gameAccept || !presetAccept || contentID == "" {
-		return false, nil
-	}
-	rows, err := tx.Query(ctx, `SELECT n.id,b.binding_key,n.desired_max_instances,r.hard_max_instances
-		FROM nodes n JOIN node_reports r ON r.node_id=n.id
-		JOIN node_template_bindings b ON b.node_id=n.id AND b.template_revision_id=$1
-		JOIN node_content_bindings c ON c.node_id=n.id AND c.arcade_game_id=$2
-		WHERE n.enabled AND n.accepting_new_requests AND NOT n.draining
-		AND n.last_heartbeat > now() - interval '2 minutes'
-		AND r.compatibility_status='compatible'
-		AND c.reported_state='confirmed' AND c.reported_content_version_id=$3
-		AND c.accepting_new_allocations
-		ORDER BY n.id FOR UPDATE OF n`, revisionID, gameID, contentID)
-	if err != nil {
-		return false, err
-	}
-	type node struct {
-		id, key       string
-		desired, hard int
-	}
-	nodes := []node{}
+	var requestIDs []string
 	for rows.Next() {
-		var n node
-		if err := rows.Scan(&n.id, &n.key, &n.desired, &n.hard); err != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			rows.Close()
 			return false, err
 		}
-		nodes = append(nodes, n)
+		requestIDs = append(requestIDs, id)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return false, err
 	}
 	rows.Close()
-	if len(nodes) == 0 {
-		return false, nil
-	}
-	var selected *node
-	for i := range nodes {
-		n := &nodes[i]
-		// The candidate query may have waited for a concurrent heartbeat's
-		// node lock. Re-read all Controller-reported eligibility and hard
-		// capacity after the lock is ours, using a fresh READ COMMITTED
-		// statement, before counting or reserving a slot.
-		err := tx.QueryRow(ctx, `SELECT b.binding_key,n.desired_max_instances,r.hard_max_instances
-			FROM nodes n JOIN node_reports r ON r.node_id=n.id
-			JOIN node_template_bindings b ON b.node_id=n.id AND b.template_revision_id=$2
-			JOIN node_content_bindings c ON c.node_id=n.id AND c.arcade_game_id=$3
-			WHERE n.id=$1 AND n.enabled AND n.accepting_new_requests AND NOT n.draining
-			AND n.last_heartbeat > now() - interval '2 minutes'
-			AND r.compatibility_status='compatible'
-			AND c.reported_state='confirmed' AND c.reported_content_version_id=$4
-			AND c.accepting_new_allocations`, n.id, revisionID, gameID, contentID).
-			Scan(&n.key, &n.desired, &n.hard)
-		if errors.Is(err, pgx.ErrNoRows) {
+	for _, requestID := range requestIDs {
+		var gameID, contentID, revisionID string
+		var mode string
+		var manualNodeID *string
+		var globalAccept, gameEnabled, gameAccept, presetEnabled, presetAccept bool
+		err = tx.QueryRow(ctx, `SELECT r.arcade_game_id,COALESCE(g.current_content_version_id,''),p.template_revision_id,
+		r.node_selection_mode,r.manual_node_id,
+		s.accepting_new_requests,g.enabled,g.accepting_new_requests,p.enabled,p.accepting_new_requests
+		FROM server_requests r JOIN arcade_games g ON g.id=r.arcade_game_id
+		JOIN game_presets p ON p.id=r.game_preset_id
+		JOIN platform_settings s ON s.singleton=true WHERE r.id=$1 FOR SHARE OF s,g,p`, requestID).
+			Scan(&gameID, &contentID, &revisionID, &mode, &manualNodeID,
+				&globalAccept, &gameEnabled, &gameAccept, &presetEnabled, &presetAccept)
+		if err != nil {
+			return false, err
+		}
+		if !gameEnabled || !presetEnabled {
+			at := time.Now().UTC()
+			_, err = tx.Exec(ctx, `UPDATE server_requests SET state='unavailable',updated_at=$2 WHERE id=$1`, requestID, at)
+			if err != nil {
+				return false, err
+			}
+			return true, tx.Commit(ctx)
+		}
+		if !globalAccept || !gameAccept || !presetAccept || contentID == "" {
 			continue
+		}
+		var nodeRows pgx.Rows
+		if mode == "manual" {
+			nodeRows, err = tx.Query(ctx, `SELECT id FROM nodes WHERE id=$1 FOR UPDATE`, manualNodeID)
+		} else {
+			nodeRows, err = tx.Query(ctx, `SELECT id FROM nodes ORDER BY priority DESC,id FOR UPDATE`)
 		}
 		if err != nil {
 			return false, err
 		}
-		limit := min(n.hard, n.desired)
-		if limit <= 0 {
-			continue
+		var nodeIDs []string
+		for nodeRows.Next() {
+			var id string
+			if err := nodeRows.Scan(&id); err != nil {
+				nodeRows.Close()
+				return false, err
+			}
+			nodeIDs = append(nodeIDs, id)
 		}
-		var occupied int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM allocations WHERE node_id=$1
-			AND state NOT IN ('reclaimed','released_no_effect')`, n.id).Scan(&occupied); err != nil {
+		if err := nodeRows.Err(); err != nil {
+			nodeRows.Close()
 			return false, err
 		}
-		if occupied < limit {
-			selected = n
-			break
+		nodeRows.Close()
+		var selected *NodeEligibility
+		for _, nodeID := range nodeIDs {
+			// Read after acquiring the node lock so concurrent heartbeat and
+			// desired-capacity updates cannot leave stale facts in the decision.
+			n, err := scanNodeEligibility(tx.QueryRow(ctx, nodeEligibilitySQL, nodeID, revisionID, gameID))
+			if err != nil {
+				return false, err
+			}
+			if n.Reason(contentID, time.Now().UTC()) == "available" {
+				selected = &n
+				break
+			}
 		}
-	}
-	if selected == nil {
-		return false, nil
-	}
-	n := selected
-	var sequence int
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(attempt_sequence),0)+1 FROM allocations
+		if selected == nil {
+			continue
+		}
+		n := selected
+		var sequence int
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(attempt_sequence),0)+1 FROM allocations
 		WHERE server_request_id=$1`, requestID).Scan(&sequence); err != nil {
-		return false, err
-	}
-	allocationID, err := NewID()
-	if err != nil {
-		return false, err
-	}
-	jobID, err := NewID()
-	if err != nil {
-		return false, err
-	}
-	at := time.Now().UTC()
-	_, err = tx.Exec(ctx, `INSERT INTO allocations(id,server_request_id,arcade_game_id,attempt_sequence,node_id,
+			return false, err
+		}
+		allocationID, err := NewID()
+		if err != nil {
+			return false, err
+		}
+		jobID, err := NewID()
+		if err != nil {
+			return false, err
+		}
+		at := time.Now().UTC()
+		_, err = tx.Exec(ctx, `INSERT INTO allocations(id,server_request_id,arcade_game_id,attempt_sequence,node_id,
 		content_version_id,template_revision_id,state,assigned_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,'reserved',$8)`, allocationID, requestID, gameID, sequence, n.id, contentID, revisionID, at)
-	if err != nil {
-		return false, err
+		VALUES($1,$2,$3,$4,$5,$6,$7,'reserved',$8)`, allocationID, requestID, gameID, sequence, n.ID, contentID, revisionID, at)
+		if err != nil {
+			return false, err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,template_binding_key,requested_port)
+		VALUES($1,$2,'create',false,$3,$4,0)`, jobID, n.ID, allocationID, n.BindingKey)
+		if err != nil {
+			return false, err
+		}
+		_, err = tx.Exec(ctx, `UPDATE server_requests SET state='allocating',updated_at=$2 WHERE id=$1`, requestID, at)
+		if err != nil {
+			return false, err
+		}
+		return true, tx.Commit(ctx)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,template_binding_key,requested_port)
-		VALUES($1,$2,'create',false,$3,$4,0)`, jobID, n.id, allocationID, n.key)
-	if err != nil {
-		return false, err
-	}
-	_, err = tx.Exec(ctx, `UPDATE server_requests SET state='allocating',updated_at=$2 WHERE id=$1`, requestID, at)
-	if err != nil {
-		return false, err
-	}
-	return true, tx.Commit(ctx)
+	return false, nil
 }
 
 type Allocation struct {
@@ -254,7 +242,7 @@ func (s *Store) StopUserRequest(ctx context.Context, userID, requestID string) (
 		}
 		ownerField, ownerID = "owner_party_id", partyID
 	}
-	r, err := scanServerRequest(tx.QueryRow(ctx, `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
+	r, err := scanServerRequest(tx.QueryRow(ctx, `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at,node_selection_mode,manual_node_id
 		FROM server_requests WHERE id=$1 AND `+ownerField+`=$2 FOR UPDATE`, requestID, ownerID))
 	if err != nil {
 		return ServerRequest{}, err

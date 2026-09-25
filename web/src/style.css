@@ -152,8 +152,30 @@ main{padding-top:24px;min-height:calc(100vh - 145px)}
 .apply-panel>p:first-of-type{margin-bottom:23px}
 .summary-row{font-size:13px}
 .assignment-note{display:flex;align-items:center;gap:12px;margin-top:8px;padding:13px;border:1px solid #d0e2d1;border-radius:14px;background:#eef5ed}
+.node-auto-choice{cursor:pointer}
+.node-auto-choice:not(.selected){background:#fafbf7;border-color:#dce5dc}
+.node-auto-choice input{position:absolute;opacity:0}
+.node-auto-choice:focus-within,.node-list label:focus-within{outline:2px solid #88ad95;outline-offset:2px}
+.manual-disclosure{border-top:1px solid #e7ebe3;margin-top:16px;padding-top:15px}
+.manual-disclosure summary{display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;color:#456258;font-size:12px;font-weight:800;cursor:pointer}
+.manual-disclosure summary::-webkit-details-marker{display:none}
+.manual-disclosure[open] summary span{transform:rotate(180deg)}
+.manual-disclosure>p,.node-list>p{font-size:11px;line-height:1.6;color:#75867c;margin:11px 0}
+.node-list{display:grid;gap:7px;margin-top:11px}
+.node-list label{display:flex;align-items:center;gap:9px;padding:10px;border:1px solid #e2e9e1;border-radius:10px;background:#fbfcf8;cursor:pointer}
+.node-list label.selected{background:#eff6ee;border-color:#a8c6ad}
+.node-list label.disabled{opacity:.65;cursor:not-allowed}
+.node-list input{accent-color:#173d34;margin:0}
+.node-list label>span:last-child{display:flex;flex-direction:column;gap:2px;min-width:0}
+.node-list strong{font-size:12px;overflow-wrap:anywhere}
+.node-list small{font-size:11px;color:#75867c}
+.node-state{width:8px;height:8px;flex:none;border-radius:50%;background:#72a982}
+.node-state.full{background:#dfaa6f}
+.node-state.maintenance{background:#c3895d}
+.node-state.unavailable{background:#9aa79e}
+.queue-note{font-size:11px;color:#75867c;margin:17px 0 0;line-height:1.6}
 .assignment-icon{display:grid;place-items:center;flex:none;width:29px;height:29px;border-radius:9px;background:#d4e8d8;font-size:17px}
-.assignment-note>span:nth-child(2){display:flex;flex-direction:column;gap:3px}
+.assignment-note>span:nth-of-type(2){display:flex;flex-direction:column;gap:3px}
 .assignment-note strong{font-size:13px}
 .assignment-note small{font-size:12px;color:#75867c}
 .assignment-check{display:grid;place-items:center;flex:none;width:19px;height:19px;margin-left:auto;border-radius:50%;background:#173d34;color:#fff;font-size:11px}

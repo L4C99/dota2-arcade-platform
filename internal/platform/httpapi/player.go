@@ -34,6 +34,27 @@ func (a *api) playerCatalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
+func (a *api) playerNodes(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.playerUser(w, r); !ok {
+		return
+	}
+	gameID, presetID := r.URL.Query().Get("arcadeGameId"), r.URL.Query().Get("gamePresetId")
+	if !nodeIDPattern.MatchString(gameID) || !nodeIDPattern.MatchString(presetID) {
+		http.Error(w, "invalid selection", http.StatusBadRequest)
+		return
+	}
+	nodes, err := a.store.PlayerNodeChoices(r.Context(), gameID, presetID)
+	if errors.Is(err, store.ErrInvalidSelection) {
+		http.Error(w, "game or preset unavailable", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "nodes unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, nodes)
+}
+
 func (a *api) createPlayerRequest(w http.ResponseWriter, r *http.Request) {
 	if !a.checkOrigin(w, r) {
 		return
@@ -43,20 +64,32 @@ func (a *api) createPlayerRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		ArcadeGameID string `json:"arcadeGameId"`
-		GamePresetID string `json:"gamePresetId"`
+		ArcadeGameID      string `json:"arcadeGameId"`
+		GamePresetID      string `json:"gamePresetId"`
+		NodeSelectionMode string `json:"nodeSelectionMode"`
+		ManualNodeID      string `json:"manualNodeId"`
 	}
 	if err := decodeJSON(r, &input); err != nil || !nodeIDPattern.MatchString(input.ArcadeGameID) || !nodeIDPattern.MatchString(input.GamePresetID) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	request, created, err := a.store.CreateUserRequest(r.Context(), userID, input.ArcadeGameID, input.GamePresetID)
+	if input.NodeSelectionMode == "" {
+		input.NodeSelectionMode = "auto"
+	}
+	if input.ManualNodeID != "" && !nodeIDPattern.MatchString(input.ManualNodeID) {
+		http.Error(w, "invalid node selection", http.StatusBadRequest)
+		return
+	}
+	request, created, err := a.store.CreateUserRequestSelected(r.Context(), userID,
+		input.ArcadeGameID, input.GamePresetID, input.NodeSelectionMode, input.ManualNodeID)
 	var maintenance *store.MaintenanceError
 	switch {
 	case errors.As(err, &maintenance):
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "maintenance", "scope": maintenance.Scope, "message": maintenance.Message})
 	case errors.Is(err, store.ErrInvalidSelection):
 		http.Error(w, "game or preset unavailable", http.StatusNotFound)
+	case errors.Is(err, store.ErrInvalidNodeSelection):
+		http.Error(w, "invalid node selection", http.StatusBadRequest)
 	case errors.Is(err, store.ErrPartyForbidden):
 		writeJSON(w, http.StatusForbidden, map[string]string{"code": "leader_required", "message": "只有队长可以为队伍申请服务器。"})
 	case errors.Is(err, store.ErrPresetPartyTooLarge):
@@ -69,6 +102,34 @@ func (a *api) createPlayerRequest(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusCreated
 		}
 		writeJSON(w, status, request)
+	}
+}
+
+func (a *api) cancelPlayerRequest(w http.ResponseWriter, r *http.Request) {
+	if !a.checkOrigin(w, r) {
+		return
+	}
+	userID, ok := a.playerUser(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if !nodeIDPattern.MatchString(id) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	request, err := a.store.CancelUserRequest(r.Context(), userID, id)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		http.Error(w, "not found", http.StatusNotFound)
+	case errors.Is(err, store.ErrPartyForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "leader_required", "message": "只有队长可以取消队伍申请。"})
+	case errors.Is(err, store.ErrJobConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "cancel_unsafe", "message": "已开始分配或存在历史分配，不能通过取消释放资源。"})
+	case err != nil:
+		http.Error(w, "cancel unavailable", http.StatusServiceUnavailable)
+	default:
+		writeJSON(w, http.StatusOK, request)
 	}
 }
 

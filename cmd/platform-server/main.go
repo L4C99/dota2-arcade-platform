@@ -74,6 +74,23 @@ func run(args []string) error {
 		fmt.Println("admin account updated")
 		return nil
 	case "node":
+		if (len(args) == 3 || len(args) == 4) && args[1] == "priority" {
+			if len(args) == 4 {
+				priority, err := strconv.Atoi(args[3])
+				if err != nil {
+					return errors.New("node priority must be an integer")
+				}
+				if err := s.SetNodePriority(ctx, args[2], priority); err != nil {
+					return err
+				}
+			}
+			priority, err := s.NodePriority(ctx, args[2])
+			if err != nil {
+				return err
+			}
+			fmt.Printf("node_id=%s priority=%d\n", args[2], priority)
+			return nil
+		}
 		if (len(args) == 3 || len(args) == 4) && args[1] == "capacity" {
 			if len(args) == 4 {
 				desired, err := strconv.Atoi(args[3])
@@ -130,7 +147,7 @@ func run(args []string) error {
 			fmt.Printf("node_job_id=%s\n", id)
 			return nil
 		}
-		return errors.New("usage: platform-server node register <name> <windows|linux> | node capacity <node-id> [desired] | node integration-job <node-id> create <template-binding> [port] | node integration-job <node-id> stop <instance-id>")
+		return errors.New("usage: platform-server node register <name> <windows|linux> | node capacity <node-id> [desired] | node priority <node-id> [priority] | node integration-job <node-id> create <template-binding> [port] | node integration-job <node-id> stop <instance-id>")
 	case "serve":
 		if len(args) != 1 {
 			return errors.New("usage: platform-server serve")

@@ -31,6 +31,17 @@ export interface ServerRequest {
   state: string
   requestedAt: string
   updatedAt: string
+  nodeSelectionMode: 'auto' | 'manual'
+  manualNodeId?: string
+}
+
+export interface NodeChoice {
+  id: string
+  displayName: string
+  status: 'available' | 'full' | 'maintenance' | 'unavailable'
+  reason: string
+  availableSlots: number
+  selectable: boolean
 }
 
 export interface PartyMember {
@@ -106,6 +117,8 @@ export const api = {
   me: () => request<{ userId: string; displayName: string }>('/me'),
   session: () => request<{ userId: string; displayName: string }>('/session', 'POST'),
   catalog: () => request<Catalog>('/catalog'),
+  nodes: (arcadeGameId: string, gamePresetId: string) =>
+    request<NodeChoice[]>(`/nodes?arcadeGameId=${encodeURIComponent(arcadeGameId)}&gamePresetId=${encodeURIComponent(gamePresetId)}`),
   party: () => request<Party | null>('/party'),
   createParty: () => request<Party>('/party', 'POST'),
   currentInvite: () => request<PartyInvite>('/party/invite'),
@@ -116,8 +129,9 @@ export const api = {
   disbandParty: () => request<void>('/party/disband', 'POST'),
   current: () => request<ServerRequest | null>('/server-requests/current'),
   getRequest: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}`),
-  createRequest: (arcadeGameId: string, gamePresetId: string) =>
-    request<ServerRequest>('/server-requests', 'POST', { arcadeGameId, gamePresetId }),
+  createRequest: (arcadeGameId: string, gamePresetId: string, nodeSelectionMode: 'auto' | 'manual' = 'auto', manualNodeId = '') =>
+    request<ServerRequest>('/server-requests', 'POST', { arcadeGameId, gamePresetId, nodeSelectionMode, manualNodeId }),
   allocation: (id: string) => request<Allocation | null>(`/server-requests/${encodeURIComponent(id)}/allocation`),
   stop: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/stop`, 'POST'),
+  cancel: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/cancel`, 'POST'),
 }
