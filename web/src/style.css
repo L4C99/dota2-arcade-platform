@@ -80,6 +80,8 @@ main{max-width:1240px;margin:auto;padding:0 28px 76px;min-height:calc(100vh - 14
 .status-dot{width:7px;height:7px;border-radius:50%;background:#5caa74}
 .phase-unavailable .status-pill,.phase-error .status-pill{background:#f7eadc;color:#9a663f}
 .phase-unavailable .status-dot,.phase-error .status-dot{background:#cf915e}
+.phase-unknown .status-pill,.phase-quarantined .status-pill{background:#f7eadc;color:#8c603e}
+.phase-unknown .status-dot,.phase-quarantined .status-dot{background:#c78850}
 .status-panel h2{font:500 clamp(29px,3vw,40px)/1.25 Georgia,"Noto Serif SC",serif;margin:36px 0 12px}
 .status-description{font-size:13px;line-height:1.8;color:#587268;margin-bottom:29px}
 .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;border-top:1px solid #e3e9e1;border-bottom:1px solid #e3e9e1;padding:19px 0}
@@ -93,6 +95,7 @@ main{max-width:1240px;margin:auto;padding:0 28px 76px;min-height:calc(100vh - 14
 .progress li.active span{background:#dcebe0;border-color:#a9c8af}
 .diagnostic{font:11px/1.5 ui-monospace,Consolas,monospace;color:#936c4e;margin:22px 0 0}
 .status-actions{margin-top:30px}
+.action-hint{flex-basis:100%;margin:0;color:#936c4e;font-size:12px;line-height:1.6}
 .secondary-button{border:1px solid #9fbaa7;background:#fffefa;color:#173d34;border-radius:11px;padding:11px 16px;font-size:12px;font-weight:800}
 .secondary-button:hover:not(:disabled){background:#edf4ec}
 .secondary-button.danger{border-color:#e0bbad;color:#955a45}

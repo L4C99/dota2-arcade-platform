@@ -220,11 +220,19 @@ func (f FrozenCreate) Contract() nodev1.FrozenCreate {
 
 func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, nodeID, kind, state, instanceID, errorCode string,
 	join *nodev1.JoinInfo, joinErrorCode string) error {
-	var requestID, selectionMode string
-	if err := tx.QueryRow(ctx, `SELECT a.server_request_id,r.node_selection_mode FROM allocations a
+	var requestID, selectionMode, currentAllocationState string
+	if err := tx.QueryRow(ctx, `SELECT a.server_request_id,r.node_selection_mode,a.state FROM allocations a
 		JOIN server_requests r ON r.id=a.server_request_id WHERE a.id=$1 FOR UPDATE OF a`, allocationID).
-		Scan(&requestID, &selectionMode); err != nil {
+		Scan(&requestID, &selectionMode, &currentAllocationState); err != nil {
 		return err
+	}
+	// Quarantine is a business and capacity safety boundary. A late create
+	// success or accepted report may close its NodeJob, but it cannot put the
+	// old Allocation back in ordinary running/creating state. Only a proved
+	// resource terminal report may resolve it.
+	if currentAllocationState == "quarantined" && !(kind == "stop" && state == "succeeded") &&
+		!(kind == "create" && state == "rejected_no_effect") {
+		return nil
 	}
 	at := time.Now().UTC()
 	allocationState, requestState := "", ""
@@ -264,7 +272,8 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 	}
 	_, err := tx.Exec(ctx, `UPDATE allocations SET state=$2,error_code=NULLIF($3,''),
 		ready_at=CASE WHEN $2='running' THEN COALESCE(ready_at,$4) ELSE ready_at END,
-		reclaimed_at=CASE WHEN $2='reclaimed' THEN COALESCE(reclaimed_at,$4) ELSE reclaimed_at END
+		reclaimed_at=CASE WHEN $2='reclaimed' THEN COALESCE(reclaimed_at,$4) ELSE reclaimed_at END,
+		quarantined_at=CASE WHEN $2='quarantined' THEN COALESCE(quarantined_at,$4) ELSE quarantined_at END
 		WHERE id=$1`, allocationID, allocationState, errorCode, at)
 	if err != nil {
 		return err
@@ -292,7 +301,7 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 			return err
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE server_requests SET state=$2,updated_at=$3 WHERE id=$1`, requestID, requestState, at)
+	_, err = tx.Exec(ctx, `UPDATE server_requests SET state=$2,updated_at=$3 WHERE id=$1 AND state <> 'abandoned'`, requestID, requestState, at)
 	if err != nil {
 		return err
 	}

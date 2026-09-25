@@ -159,6 +159,15 @@ func run(args []string) error {
 			return nil
 		}
 		return errors.New("usage: platform-server node register <name> <windows|linux> | node capacity <node-id> [desired] | node priority <node-id> [priority] | node drain|resume <node-id> | node integration-job <node-id> create <template-binding> [port] | node integration-job <node-id> stop <instance-id>")
+	case "allocation":
+		if len(args) != 3 || args[1] != "quarantine" {
+			return errors.New("usage: platform-server allocation quarantine <allocation-id>")
+		}
+		if err := s.MarkAllocationQuarantined(ctx, args[2]); err != nil {
+			return err
+		}
+		fmt.Printf("allocation_id=%s quarantined=true; capacity remains occupied\n", args[2])
+		return nil
 	case "serve":
 		if len(args) != 1 {
 			return errors.New("usage: platform-server serve")
@@ -202,6 +211,19 @@ func serve(s *store.Store) error {
 	if err != nil {
 		return fmt.Errorf("configure max_party_size: %w", err)
 	}
+	quarantineThreshold := 15 * time.Minute
+	if configured := os.Getenv("PLATFORM_QUARANTINE_AFTER_NODE_UNREACHABLE"); configured != "" {
+		quarantineThreshold, err = time.ParseDuration(configured)
+		if err != nil || quarantineThreshold <= 0 {
+			return errors.New("PLATFORM_QUARANTINE_AFTER_NODE_UNREACHABLE must be a positive duration")
+		}
+	}
+	configCtx, configDone = context.WithTimeout(context.Background(), 5*time.Second)
+	err = s.ConfigureQuarantineThreshold(configCtx, quarantineThreshold)
+	configDone()
+	if err != nil {
+		return fmt.Errorf("configure quarantine threshold: %w", err)
+	}
 	config := httpapi.Config{PublicOrigin: os.Getenv("PLATFORM_PUBLIC_ORIGIN"), Development: environment == "development",
 		WebRoot: os.Getenv("PLATFORM_WEB_ROOT")}
 	handler, err := httpapi.NewHandler(s, config)
@@ -237,6 +259,12 @@ func serve(s *store.Store) error {
 			done()
 			if err != nil && stop.Err() == nil {
 				log.Printf("allocation cycle: %v", err)
+			}
+			cycle, done = context.WithTimeout(stop, 5*time.Second)
+			_, err = s.QuarantineOneUnreachable(cycle)
+			done()
+			if err != nil && stop.Err() == nil {
+				log.Printf("quarantine cycle: %v", err)
 			}
 			select {
 			case <-stop.Done():

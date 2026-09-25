@@ -134,5 +134,6 @@ export const api = {
     request<ServerRequest>('/server-requests', 'POST', { arcadeGameId, gamePresetId, nodeSelectionMode, manualNodeId }),
   allocation: (id: string) => request<Allocation | null>(`/server-requests/${encodeURIComponent(id)}/allocation`),
   stop: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/stop`, 'POST'),
+  abandon: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/abandon`, 'POST', { confirm: true }),
   cancel: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/cancel`, 'POST'),
 }

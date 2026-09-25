@@ -201,6 +201,41 @@ func (a *api) stopPlayerRequest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, request)
 }
 
+func (a *api) abandonPlayerRequest(w http.ResponseWriter, r *http.Request) {
+	if !a.checkOrigin(w, r) {
+		return
+	}
+	userID, ok := a.playerUser(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if !nodeIDPattern.MatchString(id) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	var input struct {
+		Confirm bool `json:"confirm"`
+	}
+	if err := decodeJSON(r, &input); err != nil || !input.Confirm {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "confirmation_required"})
+		return
+	}
+	request, err := a.store.AbandonQuarantinedUserRequest(r.Context(), userID, id)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		http.Error(w, "not found", http.StatusNotFound)
+	case errors.Is(err, store.ErrPartyForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "leader_required", "message": "只有队长可以放弃异常服务器。"})
+	case errors.Is(err, store.ErrJobConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "not_quarantined", "message": "只有确认进入异常隔离的服务器才能放弃。"})
+	case err != nil:
+		http.Error(w, "abandon unavailable", http.StatusServiceUnavailable)
+	default:
+		writeJSON(w, http.StatusOK, request)
+	}
+}
+
 func (a *api) playerAllocation(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.playerUser(w, r)
 	if !ok {
