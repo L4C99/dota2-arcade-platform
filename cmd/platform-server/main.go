@@ -146,6 +146,16 @@ func serve(s *store.Store) error {
 	if environment != "" && environment != "production" && environment != "development" {
 		return errors.New("PLATFORM_ENV must be production or development")
 	}
+	partySize, err := strconv.Atoi(os.Getenv("PLATFORM_MAX_PARTY_SIZE"))
+	if err != nil || partySize <= 0 {
+		return errors.New("PLATFORM_MAX_PARTY_SIZE must be explicitly set to a positive integer")
+	}
+	configCtx, configDone := context.WithTimeout(context.Background(), 5*time.Second)
+	err = s.ConfigurePartySize(configCtx, partySize)
+	configDone()
+	if err != nil {
+		return fmt.Errorf("configure max_party_size: %w", err)
+	}
 	config := httpapi.Config{PublicOrigin: os.Getenv("PLATFORM_PUBLIC_ORIGIN"), Development: environment == "development",
 		WebRoot: os.Getenv("PLATFORM_WEB_ROOT")}
 	handler, err := httpapi.NewHandler(s, config)
