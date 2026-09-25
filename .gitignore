@@ -18,6 +18,7 @@ Thumbs.db
 *.dmp
 data/
 dist/
+node_modules/
 .cache/
 .local/
 .local-appdata/

@@ -1,0 +1,117 @@
+:root{font-family:Inter,"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;color:#173d34;background:#f5f2e9;font-synthesis:none}
+*{box-sizing:border-box}
+body{margin:0;min-width:320px}
+button,input{font:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.5}
+button:focus-visible,summary:focus-visible,input:focus-visible{outline:3px solid #91bea0;outline-offset:3px}
+h1,h2,p{margin-top:0}
+h1,h2{letter-spacing:-.045em}
+.site-header{border-bottom:1px solid #e5e8df}
+.header-inner{max-width:1240px;min-height:75px;margin:auto;padding:0 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:600;white-space:nowrap}
+.brand strong{font-weight:800}
+.brand-mark{width:25px;height:25px;display:grid;grid-template-columns:repeat(2,1fr);gap:3px;transform:rotate(-13deg)}
+.brand-mark i{display:block;background:#173d34;border-radius:2px}
+.brand-mark i:nth-child(2),.brand-mark i:nth-child(3){opacity:.52}
+.identity{display:flex;align-items:center;gap:8px;font-size:12px;color:#698176}
+.identity-dot{width:8px;height:8px;border-radius:50%;background:#89b899}
+main{max-width:1240px;margin:auto;padding:0 28px 76px;min-height:calc(100vh - 148px)}
+.intro{padding:67px 3px 40px}
+.intro-index{display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:.14em;font-weight:800;color:#749180}
+.intro-index span:first-child{width:32px;height:1px;background:#a6b9a7}
+.intro-index span:last-child{margin-left:10px;letter-spacing:.04em}
+.intro h1{font:500 clamp(38px,4.5vw,58px)/1.16 Georgia,"Noto Serif SC",serif;margin:16px 0 14px}
+.intro h1 em{font-style:normal;color:#638777}
+.intro p{font-size:14px;line-height:1.7;color:#587268;margin:0}
+.panel{background:#fffefa;border:1px solid #dce2d8;border-radius:24px;box-shadow:0 16px 42px rgba(31,62,47,.04)}
+.notice{border-radius:14px;padding:12px 16px;margin-top:18px;font-size:13px;line-height:1.5}
+.notice-error{background:#faebe5;border:1px solid #e7cabc;color:#86503c}
+.notice-maintenance{background:#faf1e6;border:1px solid #ecdcc8;color:#70543a;display:flex;gap:12px}
+.loading-panel{padding:30px;font-size:14px;color:#587268}
+.request-layout{display:grid;grid-template-columns:minmax(0,1.63fr) minmax(315px,1fr);gap:18px;align-items:start}
+.selection-stack{display:grid;gap:18px}
+.section-panel{padding:29px}
+.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:21px}
+.eyebrow{font-size:11px;letter-spacing:.12em;font-weight:800;text-transform:uppercase;color:#658173}
+.section-heading h2{font-size:23px;margin:6px 0 0}
+.section-meta{font-size:11px;color:#829788}
+.game-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.game-card{cursor:pointer;position:relative;display:flex;flex-direction:column;min-height:182px;padding:10px;border:1px solid #dde5dc;border-radius:18px;background:#fafcf8}
+.game-card.selected{border-color:#a8c6ad;background:#f5f9f3}
+.game-card.disabled{background:#faf9f4}
+.game-card input,.preset-card input{position:absolute;opacity:0;pointer-events:none}
+.game-card:focus-within,.preset-card:focus-within{outline:2px solid #88ad95;outline-offset:2px}
+.game-art{height:106px;border-radius:12px;background:linear-gradient(135deg,#abcbb5,#e1ede0);display:flex;justify-content:space-between;padding:14px;color:#3e7157;overflow:hidden}
+.game-art small{font-size:11px;font-weight:800;letter-spacing:.12em}
+.game-art b{font:400 58px/1 Georgia,serif;transform:translate(7px,22px)}
+.game-name{display:flex;flex-direction:column;gap:4px;padding:11px 3px 0}
+.game-name strong{font-size:15px}
+.game-name small{font-size:10px;color:#75867c}
+.card-pill{position:absolute;right:16px;bottom:28px;border-radius:999px;padding:5px 9px;background:#dcebe0;color:#32664a;font-size:10px;font-weight:700}
+.disabled .card-pill{background:#f7eadc;color:#a56b3d}
+.inline-maintenance{margin:15px 0 0;color:#a56b3d;font-size:12px}
+.preset-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
+.preset-card{cursor:pointer;display:flex;flex-direction:column;gap:9px;min-height:102px;padding:15px;border:1px solid #dde5dc;border-radius:14px;background:#fff}
+.preset-card.selected{border-color:#8faf99;background:#f2f7f0}
+.preset-main{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.preset-main strong{font-size:18px}
+.radio-dot{width:15px;height:15px;border:1.5px solid #bccbc0;border-radius:50%}
+.selected .radio-dot{border:4px solid #173d34}
+.preset-card small{font-size:11px;color:#75867c}
+.preset-maintenance{font-size:11px;color:#a56b3d}
+.apply-panel{padding:27px}
+.apply-panel h2,.join-panel h2,.side-panel h2{font:500 29px/1.3 Georgia,"Noto Serif SC",serif;margin:12px 0 10px}
+.apply-panel>p,.join-panel>p,.side-panel>p{font-size:12px;line-height:1.75;color:#75867c}
+.apply-panel>p:first-of-type{margin-bottom:27px}
+.summary-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:13px 0;border-top:1px solid #e8ece5;font-size:12px}
+.summary-row span{color:#849487}
+.summary-row strong{font-weight:700;text-align:right}
+.maintenance-callout{background:#faf1e6;color:#885c3f!important;padding:11px 12px;border-radius:10px;margin:10px 0!important}
+.primary-button{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;min-height:51px;border:0;border-radius:13px;background:#173d34;color:#fffdf5;padding:0 18px;font-size:14px;font-weight:800;transition:background .15s ease,transform .15s ease}
+.primary-button:hover:not(:disabled){background:#235847;transform:translateY(-1px)}
+.primary-button span{font-size:18px;font-weight:400}
+.apply-panel .primary-button{margin-top:24px}
+.footnote{font-size:10px!important;text-align:center;margin:10px 0 0;color:#8b9a8e!important}
+.active-layout{display:grid;grid-template-columns:minmax(0,1.38fr) minmax(315px,1fr);gap:18px;align-items:start}
+.status-panel{padding:31px 34px}
+.status-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.status-pill{display:flex;align-items:center;gap:8px;background:#e5efe5;color:#3f7355;border-radius:999px;padding:7px 11px;font-size:11px;font-weight:800}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#5caa74}
+.phase-unavailable .status-pill,.phase-error .status-pill{background:#f7eadc;color:#9a663f}
+.phase-unavailable .status-dot,.phase-error .status-dot{background:#cf915e}
+.status-panel h2{font:500 clamp(29px,3vw,40px)/1.25 Georgia,"Noto Serif SC",serif;margin:36px 0 12px}
+.status-description{font-size:13px;line-height:1.8;color:#587268;margin-bottom:29px}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;border-top:1px solid #e3e9e1;border-bottom:1px solid #e3e9e1;padding:19px 0}
+.facts div{display:flex;flex-direction:column;gap:7px}
+.facts span{font-size:11px;color:#829487}
+.facts strong{font-size:13px}
+.progress{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;list-style:none;padding:0;margin:27px 0 0}
+.progress li{display:flex;align-items:center;gap:7px;color:#9bad9e;font-size:11px;font-weight:700}
+.progress li span{width:26px;height:26px;display:grid;place-items:center;border-radius:50%;border:1px solid #cedbd0;font-size:10px}
+.progress li.active{color:#32664a}
+.progress li.active span{background:#dcebe0;border-color:#a9c8af}
+.diagnostic{font:11px/1.5 ui-monospace,Consolas,monospace;color:#936c4e;margin:22px 0 0}
+.status-actions{margin-top:30px}
+.secondary-button{border:1px solid #9fbaa7;background:#fffefa;color:#173d34;border-radius:11px;padding:11px 16px;font-size:12px;font-weight:800}
+.secondary-button:hover:not(:disabled){background:#edf4ec}
+.secondary-button.danger{border-color:#e0bbad;color:#955a45}
+.secondary-button.danger:hover:not(:disabled){background:#fbf0ea}
+.join-panel,.side-panel{padding:27px}
+.join-panel>p{margin-bottom:21px}
+.connect-box{display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid #cbded0;background:#f1f7ef;border-radius:13px;margin-bottom:11px;overflow-wrap:anywhere}
+.connect-box span{font-size:10px;font-weight:800;letter-spacing:.08em;color:#64846e}
+.connect-box code{font:700 14px/1.6 ui-monospace,Consolas,monospace;color:#173d34;user-select:all}
+.help{border-top:1px solid #e5eae2;margin-top:22px;padding-top:17px}
+.help summary{display:flex;justify-content:space-between;gap:12px;list-style:none;cursor:pointer;font-size:12px;font-weight:800;color:#3e6550}
+.help summary::-webkit-details-marker{display:none}
+.help[open] summary span{transform:rotate(180deg)}
+.help ol{padding-left:20px;margin:17px 0 8px}
+.help li,.help p{font-size:11px;line-height:1.8;color:#587268;margin-bottom:10px}
+.help code{background:#edf3ea;border-radius:4px;padding:2px 4px;color:#173d34}
+.join-note{border-top:1px solid #e5eae2;padding-top:17px;margin:18px 0 0!important;font-size:10px!important}
+.side-panel p{margin-bottom:0}
+footer{max-width:1240px;margin:auto;border-top:1px solid #dfe5dc;padding:21px 28px 32px;display:flex;justify-content:space-between;gap:12px;color:#8b9a8e;font-size:11px}
+@media(max-width:900px){.request-layout,.active-layout{grid-template-columns:minmax(0,1.2fr) minmax(265px,1fr)}.game-grid{grid-template-columns:1fr}.game-card{min-height:110px;flex-direction:row;align-items:center}.game-art{width:86px;height:84px;flex:none}.game-art b{font-size:38px;transform:translate(4px,28px)}.game-name{padding:0 0 0 13px}.card-pill{bottom:18px}.facts{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.header-inner{padding:0 17px;min-height:62px}.identity{font-size:0}.identity-dot{width:9px;height:9px}main{padding:0 16px 48px}.intro{padding:44px 2px 28px}.intro h1{font-size:40px}.request-layout,.active-layout{display:grid;grid-template-columns:1fr;gap:12px}.selection-stack{gap:12px}.section-panel,.apply-panel,.join-panel,.side-panel{padding:22px}.game-grid{grid-template-columns:1fr}.game-card{min-height:109px}.preset-grid{grid-template-columns:1fr 1fr}.status-panel{padding:25px 22px}.status-panel h2{margin-top:27px}.facts{grid-template-columns:1fr 1fr}.progress li{font-size:10px}.progress li span{width:23px;height:23px}footer{padding:18px 16px 27px}}
+@media(max-width:390px){.preset-grid{grid-template-columns:1fr}.facts{grid-template-columns:1fr}.progress{gap:3px}.progress li{gap:4px;font-size:9px}}

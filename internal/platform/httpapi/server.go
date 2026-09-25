@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +20,7 @@ import (
 type Config struct {
 	PublicOrigin string
 	Development  bool
+	WebRoot      string
 }
 
 func (c Config) Validate() error {
@@ -67,6 +70,16 @@ func NewHandler(s *store.Store, c Config) (http.Handler, error) {
 	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/{id}", a.nodeGetJob)
 	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/prepare", a.nodePrepareJob)
 	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/report", a.nodeReportJob)
+	if c.WebRoot != "" {
+		if !filepath.IsAbs(c.WebRoot) {
+			return nil, errors.New("PLATFORM_WEB_ROOT must be absolute")
+		}
+		info, err := os.Stat(c.WebRoot)
+		if err != nil || !info.IsDir() {
+			return nil, errors.New("PLATFORM_WEB_ROOT must be an existing directory")
+		}
+		mux.Handle("GET /", http.FileServer(http.Dir(c.WebRoot)))
+	}
 	return mux, nil
 }
 

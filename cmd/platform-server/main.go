@@ -146,7 +146,8 @@ func serve(s *store.Store) error {
 	if environment != "" && environment != "production" && environment != "development" {
 		return errors.New("PLATFORM_ENV must be production or development")
 	}
-	config := httpapi.Config{PublicOrigin: os.Getenv("PLATFORM_PUBLIC_ORIGIN"), Development: environment == "development"}
+	config := httpapi.Config{PublicOrigin: os.Getenv("PLATFORM_PUBLIC_ORIGIN"), Development: environment == "development",
+		WebRoot: os.Getenv("PLATFORM_WEB_ROOT")}
 	handler, err := httpapi.NewHandler(s, config)
 	if err != nil {
 		return err
