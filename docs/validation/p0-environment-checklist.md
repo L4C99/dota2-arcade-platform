@@ -21,14 +21,18 @@ owner and still subject to host checks.
 | Controller executable, config, and run user | P0D | confirmed | Controller and d2core run as the same ordinary game user. |
 | d2core v0.1.1 artifact identity | P0D | confirmed | Official ZIP checksum, BUILD identity, and remote `version --json` match the frozen release. |
 | d2core executable, data-dir, IPC, serve arguments | P0D | confirmed | Private development data-dir and matching local port pool checked on the running process. |
-| Dota root, executable, working directory | P0D | owner-provided, observed | Read-only host inspection confirmed paths; no game launched yet. |
+| Dota root, executable, working directory | P0D | owner-provided, observed | Host inspection confirmed paths; real n6 instances launched in P0D/P0E. |
 | Test VPK copy and current addon binding | P0D | confirmed | Owner asset copy was hashed on node; prior addon content is preserved in the isolated backup directory. |
 | Template file, hash, and d2core check | P0D | confirmed | Linux path-adapted copy and separate 300-second timeout variant passed fixed d2core `check`. |
 | Ready rule and real Dota Ready | P0D | confirmed | One Steam-login timeout was fully reclaimed; a second real create matched all Ready markers. Human join was not tested. |
 | Local game port range and public mapping | P0D | local pool confirmed; external reachability unverified | Both components used the same generated range; public game-port access was not tested. |
 | Controller-to-Platform HTTPS | P0D | confirmed | Authenticated heartbeat and durable jobs succeeded over trusted development HTTPS. |
 | create / operation / status / list / stop / reclaim | P0D | confirmed | Real create reached Ready, stop operation succeeded, status reported full reclaim, and list emptied. |
-| Restart and unknown-create reconciliation | P0E | not started | Start only after P0D acceptance and execution audit. |
+| Platform, Controller, and d2core manager restart | P0E | confirmed | All three restarted while one real Dota instance was active; original IDs and Dota PID survived. |
+| Lost create response and unknown recovery | P0E | confirmed | Real core acceptance with response discarded; Controller converged through the original frozen key and operation/status. |
+| Disconnected node recovery | P0E | confirmed within heartbeat timeout | Node heartbeat expired for over two minutes; unknown job stayed on its original node and reconnected to the original instance. |
+| Core history retention boundary | P0E | simulated; real expiry unverified | Old preparation times suppress automatic create replay; an actual 30-day expiration was not observed. |
+| Final P0E stop/reclaim and clean state | P0E | confirmed | Three real test instances were fully reclaimed; final core list empty, no dedicated Dota process, no open unknown job. |
 
 Credential values, keys, TLS private material, VPKs, and private logs must
 never be added to this file or committed to Git.

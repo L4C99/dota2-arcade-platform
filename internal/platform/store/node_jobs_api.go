@@ -46,7 +46,8 @@ func (s *Store) OpenJobsForNode(ctx context.Context, nodeID string) ([]nodev1.Jo
 		COALESCE(j.template_binding_key,''),j.requested_port,
         COALESCE(j.instance_id,''),COALESCE(j.operation_id,''),
         COALESCE(e.core_idempotency_key,''),COALESCE(e.resolved_template_path,''),
-        COALESCE(e.requested_port,0),COALESCE(encode(e.request_fingerprint,'hex'),'')
+        COALESCE(e.requested_port,0),COALESCE(encode(e.request_fingerprint,'hex'),''),
+        COALESCE(EXTRACT(EPOCH FROM e.prepared_at)::bigint,0)
         FROM node_jobs j LEFT JOIN node_job_executions e ON e.node_job_id=j.id
         WHERE j.node_id=$1 AND j.state IN ('pending','claimed','accepted','unknown')
         ORDER BY j.created_at,j.id`, nodeID)
@@ -70,7 +71,8 @@ func (s *Store) JobForNode(ctx context.Context, nodeID, jobID string) (nodev1.Jo
 		COALESCE(j.template_binding_key,''),j.requested_port,
         COALESCE(j.instance_id,''),COALESCE(j.operation_id,''),
         COALESCE(e.core_idempotency_key,''),COALESCE(e.resolved_template_path,''),
-        COALESCE(e.requested_port,0),COALESCE(encode(e.request_fingerprint,'hex'),'')
+        COALESCE(e.requested_port,0),COALESCE(encode(e.request_fingerprint,'hex'),''),
+        COALESCE(EXTRACT(EPOCH FROM e.prepared_at)::bigint,0)
         FROM node_jobs j LEFT JOIN node_job_executions e ON e.node_job_id=j.id
         WHERE j.node_id=$1 AND j.id=$2`, nodeID, jobID)
 	return scanJob(row)
@@ -84,7 +86,7 @@ func scanJob(row jobScanner) (nodev1.Job, error) {
 	var port int
 	err := row.Scan(&job.ID, &job.Kind, &job.State, &job.IntegrationOnly,
 		&job.TemplateBindingKey, &job.RequestedPort,
-		&job.InstanceID, &job.OperationID, &key, &template, &port, &fingerprint)
+		&job.InstanceID, &job.OperationID, &key, &template, &port, &fingerprint, &job.PreparedAtUnix)
 	if err != nil {
 		return nodev1.Job{}, err
 	}

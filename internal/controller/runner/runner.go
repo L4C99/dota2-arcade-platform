@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/core"
@@ -27,9 +28,13 @@ type Runner struct {
 	Network          nodev1.NetworkFacts
 }
 
-// Step reads existing durable work before claiming another job. The caller
-// must have established local protocol v1 and a compatible node heartbeat.
+// Step reconciles local core state against durable work before claiming a new
+// job. The caller must have established a compatible node heartbeat.
 func (r *Runner) Step(ctx context.Context) error {
+	list, err := r.Core.List(ctx)
+	if err != nil {
+		return err
+	}
 	jobs, err := r.Platform.OpenJobs(ctx)
 	if err != nil {
 		return err
@@ -38,7 +43,7 @@ func (r *Runner) Step(ctx context.Context) error {
 		if job.State == "pending" {
 			continue
 		}
-		if err := r.handle(ctx, job, false); err != nil {
+		if err := r.handle(ctx, job, false, list); err != nil {
 			return err
 		}
 	}
@@ -52,31 +57,36 @@ func (r *Runner) Step(ctx context.Context) error {
 	if err != nil || job == nil {
 		return err
 	}
-	return r.handle(ctx, *job, true)
+	return r.handle(ctx, *job, true, list)
 }
 
-func (r *Runner) handle(ctx context.Context, job nodev1.Job, fresh bool) error {
+func (r *Runner) handle(ctx context.Context, job nodev1.Job, fresh bool, list core.ListResult) error {
 	switch job.Kind {
 	case "create":
-		return r.create(ctx, job, fresh)
+		return r.create(ctx, job, fresh, list.Storage.HistoryDays)
 	case "stop":
-		return r.stop(ctx, job, fresh)
+		return r.stop(ctx, job)
 	default:
 		return fmt.Errorf("unsupported node job kind %q", job.Kind)
 	}
 }
 
-func (r *Runner) create(ctx context.Context, job nodev1.Job, fresh bool) error {
+func (r *Runner) create(ctx context.Context, job nodev1.Job, fresh bool, historyDays int) error {
 	if job.State == "accepted" || job.State == "unknown" && job.OperationID != "" {
 		return r.observe(ctx, job)
 	}
-	if job.State == "unknown" {
-		return nil
+	if job.State != "claimed" && job.State != "unknown" {
+		return fmt.Errorf("invalid create job state %q", job.State)
 	}
-	if !fresh || job.State != "claimed" {
-		// A persisted claimed job may have called core before a crash. P0E
-		// reconciles the fixed key; a blind replay is not safe here.
-		return r.report(ctx, job, nodev1.ReportRequest{State: "unknown", InstanceID: job.InstanceID, OperationID: job.OperationID})
+	retrying := job.FrozenCreate != nil && !fresh
+	if job.State == "unknown" && job.FrozenCreate == nil {
+		return errors.New("unknown create lacks frozen request")
+	}
+	if retrying && !withinCoreHistory(job.PreparedAtUnix, historyDays, time.Now()) {
+		if job.State == "claimed" {
+			return r.report(ctx, job, nodev1.ReportRequest{State: "unknown"})
+		}
+		return nil
 	}
 	frozen := job.FrozenCreate
 	if frozen == nil {
@@ -98,7 +108,7 @@ func (r *Runner) create(ctx context.Context, job nodev1.Job, fresh bool) error {
 	}
 	accepted, err := r.Core.Create(ctx, *frozen)
 	if err != nil {
-		if core.ClearlyNoEffectCreateReject(err) {
+		if !retrying && core.ClearlyNoEffectCreateReject(err) {
 			var e *core.CoreError
 			_ = errors.As(err, &e)
 			return r.report(ctx, job, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: e.Code, ErrorStage: e.Stage})
@@ -117,15 +127,45 @@ func (r *Runner) create(ctx context.Context, job nodev1.Job, fresh bool) error {
 	return r.observe(ctx, job)
 }
 
-func (r *Runner) stop(ctx context.Context, job nodev1.Job, fresh bool) error {
+// An old key is not proof after d2core may have expired reclaimed history.
+// One hour is reserved for clock skew and online cleanup timing.
+func withinCoreHistory(preparedAt int64, historyDays int, now time.Time) bool {
+	if preparedAt <= 0 || historyDays < 1 {
+		return false
+	}
+	prepared := time.Unix(preparedAt, 0)
+	return !prepared.After(now.Add(time.Minute)) && now.Sub(prepared) < time.Duration(historyDays)*24*time.Hour-time.Hour
+}
+
+func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 	if job.State == "accepted" || job.State == "unknown" && job.OperationID != "" {
 		return r.observe(ctx, job)
 	}
-	if job.State == "unknown" {
-		return nil
+	if job.State != "claimed" && job.State != "unknown" {
+		return fmt.Errorf("invalid stop job state %q", job.State)
 	}
-	if !fresh || job.State != "claimed" {
-		return r.report(ctx, job, nodev1.ReportRequest{State: "unknown", InstanceID: job.InstanceID, OperationID: job.OperationID})
+	instance, err := r.Core.Status(ctx, job.InstanceID)
+	if err != nil {
+		return err
+	}
+	if instance.InstanceID != job.InstanceID {
+		return fmt.Errorf("core status identity mismatch for stop job %s", job.ID)
+	}
+	if instance.CurrentOperationID != "" {
+		op, err := r.Core.Operation(ctx, instance.CurrentOperationID)
+		if err != nil {
+			return err
+		}
+		if op.InstanceID != job.InstanceID {
+			return fmt.Errorf("core operation identity mismatch for stop job %s", job.ID)
+		}
+		if op.Kind == "stop" {
+			job.OperationID = op.OperationID
+			if err := r.report(ctx, job, nodev1.ReportRequest{State: "accepted", InstanceID: job.InstanceID, OperationID: job.OperationID}); err != nil {
+				return err
+			}
+			return r.observe(ctx, job)
+		}
 	}
 	accepted, err := r.Core.Stop(ctx, job.InstanceID)
 	if err != nil {

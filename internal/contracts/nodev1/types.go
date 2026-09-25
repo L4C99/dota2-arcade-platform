@@ -66,6 +66,7 @@ type Job struct {
 	InstanceID         string        `json:"instanceId,omitempty"`
 	OperationID        string        `json:"operationId,omitempty"`
 	FrozenCreate       *FrozenCreate `json:"frozenCreate,omitempty"`
+	PreparedAtUnix     int64         `json:"preparedAtUnix,omitempty"`
 }
 
 // CreateFingerprint is the Platform's frozen request digest. d2core applies

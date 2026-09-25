@@ -140,6 +140,9 @@ func TestPostgresDurability(t *testing.T) {
 	if frozen.IdempotencyKey != CoreIdempotencyKey(jobID) || len(frozen.FingerprintSHA) != 32 {
 		t.Fatal("incomplete frozen execution")
 	}
+	if preparedJob, err := reopened.JobForNode(ctx, nodeID, jobID); err != nil || preparedJob.FrozenCreate == nil || preparedJob.PreparedAtUnix <= 0 {
+		t.Fatalf("reopened job lacks durable prepared time: %+v %v", preparedJob, err)
+	}
 	if _, err := s.PrepareCreate(ctx, nodeID, jobID, "C:/test/template.json", 0); err != nil {
 		t.Fatalf("same request retry rejected: %v", err)
 	}

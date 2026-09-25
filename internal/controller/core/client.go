@@ -67,6 +67,9 @@ type Instance struct {
 
 type ListResult struct {
 	Instances []Instance `json:"instances"`
+	Storage   struct {
+		HistoryDays int `json:"historyDays"`
+	} `json:"storage"`
 }
 
 func (c *Client) call(ctx context.Context, method string, params any, output any) error {

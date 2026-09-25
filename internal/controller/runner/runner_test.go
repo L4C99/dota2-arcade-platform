@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	coreclient "github.com/L4C99/dota2-arcade-dedicated-core/client"
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
@@ -16,9 +17,13 @@ type fakePlatform struct {
 	job      nodev1.Job
 	prepared bool
 	reports  []nodev1.ReportRequest
+	events   *[]string
 }
 
 func (p *fakePlatform) OpenJobs(context.Context) ([]nodev1.Job, error) {
+	if p.events != nil {
+		*p.events = append(*p.events, "open")
+	}
 	if p.job.State == "succeeded" {
 		return nil, nil
 	}
@@ -35,6 +40,7 @@ func (p *fakePlatform) Prepare(_ context.Context, _ string, in nodev1.PrepareCre
 	digest := nodev1.CreateFingerprint(key, in.Template, in.Port)
 	f := nodev1.FrozenCreate{IdempotencyKey: key, Template: in.Template, Port: in.Port, FingerprintSHA256: hex.EncodeToString(digest[:])}
 	p.job.FrozenCreate = &f
+	p.job.PreparedAtUnix = time.Now().Unix()
 	return f, nil
 }
 func (p *fakePlatform) Report(_ context.Context, _ string, r nodev1.ReportRequest) (nodev1.Job, error) {
@@ -50,16 +56,20 @@ func (p *fakePlatform) Report(_ context.Context, _ string, r nodev1.ReportReques
 }
 
 type fakeCore struct {
-	creates  int
-	stops    int
-	result   core.Accepted
-	err      error
-	op       core.Operation
-	instance core.Instance
+	creates     int
+	stops       int
+	result      core.Accepted
+	err         error
+	op          core.Operation
+	instance    core.Instance
+	historyDays int
+	events      *[]string
+	keys        []nodev1.FrozenCreate
 }
 
-func (c *fakeCore) Create(context.Context, nodev1.FrozenCreate) (core.Accepted, error) {
+func (c *fakeCore) Create(_ context.Context, frozen nodev1.FrozenCreate) (core.Accepted, error) {
 	c.creates++
+	c.keys = append(c.keys, frozen)
 	return c.result, c.err
 }
 func (c *fakeCore) Stop(context.Context, string) (core.Accepted, error) {
@@ -68,7 +78,18 @@ func (c *fakeCore) Stop(context.Context, string) (core.Accepted, error) {
 }
 func (c *fakeCore) Operation(context.Context, string) (core.Operation, error) { return c.op, nil }
 func (c *fakeCore) Status(context.Context, string) (core.Instance, error)     { return c.instance, nil }
-func (c *fakeCore) List(context.Context) (core.ListResult, error)             { return core.ListResult{}, nil }
+func (c *fakeCore) List(context.Context) (core.ListResult, error) {
+	if c.events != nil {
+		*c.events = append(*c.events, "list")
+	}
+	var out core.ListResult
+	if c.historyDays == 0 {
+		out.Storage.HistoryDays = 30
+	} else {
+		out.Storage.HistoryDays = c.historyDays
+	}
+	return out, nil
+}
 
 func testJob() nodev1.Job {
 	return nodev1.Job{ID: "12345678-1234-1234-1234-1234567890ab", Kind: "create", State: "pending", TemplateBindingKey: "test", RequestedPort: 28000}
@@ -95,16 +116,16 @@ func TestCreatePreparedAcceptedThenReady(t *testing.T) {
 	}
 }
 
-func TestExistingClaimedJobNeverBlindlyReplaysCreate(t *testing.T) {
+func TestClaimedBeforePrepareCanStartAfterRestart(t *testing.T) {
 	p := &fakePlatform{job: testJob()}
 	p.job.State = "claimed"
-	c := &fakeCore{}
+	c := &fakeCore{result: core.Accepted{Accepted: true, InstanceID: "i_1", OperationID: "o_1"}, op: core.Operation{OperationID: "o_1", Kind: "create", InstanceID: "i_1", Status: "running"}}
 	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
 	if err := r.Step(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if c.creates != 0 || p.job.State != "unknown" {
-		t.Fatalf("blind replay: %+v %+v", p, c)
+	if !p.prepared || c.creates != 1 || p.job.State != "accepted" {
+		t.Fatalf("pre-prepare recovery: %+v %+v", p, c)
 	}
 }
 
@@ -121,8 +142,109 @@ func TestTimeoutStaysUnknown(t *testing.T) {
 	if err := r.Step(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if c.creates != 1 {
-		t.Fatal("replayed unknown create")
+	if c.creates != 2 || c.keys[0] != c.keys[1] || p.job.State != "unknown" {
+		t.Fatal("unknown create did not retry the same frozen request")
+	}
+}
+
+func TestLostResponseRecoversOriginalIDsAndListsFirst(t *testing.T) {
+	events := []string{}
+	p := &fakePlatform{job: testJob(), events: &events}
+	c := &fakeCore{err: errors.New("lost create response"), events: &events}
+	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p.job.State != "unknown" {
+		t.Fatalf("state = %s", p.job.State)
+	}
+	c.err = nil
+	c.result = core.Accepted{Accepted: true, InstanceID: "i_original", OperationID: "o_original"}
+	c.op = core.Operation{OperationID: "o_original", Kind: "create", InstanceID: "i_original", Status: "succeeded"}
+	c.instance = core.Instance{InstanceID: "i_original", Lifecycle: "active", Process: "running", Room: "ready"}
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p.job.State != "succeeded" || c.creates != 2 || c.keys[0] != c.keys[1] {
+		t.Fatalf("recovery: %+v %+v", p, c)
+	}
+	if len(events) < 3 || events[0] != "list" || events[1] != "open" || events[2] != "list" {
+		t.Fatalf("reconcile order: %v", events)
+	}
+	if events[3] != "open" {
+		t.Fatalf("reconcile order: %v", events)
+	}
+}
+
+func TestExpiredUnknownDoesNotReplayOrClaim(t *testing.T) {
+	p := &fakePlatform{job: testJob()}
+	p.job.State = "unknown"
+	p.job.PreparedAtUnix = time.Now().Add(-31 * 24 * time.Hour).Unix()
+	key := "nodejob-123456781234123412341234567890ab"
+	path := testTemplate(t)
+	digest := nodev1.CreateFingerprint(key, path, 28000)
+	p.job.FrozenCreate = &nodev1.FrozenCreate{IdempotencyKey: key, Template: path, Port: 28000, FingerprintSHA256: hex.EncodeToString(digest[:])}
+	c := &fakeCore{}
+	r := Runner{Platform: p, Core: c}
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.creates != 0 || p.job.State != "unknown" {
+		t.Fatalf("expired unknown replayed: %+v %+v", p, c)
+	}
+}
+
+func TestHistoryWindowRequiresKnownRecentPreparation(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	for _, tc := range []struct {
+		name     string
+		prepared int64
+		days     int
+		want     bool
+	}{
+		{"recent", now.Add(-time.Hour).Unix(), 30, true},
+		{"one-day-retention-recent", now.Add(-time.Hour).Unix(), 1, true},
+		{"near-expiry", now.Add(-30*24*time.Hour + 30*time.Minute).Unix(), 30, false},
+		{"unknown-time", 0, 30, false},
+		{"unknown-retention", now.Unix(), 0, false},
+		{"future-clock", now.Add(2 * time.Minute).Unix(), 30, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := withinCoreHistory(tc.prepared, tc.days, now); got != tc.want {
+				t.Fatalf("withinCoreHistory = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestKnownAcceptedOperationAfterRestartDoesNotCreate(t *testing.T) {
+	p := &fakePlatform{job: testJob()}
+	p.job.State, p.job.InstanceID, p.job.OperationID = "accepted", "i_1", "o_1"
+	c := &fakeCore{op: core.Operation{OperationID: "o_1", Kind: "create", InstanceID: "i_1", Status: "succeeded"}, instance: core.Instance{InstanceID: "i_1", Lifecycle: "active", Process: "running", Room: "ready"}}
+	r := Runner{Platform: p, Core: c}
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.creates != 0 || p.job.State != "succeeded" {
+		t.Fatalf("accepted recovery: %+v %+v", p, c)
+	}
+}
+
+func TestRetryRejectionCannotEraseEarlierUnknownEffect(t *testing.T) {
+	p := &fakePlatform{job: testJob()}
+	p.job.State = "unknown"
+	p.job.PreparedAtUnix = time.Now().Unix()
+	key := "nodejob-123456781234123412341234567890ab"
+	path := testTemplate(t)
+	digest := nodev1.CreateFingerprint(key, path, 28000)
+	p.job.FrozenCreate = &nodev1.FrozenCreate{IdempotencyKey: key, Template: path, Port: 28000, FingerprintSHA256: hex.EncodeToString(digest[:])}
+	c := &fakeCore{err: &coreclient.Error{Code: "PORT_IN_USE", Stage: "validate"}}
+	r := Runner{Platform: p, Core: c}
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.creates != 1 || p.job.State != "unknown" {
+		t.Fatalf("retry incorrectly released unknown effect: %+v %+v", p, c)
 	}
 }
 
@@ -154,5 +276,17 @@ func TestStopRequiresFullReclaim(t *testing.T) {
 	}
 	if p.job.State != "succeeded" || c.stops != 1 {
 		t.Fatalf("reclaim did not converge: %+v %+v", p, c)
+	}
+}
+
+func TestStopLostResponseFindsExistingStopOperation(t *testing.T) {
+	p := &fakePlatform{job: nodev1.Job{ID: "12345678-1234-1234-1234-1234567890ab", Kind: "stop", State: "unknown", InstanceID: "i_1"}}
+	c := &fakeCore{instance: core.Instance{InstanceID: "i_1", Lifecycle: "reclaimed", Process: "stopped", Cleanup: "complete", CurrentOperationID: "o_stop"}, op: core.Operation{OperationID: "o_stop", Kind: "stop", InstanceID: "i_1", Status: "succeeded"}}
+	r := Runner{Platform: p, Core: c}
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p.job.State != "succeeded" || p.job.OperationID != "o_stop" || c.stops != 0 {
+		t.Fatalf("stop reconciliation: %+v %+v", p, c)
 	}
 }
