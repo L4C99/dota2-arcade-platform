@@ -44,6 +44,14 @@ Controller 恢复联系后仍先执行 d2core list，再读取本 Node 的 open 
 
 P4B 将 `PlatformSettings.quarantine_after_node_unreachable` 的冻结默认值设为 15 分钟。Platform 部署可通过 `PLATFORM_QUARANTINE_AFTER_NODE_UNREACHABLE` 指定正的 Go duration（例如 `20m`）；服务启动时把部署值写入 PlatformSettings。阈值到达且 Allocation 可能有副作用时，后台循环将其标记 `quarantined`，但保留 Node 容量、原端口和全部历史；这不表示 d2core 已停止。迟到的普通 create/stop 报告不能把已隔离 Allocation 恢复为可用状态，只有明确的资源终态证明才可结束占用。数据库授权的运维人员可用 `platform-server allocation quarantine <allocation-id>` 根据诊断提前隔离；P4D 管理员 Web 控制面将提供相应操作与 Audit。
 
+## P4D/P4E 完整实例对账
+
+兼容心跳响应可带 `reconcileRequestedGeneration` / `reconcileCompletedGeneration`。管理员请求对账只增加目标 Node 的持久代数；Controller 在一次成功的对账轮次后通过 `POST /reconcile/complete` 回报同一代数。回报表示已执行一次对账，不表示所有异常已经回收或隔离已解除。断线或 Controller 重启后，未完成代数仍可从心跳恢复。
+
+每轮 Controller 先读取 d2core `list` 和未终结 NodeJob，按原冻结请求、operation/status 收敛；然后用 `GET /allocations/active` 读取本 Node 已知实例身份，逐个查询 d2core `status`，通过 `POST /allocations/{id}/fact` 回报所见状态。存在未终结 NodeJob 的 Allocation 先由该 Job 的原路径处理。每份实例事实必须匹配旧 create Job 的 immutable instance ID。传输错误保留未知；只有结构化身份错误进入隔离。只有 `lifecycle=reclaimed`、`process=stopped`、`cleanup=complete` 同时成立才更新 Allocation 为 `reclaimed` 并释放容量。活跃实例端口与冻结 JoinInfo 不同会隔离，绝不悄悄改写旧端口。重复事实幂等，不生成第二个 create 或新的 Allocation attempt。
+
+这些端点仅接受原 Node 的 Secret。Web 管理员可以请求对账，但不能上报 Controller 的实例、内容或网络事实；管理员总览只显示对账代数和非敏感状态摘要。
+
 ## P3D 普通 Node Drain
 
 运维人员在 Platform 主机用 `platform-server node drain <node-id>` 关闭该 Node 的新 Allocation admission，用 `platform-server node resume <node-id>` 恢复。命令可重复执行；写入的是 Platform 的 `nodes.draining` 控制值。Drain 后已有 Allocation、NodeJob 与 d2core instance 继续原生命周期，pending 的已有 Job 仍可被该 Node 领取；不自动 stop、cancel、reclaim、切换内容版本或清理端口。自动申请可选其他 eligible Node，手动申请保留原 `requested_at` 并等待目标 Node Resume。Resume 仍需通过所有其他内容、容量、兼容与心跳检查。此操作不执行 P5 内容滚动工作流。

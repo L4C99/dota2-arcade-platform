@@ -77,7 +77,12 @@ func NewHandler(s *store.Store, c Config) (http.Handler, error) {
 	mux.HandleFunc("POST /api/v1/admin/login", a.adminLogin)
 	mux.HandleFunc("GET /api/v1/admin/me", a.adminMe)
 	mux.HandleFunc("POST /api/v1/admin/logout", a.adminLogout)
+	mux.HandleFunc("GET /api/v1/admin/overview", a.adminOverview)
+	mux.HandleFunc("POST /api/v1/admin/actions", a.adminAction)
 	mux.HandleFunc("POST "+nodev1.APIPath+"/heartbeat", a.nodeHeartbeat)
+	mux.HandleFunc("POST "+nodev1.APIPath+"/reconcile/complete", a.nodeReconcileComplete)
+	mux.HandleFunc("GET "+nodev1.APIPath+"/allocations/active", a.nodeActiveAllocations)
+	mux.HandleFunc("POST "+nodev1.APIPath+"/allocations/{id}/fact", a.nodeInstanceFact)
 	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/open", a.nodeOpenJobs)
 	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/claim", a.nodeClaimJob)
 	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/{id}", a.nodeGetJob)
@@ -91,6 +96,9 @@ func NewHandler(s *store.Store, c Config) (http.Handler, error) {
 		if err != nil || !info.IsDir() {
 			return nil, errors.New("PLATFORM_WEB_ROOT must be an existing directory")
 		}
+		mux.HandleFunc("GET /admin", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, filepath.Join(c.WebRoot, "index.html"))
+		})
 		mux.Handle("GET /", http.FileServer(http.Dir(c.WebRoot)))
 	}
 	return mux, nil
@@ -245,6 +253,9 @@ func (a *api) adminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.gate.Succeeded(key)
+	if previous, err := r.Cookie(a.adminCookieName()); err == nil {
+		_ = a.store.RevokeAdminToken(r.Context(), previous.Value)
+	}
 	a.setCookie(w, a.adminCookieName(), token, 12*time.Hour)
 	writeJSON(w, http.StatusOK, map[string]string{"adminUserId": id})
 }

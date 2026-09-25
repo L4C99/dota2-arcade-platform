@@ -19,14 +19,22 @@ var ErrNodeUnauthorized = errors.New("node unauthorized")
 // SetNodeDrain is an operator control for new Allocation admission only.
 // Existing jobs and instances continue through their normal lifecycle.
 func (s *Store) SetNodeDrain(ctx context.Context, nodeID string, draining bool) error {
-	command, err := s.Pool.Exec(ctx, `UPDATE nodes SET draining=$2 WHERE id=$1`, nodeID, draining)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if command.RowsAffected() != 1 {
-		return pgx.ErrNoRows
+	defer tx.Rollback(ctx)
+	var before bool
+	if err := tx.QueryRow(ctx, `SELECT draining FROM nodes WHERE id=$1 FOR UPDATE`, nodeID).Scan(&before); err != nil {
+		return err
 	}
-	return nil
+	if _, err := tx.Exec(ctx, `UPDATE nodes SET draining=$2 WHERE id=$1`, nodeID, draining); err != nil {
+		return err
+	}
+	if err := auditOperator(ctx, tx, "operator_cli", "node.drain", "node", nodeID, map[string]any{"before": before, "after": draining}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) NodeDraining(ctx context.Context, nodeID string) (bool, error) {
@@ -36,14 +44,22 @@ func (s *Store) NodeDraining(ctx context.Context, nodeID string) (bool, error) {
 }
 
 func (s *Store) SetNodePriority(ctx context.Context, nodeID string, priority int) error {
-	command, err := s.Pool.Exec(ctx, `UPDATE nodes SET priority=$2 WHERE id=$1`, nodeID, priority)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if command.RowsAffected() != 1 {
-		return pgx.ErrNoRows
+	defer tx.Rollback(ctx)
+	var before int
+	if err := tx.QueryRow(ctx, `SELECT priority FROM nodes WHERE id=$1 FOR UPDATE`, nodeID).Scan(&before); err != nil {
+		return err
 	}
-	return nil
+	if _, err := tx.Exec(ctx, `UPDATE nodes SET priority=$2 WHERE id=$1`, nodeID, priority); err != nil {
+		return err
+	}
+	if err := auditOperator(ctx, tx, "operator_cli", "node.priority", "node", nodeID, map[string]any{"before": before, "after": priority}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) NodePriority(ctx context.Context, nodeID string) (int, error) {
@@ -190,7 +206,27 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 	if err := tx.Commit(ctx); err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}
-	return nodev1.HeartbeatResult{CompatibilityStatus: status, ReportedAt: reportedAt.UTC().Format(time.RFC3339Nano)}, nil
+	result := nodev1.HeartbeatResult{CompatibilityStatus: status, ReportedAt: reportedAt.UTC().Format(time.RFC3339Nano)}
+	if err := s.Pool.QueryRow(ctx, `SELECT requested_generation,completed_generation FROM node_reconcile_requests WHERE node_id=$1`, nodeID).
+		Scan(&result.ReconcileRequestedGeneration, &result.ReconcileCompletedGeneration); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nodev1.HeartbeatResult{}, err
+	}
+	return result, nil
+}
+
+func (s *Store) CompleteNodeReconcile(ctx context.Context, nodeID string, generation int64) error {
+	if generation <= 0 {
+		return ErrJobConflict
+	}
+	command, err := s.Pool.Exec(ctx, `UPDATE node_reconcile_requests SET completed_generation=$2,completed_at=now()
+		WHERE node_id=$1 AND requested_generation=$2 AND completed_generation<=$2`, nodeID, generation)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() == 0 {
+		return ErrJobConflict
+	}
+	return nil
 }
 
 func (s *Store) NodeCompatible(ctx context.Context, nodeID string) (bool, error) {

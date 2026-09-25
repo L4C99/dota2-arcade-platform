@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/buildinfo"
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/config"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/core"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/platformclient"
@@ -43,23 +44,23 @@ func run(args []string) error {
 	}
 	worker := &runner.Runner{Platform: client, Core: coreClient, TemplateBindings: conf.TemplateBindings, Network: conf.Network}
 	factReader := config.NewFactReader(conf)
-	send := func(ctx context.Context) (string, error) {
+	send := func(ctx context.Context) (nodev1.HeartbeatResult, error) {
 		protocol := 0
 		if _, err := coreClient.List(ctx); err == nil {
 			protocol = 1
 		}
 		facts := factReader.Facts(buildinfo.Version, protocol)
 		result, err := client.Heartbeat(ctx, facts)
-		return result.CompatibilityStatus, err
+		return result, err
 	}
 	if args[0] == "heartbeat" {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		status, err := send(ctx)
+		result, err := send(ctx)
 		if err != nil {
 			return err
 		}
-		fmt.Println("heartbeat accepted; compatibility=" + status)
+		fmt.Println("heartbeat accepted; compatibility=" + result.CompatibilityStatus)
 		return nil
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -69,7 +70,8 @@ func run(args []string) error {
 	lastStatus := ""
 	for {
 		cycle, cancel := context.WithTimeout(ctx, 20*time.Second)
-		status, err := send(cycle)
+		result, err := send(cycle)
+		status := result.CompatibilityStatus
 		if err != nil {
 			log.Printf("heartbeat failed: %v", err)
 		} else if status != lastStatus {
@@ -79,6 +81,10 @@ func run(args []string) error {
 		if err == nil && status == "compatible" {
 			if err := worker.Step(cycle); err != nil {
 				log.Printf("node job cycle failed: %v", err)
+			} else if result.ReconcileRequestedGeneration > result.ReconcileCompletedGeneration {
+				if err := client.CompleteReconcile(cycle, result.ReconcileRequestedGeneration); err != nil {
+					log.Printf("node reconcile acknowledgement failed: %v", err)
+				}
 			}
 		}
 		cancel()

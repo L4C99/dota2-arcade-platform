@@ -76,6 +76,24 @@ func (c *Client) Heartbeat(ctx context.Context, h nodev1.Heartbeat) (nodev1.Hear
 	return result, err
 }
 
+func (c *Client) CompleteReconcile(ctx context.Context, generation int64) error {
+	_, err := c.do(ctx, http.MethodPost, "/reconcile/complete", struct {
+		Generation int64 `json:"generation"`
+	}{generation}, nil)
+	return err
+}
+
+func (c *Client) ActiveAllocations(ctx context.Context) ([]nodev1.ActiveAllocation, error) {
+	var allocations []nodev1.ActiveAllocation
+	_, err := c.do(ctx, http.MethodGet, "/allocations/active", nil, &allocations)
+	return allocations, err
+}
+
+func (c *Client) ReportInstanceFact(ctx context.Context, id string, fact nodev1.InstanceFact) error {
+	_, err := c.do(ctx, http.MethodPost, "/allocations/"+id+"/fact", fact, nil)
+	return err
+}
+
 func (c *Client) OpenJobs(ctx context.Context) ([]nodev1.Job, error) {
 	var jobs []nodev1.Job
 	_, err := c.do(ctx, http.MethodGet, "/jobs/open", nil, &jobs)

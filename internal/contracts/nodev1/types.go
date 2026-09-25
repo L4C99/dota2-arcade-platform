@@ -55,8 +55,26 @@ type Heartbeat struct {
 }
 
 type HeartbeatResult struct {
-	CompatibilityStatus string `json:"compatibilityStatus"`
-	ReportedAt          string `json:"reportedAt"`
+	CompatibilityStatus          string `json:"compatibilityStatus"`
+	ReportedAt                   string `json:"reportedAt"`
+	ReconcileRequestedGeneration int64  `json:"reconcileRequestedGeneration"`
+	ReconcileCompletedGeneration int64  `json:"reconcileCompletedGeneration"`
+}
+
+type ActiveAllocation struct {
+	ID         string `json:"id"`
+	InstanceID string `json:"instanceId"`
+	State      string `json:"state"`
+	HasOpenJob bool   `json:"hasOpenJob"`
+}
+
+type InstanceFact struct {
+	InstanceID string `json:"instanceId"`
+	Outcome    string `json:"outcome"`
+	Lifecycle  string `json:"lifecycle"`
+	Process    string `json:"process"`
+	Cleanup    string `json:"cleanup"`
+	Port       int    `json:"port"`
 }
 
 type Job struct {

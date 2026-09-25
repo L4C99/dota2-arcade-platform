@@ -39,7 +39,7 @@ func (s *Store) SetDesiredCapacity(ctx context.Context, nodeID string, desired i
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var hard int
+	var hard, before int
 	err = tx.QueryRow(ctx, `SELECT r.hard_max_instances FROM nodes n
 		JOIN node_reports r ON r.node_id=n.id WHERE n.id=$1 FOR UPDATE OF n`, nodeID).Scan(&hard)
 	if err != nil {
@@ -48,7 +48,13 @@ func (s *Store) SetDesiredCapacity(ctx context.Context, nodeID string, desired i
 	if desired > hard {
 		return fmt.Errorf("%w: desired=%d hard=%d", ErrInvalidDesiredCapacity, desired, hard)
 	}
+	if err := tx.QueryRow(ctx, `SELECT desired_max_instances FROM nodes WHERE id=$1`, nodeID).Scan(&before); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `UPDATE nodes SET desired_max_instances=$2 WHERE id=$1`, nodeID, desired); err != nil {
+		return err
+	}
+	if err := auditOperator(ctx, tx, "operator_cli", "node.capacity", "node", nodeID, map[string]any{"before": before, "after": desired}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

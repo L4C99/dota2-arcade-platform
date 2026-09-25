@@ -42,6 +42,11 @@ func TestPlayerWebStaticRoot(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "player web") {
 		t.Fatalf("player page code=%d body=%q", w.Code, w.Body.String())
 	}
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "player web") {
+		t.Fatalf("admin SPA entry code=%d body=%q", w.Code, w.Body.String())
+	}
 	if _, err := NewHandler(nil, Config{PublicOrigin: "https://example.org", WebRoot: "relative"}); err == nil {
 		t.Fatal("relative static path accepted")
 	}

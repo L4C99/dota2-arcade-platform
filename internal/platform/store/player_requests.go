@@ -41,6 +41,7 @@ type GamePreset struct {
 type Catalog struct {
 	GlobalAcceptingNewRequests bool         `json:"globalAcceptingNewRequests"`
 	GlobalMaintenanceMessage   string       `json:"globalMaintenanceMessage"`
+	SiteAnnouncement           string       `json:"siteAnnouncement"`
 	Games                      []ArcadeGame `json:"games"`
 	Presets                    []GamePreset `json:"presets"`
 }
@@ -49,6 +50,9 @@ func (s *Store) PlayerCatalog(ctx context.Context) (Catalog, error) {
 	c := Catalog{Games: []ArcadeGame{}, Presets: []GamePreset{}}
 	if err := s.Pool.QueryRow(ctx, `SELECT accepting_new_requests,maintenance_message
 		FROM platform_settings WHERE singleton=true`).Scan(&c.GlobalAcceptingNewRequests, &c.GlobalMaintenanceMessage); err != nil {
+		return Catalog{}, err
+	}
+	if err := s.Pool.QueryRow(ctx, `SELECT message FROM site_announcements WHERE singleton=true`).Scan(&c.SiteAnnouncement); err != nil {
 		return Catalog{}, err
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT id,workshop_id,display_name,enabled,accepting_new_requests,maintenance_message

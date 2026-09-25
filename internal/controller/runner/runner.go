@@ -22,6 +22,11 @@ type Platform interface {
 	Report(context.Context, string, nodev1.ReportRequest) (nodev1.Job, error)
 }
 
+type activeReconciler interface {
+	ActiveAllocations(context.Context) ([]nodev1.ActiveAllocation, error)
+	ReportInstanceFact(context.Context, string, nodev1.InstanceFact) error
+}
+
 type Runner struct {
 	Platform         Platform
 	Core             core.API
@@ -48,6 +53,11 @@ func (r *Runner) Step(ctx context.Context) error {
 			return err
 		}
 	}
+	if platform, ok := r.Platform.(activeReconciler); ok {
+		if err := r.reconcileActive(ctx, platform); err != nil {
+			return err
+		}
+	}
 	// Leave another claim until all existing work has converged.
 	for _, job := range jobs {
 		if job.State != "pending" {
@@ -59,6 +69,41 @@ func (r *Runner) Step(ctx context.Context) error {
 		return err
 	}
 	return r.handle(ctx, *job, true, list)
+}
+
+func (r *Runner) reconcileActive(ctx context.Context, platform activeReconciler) error {
+	allocations, err := platform.ActiveAllocations(ctx)
+	if err != nil {
+		return err
+	}
+	for _, allocation := range allocations {
+		if allocation.HasOpenJob || allocation.InstanceID == "" {
+			continue
+		}
+		fact := nodev1.InstanceFact{InstanceID: allocation.InstanceID, Outcome: "uncertain"}
+		// Status follows the full List inventory read. A transport failure is
+		// unknown; only a structured core identity error isolates the attempt.
+		instance, statusErr := r.Core.Status(ctx, allocation.InstanceID)
+		if statusErr != nil {
+			if !coreIdentityFailure(statusErr) {
+				return statusErr
+			}
+			fact.Outcome = "identity_unverified"
+		} else if instance.InstanceID != allocation.InstanceID {
+			fact.Outcome = "identity_unverified"
+		} else {
+			fact.Lifecycle, fact.Process, fact.Cleanup, fact.Port = instance.Lifecycle, instance.Process, instance.Cleanup, instance.Port
+			if reclaimed(instance) {
+				fact.Outcome = "reclaimed"
+			} else if instance.Lifecycle == "active" && instance.Process == "running" {
+				fact.Outcome = "active"
+			}
+		}
+		if err := platform.ReportInstanceFact(ctx, allocation.ID, fact); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Runner) handle(ctx context.Context, job nodev1.Job, fresh bool, list core.ListResult) error {

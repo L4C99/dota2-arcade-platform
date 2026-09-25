@@ -89,8 +89,18 @@ func (s *Store) CreateAdmin(ctx context.Context, username, password string) (str
 	if err != nil {
 		return "", err
 	}
-	_, err = s.Pool.Exec(ctx, "INSERT INTO admin_users(id,username,password_hash) VALUES($1,$2,$3)", id, username, hash)
-	return id, err
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "INSERT INTO admin_users(id,username,password_hash) VALUES($1,$2,$3)", id, username, hash); err != nil {
+		return "", err
+	}
+	if err := auditOperator(ctx, tx, "operator_cli", "admin.create", "admin_user", id, map[string]any{"username": username}); err != nil {
+		return "", err
+	}
+	return id, tx.Commit(ctx)
 }
 
 func (s *Store) ResetAdminPassword(ctx context.Context, username, password string) error {
@@ -98,15 +108,20 @@ func (s *Store) ResetAdminPassword(ctx context.Context, username, password strin
 	if err != nil {
 		return err
 	}
-	result, err := s.Pool.Exec(ctx, `UPDATE admin_users SET password_hash=$2,credential_version=credential_version+1,
-        updated_at=now() WHERE username=$1`, strings.ToLower(strings.TrimSpace(username)), hash)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if result.RowsAffected() == 0 {
-		return pgx.ErrNoRows
+	defer tx.Rollback(ctx)
+	var adminID string
+	if err := tx.QueryRow(ctx, `UPDATE admin_users SET password_hash=$2,credential_version=credential_version+1,
+		updated_at=now() WHERE username=$1 RETURNING id`, strings.ToLower(strings.TrimSpace(username)), hash).Scan(&adminID); err != nil {
+		return err
 	}
-	return nil
+	if err := auditOperator(ctx, tx, "operator_cli", "admin.reset_password", "admin_user", adminID, map[string]any{"sessionsInvalidated": true}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) LoginAdmin(ctx context.Context, username, password string) (adminID, token string, err error) {

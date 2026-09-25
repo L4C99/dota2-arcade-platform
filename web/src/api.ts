@@ -20,6 +20,7 @@ export interface GamePreset {
 export interface Catalog {
   globalAcceptingNewRequests: boolean
   globalMaintenanceMessage: string
+  siteAnnouncement: string
   games: ArcadeGame[]
   presets: GamePreset[]
 }

@@ -71,6 +71,70 @@ func (a *api) nodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (a *api) nodeReconcileComplete(w http.ResponseWriter, r *http.Request) {
+	nodeID, ok := a.authenticatedNode(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Generation int64 `json:"generation"`
+	}
+	if err := decodeNodeJSON(w, r, &input); err != nil || input.Generation <= 0 {
+		http.Error(w, "invalid reconcile generation", http.StatusBadRequest)
+		return
+	}
+	if err := a.store.CompleteNodeReconcile(r.Context(), nodeID, input.Generation); err != nil {
+		if errors.Is(err, store.ErrJobConflict) {
+			http.Error(w, "stale reconcile generation", http.StatusConflict)
+		} else {
+			http.Error(w, "reconcile unavailable", http.StatusServiceUnavailable)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *api) nodeActiveAllocations(w http.ResponseWriter, r *http.Request) {
+	nodeID, ok := a.authenticatedNode(w, r)
+	if !ok {
+		return
+	}
+	allocations, err := a.store.ActiveAllocationsForNode(r.Context(), nodeID)
+	if err != nil {
+		http.Error(w, "active allocations unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, allocations)
+}
+
+func (a *api) nodeInstanceFact(w http.ResponseWriter, r *http.Request) {
+	nodeID, ok := a.authenticatedNode(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if !nodeIDPattern.MatchString(id) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	var fact nodev1.InstanceFact
+	if err := decodeNodeJSON(w, r, &fact); err != nil {
+		http.Error(w, "invalid instance fact", http.StatusBadRequest)
+		return
+	}
+	err := a.store.ReportInstanceFact(r.Context(), nodeID, id, fact)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		http.Error(w, "not found", http.StatusNotFound)
+	case errors.Is(err, store.ErrJobConflict):
+		http.Error(w, "invalid instance fact", http.StatusConflict)
+	case err != nil:
+		http.Error(w, "instance reconciliation unavailable", http.StatusServiceUnavailable)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func (a *api) nodeOpenJobs(w http.ResponseWriter, r *http.Request) {
 	nodeID, ok := a.authenticatedNode(w, r)
 	if !ok {

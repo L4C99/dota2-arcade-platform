@@ -1,0 +1,19 @@
+# Administrator API (P4D)
+
+The administrator UI is served at `/admin` and uses same-origin `/api/v1/admin`. Its cookie is separate from the anonymous player Session. Production requires HTTPS; the cookie is `Secure`, `HttpOnly`, `SameSite=Lax`, host-only and expires absolutely after 12 hours. A successful login issues a fresh opaque token and revokes the previous token in that browser. Logout revokes immediately; disabling an AdminUser or resetting its password invalidates existing sessions through the server-side credential version. Login failures use an IP + normalized username exponential backoff. Mutating requests require the configured exact Origin; wildcard CORS is not enabled. The backend authenticates the AdminUser on every request.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| POST | `/login` | Username/password login; Argon2id verifier in PostgreSQL |
+| GET | `/me` | Check independent AdminSession |
+| POST | `/logout` | Revoke current AdminSession |
+| GET | `/overview` | Sanitized settings, catalog, Node and binding facts, entry state, recent requests/Allocations/open jobs, Party summary and Audit |
+| POST | `/actions` | Typed administrative state transition, authorized and audited in one database transaction |
+
+`POST /actions` accepts an `action` and the fields for that action. Supported actions: `global.update` (`accepting`, `message`), `announcement.update` (`message`), `game.update` / `preset.update` (`targetId`, `enabled`, `accepting`, `message`), `node.update` (`targetId`, `draining`, `priority`, `desired`), `binding.update` (`targetId` Node, `gameId`, `accepting`), `node.reconcile` (`targetId`), `request.cancel` (`targetId`), `request.stop` (`targetId`), `allocation.quarantine` (`targetId`), and `entry.update` (`targetId` Node, `entry=steam|steamchina`, `verified` or `enabled`, with `confirmed=true` for a new human verification). Invalid state transitions return 409; malformed actions return 400. Unknown JSON fields are rejected.
+
+`node.update` cannot set desired capacity above the Controller-reported hard limit. `binding.update` changes only Platform admission; it cannot change reported content version/state/time. A new entry verification requires Controller-reported A2S availability and an explicit human confirmation for the current network revision; the P4 development environment has not completed the P5 real client workflow, so its entry remains unverified and disabled. Enabling an unverified entry is rejected. A Controller revision change revokes the old verification and enabled state automatically. P4 does not expose ContentVersion target switching.
+
+`request.cancel` requires a pure waiting request with no Allocation. `request.stop` creates a normal stop NodeJob for a trusted existing instance and retains capacity until full d2core reclaim. `allocation.quarantine` preserves capacity, old node/port/content and history; it rejects a pure pending reservation. `node.reconcile` queues a durable generation for the target Controller; completion means a pass was attempted, not that all problems disappeared.
+
+Audit records the administrator identity, action, target, time and relevant prior/resulting state without password, Session token, Node Secret, SSH key, frozen local path or raw private network facts. CLI operator actions and automatic unreachable quarantine use their own actor kind. `/overview` omits raw network facts and local paths, and shows only structured error codes. No Web shell, arbitrary console/command, process kill, file browser, firewall or NAT control exists.

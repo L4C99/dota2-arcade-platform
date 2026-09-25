@@ -321,6 +321,9 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
 
   <main>
     <div v-if="error" class="notice notice-error" role="alert">{{ error }}</div>
+    <div v-if="catalog?.siteAnnouncement" class="notice notice-announcement" role="status">
+      <strong>站点公告</strong><span>{{ catalog.siteAnnouncement }}</span>
+    </div>
     <div v-if="catalog && !catalog.globalAcceptingNewRequests" class="notice notice-maintenance" role="status">
       <strong>平台维护</strong><span>{{ catalog.globalMaintenanceMessage || '暂不接受新申请。' }}</span>
     </div>

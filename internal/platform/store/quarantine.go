@@ -59,6 +59,9 @@ func (s *Store) QuarantineOneUnreachable(ctx context.Context) (bool, error) {
 	if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
 		return false, err
 	}
+	if err := auditOperator(ctx, tx, "system", "allocation.quarantine.unreachable", "allocation", allocationID, map[string]any{"after": "quarantined", "capacityReleased": false}); err != nil {
+		return false, err
+	}
 	return true, tx.Commit(ctx)
 }
 
@@ -100,6 +103,9 @@ func (s *Store) MarkAllocationQuarantined(ctx context.Context, allocationID stri
 		return err
 	}
 	if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
+		return err
+	}
+	if err := auditOperator(ctx, tx, "operator_cli", "allocation.quarantine", "allocation", allocationID, map[string]any{"before": state, "after": "quarantined", "capacityReleased": false}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

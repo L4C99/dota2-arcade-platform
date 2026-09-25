@@ -1,5 +1,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
+import AdminApp from './AdminApp.vue'
 import './style.css'
+import './admin.css'
 
-createApp(App).mount('#app')
+createApp(window.location.pathname === '/admin' ? AdminApp : App).mount('#app')

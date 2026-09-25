@@ -28,6 +28,7 @@ main{max-width:1240px;margin:auto;padding:0 28px 76px;min-height:calc(100vh - 14
 .notice{border-radius:14px;padding:12px 16px;margin-top:18px;font-size:13px;line-height:1.5}
 .notice-error{background:#faebe5;border:1px solid #e7cabc;color:#86503c}
 .notice-maintenance{background:#faf1e6;border:1px solid #ecdcc8;color:#70543a;display:flex;gap:12px}
+.notice-announcement{background:#eaf2e8;border:1px solid #d6e4d5;color:#315d4d;display:flex;gap:12px}
 .loading-panel{padding:30px;font-size:14px;color:#587268}
 .request-layout{display:grid;grid-template-columns:minmax(0,1.63fr) minmax(315px,1fr);gap:18px;align-items:start}
 .selection-stack{display:grid;gap:18px}

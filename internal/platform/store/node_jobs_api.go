@@ -263,17 +263,15 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 			allocationState, requestState = "stopping", "stopping"
 		case "succeeded":
 			allocationState, requestState = "reclaimed", "ended"
-			if currentAllocationState == "quarantined" {
-				var pausedIntent bool
-				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents
-					WHERE source_request_id=$1 AND state='paused')`, requestID).Scan(&pausedIntent); err != nil {
-					return err
-				}
-				if pausedIntent {
-					// A paused next-game intent still needs the owner to
-					// decide whether to continue after quarantine.
-					requestState = "quarantined"
-				}
+			var pausedIntent bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents
+				WHERE source_request_id=$1 AND state='paused')`, requestID).Scan(&pausedIntent); err != nil {
+				return err
+			}
+			if pausedIntent {
+				// A paused next-game intent still needs the owner to
+				// decide whether to continue after quarantine.
+				requestState = "quarantined"
 			}
 		case "failed_with_effect":
 			allocationState, requestState = "quarantined", "quarantined"
