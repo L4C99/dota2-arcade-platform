@@ -102,7 +102,7 @@ func scanServerRequest(row requestScanner) (ServerRequest, error) {
 }
 
 const currentRequestSQL = `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at
-	FROM server_requests WHERE owner_user_id=$1 AND state IN ('waiting','allocating','creating','running','stopping')`
+	FROM server_requests WHERE owner_user_id=$1 AND state IN ('waiting','allocating','creating','running','stopping','failed_unreclaimed','quarantined')`
 
 func (s *Store) CurrentUserRequest(ctx context.Context, userID string) (*ServerRequest, error) {
 	r, err := scanServerRequest(s.Pool.QueryRow(ctx, currentRequestSQL, userID))
@@ -165,8 +165,9 @@ func (s *Store) CreateUserRequest(ctx context.Context, userID, gameID, presetID 
 	if err != nil {
 		return ServerRequest{}, false, err
 	}
-	r, err := scanServerRequest(tx.QueryRow(ctx, `INSERT INTO server_requests(id,owner_user_id,arcade_game_id,game_preset_id)
-		VALUES($1,$2,$3,$4) RETURNING id,arcade_game_id,game_preset_id,state,requested_at,updated_at`, id, userID, gameID, presetID))
+	requestedAt := time.Now().UTC()
+	r, err := scanServerRequest(tx.QueryRow(ctx, `INSERT INTO server_requests(id,owner_user_id,arcade_game_id,game_preset_id,requested_at,updated_at)
+		VALUES($1,$2,$3,$4,$5,$5) RETURNING id,arcade_game_id,game_preset_id,state,requested_at,updated_at`, id, userID, gameID, presetID, requestedAt))
 	if err != nil {
 		return ServerRequest{}, false, err
 	}

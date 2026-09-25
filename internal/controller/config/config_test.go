@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -56,7 +58,8 @@ func TestFactsReadback(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(release, "pak01_dir.vpk"), []byte("test"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	metadata, _ := json.Marshal(contentMetadata{WorkshopID: "123", ContentVersionID: "v1", ReleasePath: release})
+	digest := sha256.Sum256([]byte("test"))
+	metadata, _ := json.Marshal(contentMetadata{WorkshopID: "123", ContentVersionID: "v1", ReleasePath: release, VPKSHA256: hex.EncodeToString(digest[:])})
 	if err := os.WriteFile(config.ContentBindings[0].MetadataPath, metadata, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -67,9 +70,17 @@ func TestFactsReadback(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
-	h = config.Facts("test", 0)
+	reader := NewFactReader(config)
+	h = reader.Facts("test", 0)
 	if h.Content[0].State != "confirmed" || h.Content[0].ContentVersionID != "v1" {
 		t.Fatalf("content readback failed: %+v", h.Content[0])
+	}
+	if err := os.WriteFile(filepath.Join(release, "pak01_dir.vpk"), []byte("changed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	h = reader.Facts("test", 0)
+	if h.Content[0].State != "unknown" {
+		t.Fatalf("changed VPK retained confirmed fact: %+v", h.Content[0])
 	}
 }
 

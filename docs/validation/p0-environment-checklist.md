@@ -39,6 +39,7 @@ owner and still subject to host checks.
 | Human join, public game ports, A2S, Steam/steamchina URI | later stage | not verified | No human client or public game-port/URI acceptance was performed in P0. |
 | P0 owner acceptance | P0 closure | confirmed | Owner formally accepted P0A–P0E; this is not V1 review, RC, Release, or production acceptance. |
 | P1A development catalog and request API | P1A | confirmed in development | One owner-confirmed test ContentVersion, n6 preset, logical development template binding, migration 4, isolated database tests and HTTP recovery check. See [P1A](p1a.md). |
+| P1B content fact, Allocation and real business create/stop | P1B | confirmed in development | Controller SHA256 readback, migration 5, atomic one-node reservation, real Dota Ready and full reclaim through player-owned business objects. See [P1B](p1b.md). |
 
 Credential values, keys, TLS private material, VPKs, and private logs must
 never be added to this file or committed to Git.

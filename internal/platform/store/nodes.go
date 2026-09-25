@@ -88,6 +88,39 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 	if err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}
+	// A missing or unrecognized Controller fact cannot leave an older binding
+	// looking confirmed. The Platform controls only the accepting flag.
+	if _, err := tx.Exec(ctx, `UPDATE node_content_bindings SET reported_state='unknown',
+		reported_content_version_id=NULL,reported_at=$2 WHERE node_id=$1`, nodeID, reportedAt); err != nil {
+		return nodev1.HeartbeatResult{}, err
+	}
+	for _, fact := range h.Content {
+		var gameID string
+		var versionID *string
+		err := tx.QueryRow(ctx, `SELECT g.id,c.id FROM arcade_games g
+			LEFT JOIN content_versions c ON c.arcade_game_id=g.id AND c.id=$2
+			WHERE g.workshop_id=$1`, fact.WorkshopID, fact.ContentVersionID).Scan(&gameID, &versionID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nodev1.HeartbeatResult{}, err
+		}
+		state := "unknown"
+		if fact.State != "confirmed" {
+			versionID = nil
+		} else if versionID != nil {
+			state = "confirmed"
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO node_content_bindings(node_id,arcade_game_id,reported_content_version_id,reported_state,reported_at)
+			VALUES($1,$2,$3,$4,$5) ON CONFLICT(node_id,arcade_game_id) DO UPDATE SET
+			reported_content_version_id=EXCLUDED.reported_content_version_id,
+			reported_state=EXCLUDED.reported_state,reported_at=EXCLUDED.reported_at`,
+			nodeID, gameID, versionID, state, reportedAt)
+		if err != nil {
+			return nodev1.HeartbeatResult{}, err
+		}
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO node_reports(node_id,controller_version,node_api_version,d2core_version,d2core_commit,
         d2core_protocol_version,compatibility_status,hard_max_instances,network_facts,content_facts,reported_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)

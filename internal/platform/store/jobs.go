@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/jackc/pgx/v5"
@@ -94,6 +95,20 @@ func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template strin
 	}
 	if frozen.IdempotencyKey != key || frozen.TemplatePath != template || frozen.Port != port || !bytes.Equal(frozen.FingerprintSHA, fingerprint[:]) {
 		return FrozenCreate{}, fmt.Errorf("%w: frozen create request changed", ErrJobConflict)
+	}
+	startedAt := time.Now().UTC()
+	_, err = tx.Exec(ctx, `UPDATE allocations a SET state='creating',
+		create_started_at=COALESCE(a.create_started_at,$2)
+		FROM node_jobs j WHERE j.id=$1 AND j.allocation_id=a.id AND a.state IN ('reserved','create_unknown','creating')`,
+		jobID, startedAt)
+	if err != nil {
+		return FrozenCreate{}, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE server_requests r SET state='creating',updated_at=$2
+		FROM allocations a JOIN node_jobs j ON j.allocation_id=a.id
+		WHERE j.id=$1 AND a.server_request_id=r.id AND r.state='allocating'`, jobID, startedAt)
+	if err != nil {
+		return FrozenCreate{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return FrozenCreate{}, err

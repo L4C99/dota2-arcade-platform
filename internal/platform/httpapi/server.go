@@ -55,6 +55,8 @@ func NewHandler(s *store.Store, c Config) (http.Handler, error) {
 	mux.HandleFunc("POST /api/v1/server-requests", a.createPlayerRequest)
 	mux.HandleFunc("GET /api/v1/server-requests/current", a.currentPlayerRequest)
 	mux.HandleFunc("GET /api/v1/server-requests/{id}", a.playerRequest)
+	mux.HandleFunc("POST /api/v1/server-requests/{id}/stop", a.stopPlayerRequest)
+	mux.HandleFunc("GET /api/v1/server-requests/{id}/allocation", a.playerAllocation)
 	mux.HandleFunc("POST /api/v1/session/logout", a.logout)
 	mux.HandleFunc("POST /api/v1/admin/login", a.adminLogin)
 	mux.HandleFunc("GET /api/v1/admin/me", a.adminMe)

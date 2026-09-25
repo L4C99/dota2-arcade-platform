@@ -42,12 +42,13 @@ func run(args []string) error {
 		return err
 	}
 	worker := &runner.Runner{Platform: client, Core: coreClient, TemplateBindings: conf.TemplateBindings, Network: conf.Network}
+	factReader := config.NewFactReader(conf)
 	send := func(ctx context.Context) (string, error) {
 		protocol := 0
 		if _, err := coreClient.List(ctx); err == nil {
 			protocol = 1
 		}
-		facts := conf.Facts(buildinfo.Version, protocol)
+		facts := factReader.Facts(buildinfo.Version, protocol)
 		result, err := client.Heartbeat(ctx, facts)
 		return result.CompatibilityStatus, err
 	}

@@ -102,3 +102,57 @@ func (a *api) playerRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, request)
 }
+
+func (a *api) stopPlayerRequest(w http.ResponseWriter, r *http.Request) {
+	if !a.checkOrigin(w, r) {
+		return
+	}
+	userID, ok := a.playerUser(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if !nodeIDPattern.MatchString(id) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	request, err := a.store.StopUserRequest(r.Context(), userID, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, store.ErrJobConflict) {
+		http.Error(w, "request cannot be stopped in its current state", http.StatusConflict)
+		return
+	}
+	if err != nil {
+		http.Error(w, "stop unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, request)
+}
+
+func (a *api) playerAllocation(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.playerUser(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if !nodeIDPattern.MatchString(id) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if _, err := a.store.UserRequest(r.Context(), userID, id); errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "allocation unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	allocation, err := a.store.UserRequestAllocation(r.Context(), userID, id)
+	if err != nil {
+		http.Error(w, "allocation unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, allocation)
+}

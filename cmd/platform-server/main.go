@@ -172,6 +172,23 @@ func serve(s *store.Store) error {
 	stop, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			cycle, done := context.WithTimeout(stop, 5*time.Second)
+			_, err := s.TryAllocateOne(cycle)
+			done()
+			if err != nil && stop.Err() == nil {
+				log.Printf("P1 allocation cycle: %v", err)
+			}
+			select {
+			case <-stop.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	go func() {
 		<-stop.Done()
 		ctx, done := context.WithTimeout(context.Background(), 10*time.Second)
 		defer done()

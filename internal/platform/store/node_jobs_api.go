@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/jackc/pgx/v5"
@@ -121,10 +122,11 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 		return nodev1.Job{}, err
 	}
 	defer tx.Rollback(ctx)
-	var oldState, kind, instanceID, operationID, errorCode, errorStage string
+	var oldState, kind, instanceID, operationID, errorCode, errorStage, allocationID string
 	err = tx.QueryRow(ctx, `SELECT state,kind,COALESCE(instance_id,''),COALESCE(operation_id,''),
-        COALESCE(error_code,''),COALESCE(error_stage,'') FROM node_jobs WHERE id=$1 AND node_id=$2 FOR UPDATE`, jobID, nodeID).
-		Scan(&oldState, &kind, &instanceID, &operationID, &errorCode, &errorStage)
+		COALESCE(error_code,''),COALESCE(error_stage,''),COALESCE(allocation_id::text,'')
+		FROM node_jobs WHERE id=$1 AND node_id=$2 FOR UPDATE`, jobID, nodeID).
+		Scan(&oldState, &kind, &instanceID, &operationID, &errorCode, &errorStage, &allocationID)
 	if err != nil {
 		return nodev1.Job{}, err
 	}
@@ -149,7 +151,7 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM node_job_executions WHERE node_job_id=$1)", jobID).Scan(&hasFrozen); err != nil {
 			return nodev1.Job{}, err
 		}
-		if !hasFrozen {
+		if !hasFrozen && report.State != "rejected_no_effect" {
 			return nodev1.Job{}, fmt.Errorf("%w: create job has no frozen execution", ErrJobConflict)
 		}
 	}
@@ -182,6 +184,11 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 	if err != nil {
 		return nodev1.Job{}, err
 	}
+	if allocationID != "" {
+		if err := applyAllocationJobReport(ctx, tx, allocationID, nodeID, kind, report.State, instanceID, report.ErrorCode); err != nil {
+			return nodev1.Job{}, err
+		}
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO node_job_reports(node_job_id,state,instance_id,operation_id,error_code,error_stage)
         VALUES($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''))`,
 		jobID, report.State, instanceID, operationID, report.ErrorCode, report.ErrorStage)
@@ -197,4 +204,71 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 func (f FrozenCreate) Contract() nodev1.FrozenCreate {
 	return nodev1.FrozenCreate{IdempotencyKey: f.IdempotencyKey, Template: f.TemplatePath,
 		Port: f.Port, FingerprintSHA256: hex.EncodeToString(f.FingerprintSHA)}
+}
+
+func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, nodeID, kind, state, instanceID, errorCode string) error {
+	var requestID string
+	if err := tx.QueryRow(ctx, `SELECT server_request_id FROM allocations WHERE id=$1 FOR UPDATE`, allocationID).Scan(&requestID); err != nil {
+		return err
+	}
+	at := time.Now().UTC()
+	allocationState, requestState := "", ""
+	switch kind {
+	case "create":
+		switch state {
+		case "accepted":
+			allocationState, requestState = "creating", "creating"
+		case "unknown":
+			allocationState, requestState = "create_unknown", "creating"
+		case "succeeded":
+			allocationState, requestState = "running", "running"
+		case "rejected_no_effect":
+			allocationState, requestState = "released_no_effect", "unavailable"
+		case "failed_with_effect":
+			allocationState, requestState = "failed_unreclaimed", "failed_unreclaimed"
+		}
+	case "stop":
+		switch state {
+		case "accepted", "unknown":
+			allocationState, requestState = "stopping", "stopping"
+		case "succeeded":
+			allocationState, requestState = "reclaimed", "ended"
+		case "failed_with_effect":
+			allocationState, requestState = "quarantined", "quarantined"
+		}
+	}
+	if allocationState == "" {
+		return fmt.Errorf("%w: unsupported business job report", ErrJobConflict)
+	}
+	_, err := tx.Exec(ctx, `UPDATE allocations SET state=$2,error_code=NULLIF($3,''),
+		ready_at=CASE WHEN $2='running' THEN COALESCE(ready_at,$4) ELSE ready_at END,
+		reclaimed_at=CASE WHEN $2='reclaimed' THEN COALESCE(reclaimed_at,$4) ELSE reclaimed_at END
+		WHERE id=$1`, allocationID, allocationState, errorCode, at)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE server_requests SET state=$2,updated_at=$3 WHERE id=$1`, requestID, requestState, at)
+	if err != nil {
+		return err
+	}
+	if kind == "create" && state == "failed_with_effect" && instanceID != "" {
+		stopJobID, err := NewID()
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,instance_id)
+			VALUES($1,$2,'stop',false,$3,$4) ON CONFLICT DO NOTHING`, stopJobID, nodeID, allocationID, instanceID)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE allocations SET state='stopping' WHERE id=$1`, allocationID)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE server_requests SET state='stopping',updated_at=$2 WHERE id=$1`, requestID, at)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
