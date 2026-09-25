@@ -2,7 +2,7 @@
 
 面向 Dota 2 游廊玩家的自助专服平台。
 
-**V1 P-1 UI / UX 原型已由项目所有者验收通过。**冻结的产品与架构规格见 [docs/specs/v1.md](docs/specs/v1.md)。P0 正按 P0A → P0E 顺序实施。
+**P1 已由项目所有者验收通过。** 阶段事实见 [P1 验收与收尾](docs/validation/p1-summary.md)，冻结的产品与架构规格见 [docs/specs/v1.md](docs/specs/v1.md)。P2 尚未开工；P1 验收不等于 V1 Release 或生产部署。
 
 [prototype/p1/](prototype/p1/) 保留最终视觉与交互参考；仅使用模拟数据，不是生产前端，也不连接真实服务。
 
@@ -22,4 +22,4 @@ P0B 起，`platform-server` 提供 `migrate`、`serve`、`admin create <username
 
 P0C 的 [Node API v1](docs/node-protocol.md) 提供预置节点认证、事实心跳与 durable NodeJob claim/prepare/report。`platform-server node register <name> <windows|linux>` 登记节点并仅输出一次 Secret。`node-controller heartbeat|run --config <绝对路径>` 读取本机配置和独立 Secret 文件。
 
-P0D 的 Controller 使用固定 d2core v0.1.1 Go client 连接同用户本地 API。成功调用 `list` 后才报告 protocol v1；兼容心跳后先读取未终结任务，再领取新任务。集成测试任务由 `platform-server node integration-job <node-id> create <template-binding> [port]` 或 `... stop <instance-id>` 建立。`template-binding` 是 Controller 本机配置的逻辑键，Server 不接收或下发任意本机路径。真实 Linux 开发节点的 create → Ready → stop → full reclaim 验证见 [P0D 验证记录](docs/validation/p0d.md)。本机真实环境事实保存在 Git 忽略的 `.local/p0-host-inventory.md`；公开字段检查见 [P0 环境清单](docs/validation/p0-environment-checklist.md)。P0E 的重启与 unknown 对账尚未实施。
+P0D 的 Controller 使用固定 d2core v0.1.1 Go client 连接同用户本地 API。成功调用 `list` 后才报告 protocol v1；兼容心跳后先读取未终结任务，再领取新任务。集成测试任务由 `platform-server node integration-job <node-id> create <template-binding> [port]` 或 `... stop <instance-id>` 建立。`template-binding` 是 Controller 本机配置的逻辑键，Server 不接收或下发任意本机路径。真实 Linux 开发节点的 create → Ready → stop → full reclaim 验证见 [P0D 验证记录](docs/validation/p0d.md)；P0E 的重启与 unknown 对账见 [P0E 验证记录](docs/validation/p0e.md)。本机真实环境事实保存在 Git 忽略的 `.local/p0-host-inventory.md`；公开字段检查见 [P0 环境清单](docs/validation/p0-environment-checklist.md)。

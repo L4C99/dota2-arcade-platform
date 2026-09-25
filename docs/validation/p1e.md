@@ -29,3 +29,5 @@ P0's approximately 10–16s samples measured core create acceptance to Ready, a 
 ## Boundaries
 
 The owner-confirmed connect path is PASS. Independent validation of the revised console-help wording is NOT VERIFIED by explicit owner direction. A2S queries, Steam/steamchina URIs, Windows Node, multi-node scheduling, Party, production timeout, production content/version release, and production deployment were outside P1 and remain NOT VERIFIED.
+
+The owner subsequently confirmed the formal Web's visual and interaction parity in a separate [UI checkpoint](p1d-parity.md). That approval does not replace this P1E functional checkpoint or imply a second human Dota run. The combined P1 stage acceptance is recorded in the [P1 summary](p1-summary.md).
