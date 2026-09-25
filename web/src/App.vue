@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ApiError, api } from './api'
 import type { Allocation, Catalog, Party, PartyInvite, ServerRequest } from './api'
 import { maintenanceFor, statusFor } from './state'
+import { inviteTokenFromHash, partyInviteLink, tokenFromInviteInput } from './partyInvite'
 
 const savedRequestKey = 'arcade.lastRequestId'
 const loading = ref(true)
@@ -14,7 +15,7 @@ const catalog = ref<Catalog | null>(null)
 const userId = ref('')
 const party = ref<Party | null>(null)
 const invite = ref<PartyInvite | null>(null)
-const inviteToken = ref(new URLSearchParams(window.location.search).get('invite') || '')
+const inviteToken = ref(inviteTokenFromHash(window.location.hash))
 const partyView = ref(!!inviteToken.value)
 const partyNotice = ref('')
 const copiedInvite = ref(false)
@@ -34,7 +35,7 @@ const isLeader = computed(() => !party.value || party.value.currentRole === 'lea
 const partyOverPreset = computed(() => !!party.value && !!preset.value && party.value.members.length > preset.value.maxPlayers)
 const blockingParty = computed(() => !!party.value && !!currentRequest.value &&
   ['waiting', 'allocating', 'creating', 'running', 'stopping', 'failed_unreclaimed', 'quarantined'].includes(currentRequest.value.state))
-const inviteLink = computed(() => invite.value ? `${window.location.origin}/?invite=${encodeURIComponent(invite.value.token)}` : '')
+const inviteLink = computed(() => invite.value ? partyInviteLink(window.location.origin, invite.value.token) : '')
 const canSubmit = computed(() => !!gameId.value && !!presetId.value && !maintenance.value && !busy.value && isLeader.value && !partyOverPreset.value)
 
 function describeError(cause: unknown): string {
@@ -129,13 +130,8 @@ async function partyAction(action: () => Promise<unknown>, notice: string): Prom
   if (actionError) error.value = actionError
 }
 
-function tokenFromInput(value: string): string {
-  try { return new URL(value).searchParams.get('invite') || value.trim() }
-  catch { return value.trim() }
-}
-
 async function joinByInvite(): Promise<void> {
-  const token = tokenFromInput(inviteToken.value)
+  const token = tokenFromInviteInput(inviteToken.value)
   if (!token) { error.value = '请粘贴有效的邀请链接。'; return }
   await partyAction(async () => {
     await api.joinParty(token)
