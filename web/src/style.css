@@ -48,7 +48,7 @@ main{max-width:1240px;margin:auto;padding:0 28px 76px;min-height:calc(100vh - 14
 .game-name{display:flex;flex-direction:column;gap:4px;padding:11px 3px 0}
 .game-name strong{font-size:15px}
 .game-name small{font-size:10px;color:#75867c}
-.card-pill{position:absolute;right:16px;bottom:28px;border-radius:999px;padding:5px 9px;background:#dcebe0;color:#32664a;font-size:10px;font-weight:700}
+.card-pill{align-self:flex-start;margin-top:8px;border-radius:999px;padding:5px 9px;background:#dcebe0;color:#32664a;font-size:10px;font-weight:700;white-space:nowrap}
 .disabled .card-pill{background:#f7eadc;color:#a56b3d}
 .inline-maintenance{margin:15px 0 0;color:#a56b3d;font-size:12px}
 .preset-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
@@ -135,7 +135,6 @@ main{padding-top:24px;min-height:calc(100vh - 145px)}
 .game-art b{font-size:36px;transform:translate(5px,16px)}
 .game-name strong{font-size:16px}
 .game-name small{font-size:13px}
-.card-pill{top:15px;bottom:auto;right:18px}
 .preset-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 .preset-card{min-height:108px;gap:4px}
 .preset-main strong{font-size:22px}
@@ -208,7 +207,6 @@ footer{color:#647a6d;letter-spacing:.04em}
   .game-card{min-height:112px;flex-direction:row;align-items:center}
   .game-art{width:86px;height:85px;flex:none}
   .game-name{flex:1;min-width:0;padding:0 0 0 13px;overflow-wrap:anywhere}
-  .card-pill{position:static;flex:none;align-self:center;margin-left:8px;white-space:nowrap}
   .preset-card{min-height:auto}
   .application-sidebar{gap:12px}
   .section-panel,.status-panel,.join-panel,.side-panel{padding:23px}
@@ -226,7 +224,6 @@ footer{color:#647a6d;letter-spacing:.04em}
   .game-name{flex:none;min-width:0;padding:8px 4px 0}
   .game-name strong{font-size:14px;line-height:1.4;overflow-wrap:anywhere}
   .game-name small{font-size:11px;overflow-wrap:anywhere}
-  .card-pill{position:static;align-self:flex-start;margin:8px 4px 0;white-space:nowrap}
   .preset-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .preset-card{min-height:95px;padding:11px}
   .preset-main strong{font-size:18px}
@@ -284,7 +281,6 @@ footer{color:#647a6d;letter-spacing:.04em}
   .section-panel,.owner-panel,.apply-panel,.status-panel,.join-panel,.side-panel{padding:19px}
   .game-grid{gap:8px}
   .game-card{min-height:145px}
-  .card-pill{position:static;align-self:flex-start;margin:auto 0 0 4px}
   .preset-grid{gap:6px}
   .preset-card{padding:9px}
   .preset-main strong{font-size:17px}

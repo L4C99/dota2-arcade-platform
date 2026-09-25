@@ -295,8 +295,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
             <label v-for="(item, index) in catalog.games" :key="item.id" class="game-card" :class="{ selected: gameId === item.id, disabled: !item.acceptingNewRequests }">
               <input v-model="gameId" type="radio" name="game" :value="item.id" @change="presetId = catalog.presets.find(p => p.arcadeGameId === item.id)?.id || ''" />
               <span class="game-art" aria-hidden="true"><small>{{ String(index + 1).padStart(2, '0') }}</small><b>✦</b></span>
-              <span class="game-name"><strong>{{ item.displayName }}</strong><small>Workshop {{ item.workshopId }}</small></span>
-              <span class="card-pill">{{ item.acceptingNewRequests ? (gameId === item.id ? '已选择' : '可申请') : '维护中' }}</span>
+              <span class="game-name"><strong>{{ item.displayName }}</strong><small>Workshop {{ item.workshopId }}</small><span class="card-pill">{{ item.acceptingNewRequests ? (gameId === item.id ? '已选择' : '可申请') : '维护中' }}</span></span>
             </label>
           </div>
           <p v-if="game && !game.acceptingNewRequests" class="inline-maintenance">{{ game.maintenanceMessage || '这张地图正在维护。' }}</p>
