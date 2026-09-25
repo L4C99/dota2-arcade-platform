@@ -147,18 +147,14 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
       <strong>平台维护</strong><span>{{ catalog.globalMaintenanceMessage || '暂不接受新申请。' }}</span>
     </div>
 
-    <section class="intro">
-      <div class="intro-index"><span/> YOUR PRIVATE SERVER <span>01 / 01</span></div>
-      <h1>申请一台<br><em>Dota 2 游廊专服</em></h1>
-      <p>选择玩法，等待启动，再用页面提供的命令进入游戏。</p>
-    </section>
+    <header class="page-heading"><h1>{{ currentRequest ? '当前服务器' : '申请服务器' }}</h1></header>
 
     <div v-if="loading" class="panel loading-panel" role="status">正在恢复你的会话与申请…</div>
     <div v-else-if="!catalog" class="panel loading-panel">页面暂时无法连接平台。刷新后会继续恢复当前申请。</div>
     <div v-else-if="!currentRequest" class="request-layout">
       <div class="selection-stack">
         <section class="panel section-panel">
-          <div class="section-heading"><div><span class="eyebrow">01 / 选择内容</span><h2>游廊地图</h2></div><span class="section-meta">当前开放</span></div>
+          <div class="section-heading"><div><span class="eyebrow">01 / 选择内容</span><h2>全部地图</h2></div></div>
           <div class="game-grid">
             <label v-for="(item, index) in catalog.games" :key="item.id" class="game-card" :class="{ selected: gameId === item.id, disabled: !item.acceptingNewRequests }">
               <input v-model="gameId" type="radio" name="game" :value="item.id" @change="presetId = catalog.presets.find(p => p.arcadeGameId === item.id)?.id || ''" />
@@ -183,16 +179,20 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
         </section>
       </div>
 
-      <aside class="panel apply-panel">
-        <span class="eyebrow">03 / 申请服务器</span>
-        <h2>开一局吧</h2>
-        <p>当前仅开放一张地图和一个玩法。系统会为你确认开发节点的内容与空位。</p>
-        <div class="summary-row"><span>地图</span><strong>{{ game?.displayName || '未选择' }}</strong></div>
-        <div class="summary-row"><span>玩法</span><strong>{{ preset?.displayName || '未选择' }}</strong></div>
-        <div class="summary-row"><span>人数上限</span><strong>{{ preset?.maxPlayers ?? '—' }} 人</strong></div>
-        <p v-if="maintenance" class="maintenance-callout" role="status">{{ maintenance }}</p>
-        <button class="primary-button" type="button" :disabled="!canSubmit" @click="start">{{ busy ? '正在提交…' : '申请服务器' }} <span aria-hidden="true">↗</span></button>
-        <p class="footnote">重复点击或刷新页面会恢复同一条活动申请。</p>
+      <aside class="application-sidebar" aria-label="申请摘要">
+        <section class="panel owner-panel"><span class="eyebrow">当前申请人</span><div class="owner-line"><span class="owner-avatar" aria-hidden="true">我</span><span><strong>仅自己</strong><small>匿名玩家 · 单人申请</small></span><span class="owner-count">1 人</span></div></section>
+        <section class="panel apply-panel">
+          <span class="eyebrow">03 / 申请服务器</span>
+          <h2>申请确认</h2>
+          <p>平台会检查当前开发节点的内容和空位，再分配服务器。</p>
+          <div class="summary-row"><span>地图</span><strong>{{ game?.displayName || '未选择' }}</strong></div>
+          <div class="summary-row"><span>玩法</span><strong>{{ preset?.displayName || '未选择' }}</strong></div>
+          <div class="summary-row"><span>人数上限</span><strong>{{ preset?.maxPlayers ?? '—' }} 人</strong></div>
+          <div class="assignment-note"><span class="assignment-icon" aria-hidden="true">↗</span><span><strong>系统分配节点</strong><small>根据当前内容与容量确认</small></span><span class="assignment-check" aria-hidden="true">✓</span></div>
+          <p v-if="maintenance" class="maintenance-callout" role="status">{{ maintenance }}</p>
+          <button class="primary-button" type="button" :disabled="!canSubmit" @click="start">{{ busy ? '正在提交…' : '申请服务器' }} <span aria-hidden="true">↗</span></button>
+          <p class="footnote">已有活动申请时，会优先显示当前状态。</p>
+        </section>
       </aside>
     </div>
 
@@ -201,15 +201,16 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
         <div class="status-top"><span class="eyebrow">当前申请</span><span class="status-pill"><span class="status-dot"/>{{ state.title }}</span></div>
         <h2>{{ state.title }}</h2>
         <p class="status-description">{{ state.description }}</p>
-        <div class="facts">
+        <div class="facts" aria-label="申请内容">
           <div><span>游廊地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div>
           <div><span>游戏模式</span><strong>{{ preset?.displayName || '加载中' }}</strong></div>
+          <div><span>申请人</span><strong>仅自己</strong></div>
           <div><span>服务器节点</span><strong>{{ allocation?.nodeDisplayName || '等待分配' }}</strong></div>
         </div>
         <ol class="progress" aria-label="开服进度">
-          <li :class="{ active: state.phase === 'waiting' }"><span>01</span>等待资源</li>
-          <li :class="{ active: ['allocating', 'creating'].includes(state.phase) }"><span>02</span>分配并启动</li>
-          <li :class="{ active: ['ready', 'unavailable'].includes(state.phase) }"><span>03</span>连接服务器</li>
+          <li :class="{ active: state.phase === 'waiting', done: ['allocating', 'creating', 'ready', 'unavailable', 'stopping', 'ended'].includes(state.phase) }"><span>01</span>等待资源</li>
+          <li :class="{ active: ['allocating', 'creating'].includes(state.phase), done: ['ready', 'unavailable', 'stopping', 'ended'].includes(state.phase) }"><span>02</span>分配并启动</li>
+          <li :class="{ active: ['ready', 'unavailable'].includes(state.phase), done: ['stopping', 'ended'].includes(state.phase) && !!allocation?.joinInfoAvailableAt }"><span>03</span>连接服务器</li>
         </ol>
         <p v-if="allocation?.errorCode || allocation?.joinInfoErrorCode" class="diagnostic">诊断代码：{{ allocation.joinInfoErrorCode || allocation.errorCode }}</p>
         <div class="status-actions">
@@ -221,15 +222,13 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
       <aside v-if="state.phase === 'ready' && allocation?.joinInfo" class="panel join-panel">
         <span class="eyebrow">服务器已就绪</span><h2>进入游戏</h2>
         <p>在 Dota 2 控制台输入这条命令，即可连接当前服务器。</p>
-        <div class="connect-box"><span>手动连接命令</span><code>{{ allocation.joinInfo.connectCommand }}</code></div>
-        <button type="button" class="primary-button" @click="copyConnect">{{ copied ? '已复制' : '复制 connect 命令' }} <span aria-hidden="true">⧉</span></button>
+        <div class="connect-box"><div><span>手动连接</span><code>{{ allocation.joinInfo.connectCommand }}</code></div><button type="button" class="copy-button" @click="copyConnect">{{ copied ? '已复制' : '复制命令' }}</button></div>
         <details class="help"><summary>如何启用并打开 Dota 2 控制台 <span aria-hidden="true">⌄</span></summary>
           <ol>
             <li>在 Steam 游戏库中打开 Dota 2「属性 → 启动选项」，填入 <span class="help-copy-pair"><code>-console</code><button type="button" class="inline-button" @click="copyConsoleOption">{{ copiedConsole ? '已复制' : '复制启动项' }}</button></span>，然后重启 Dota 2。</li>
             <li>可先按默认键 <kbd>&#92;</kbd> 打开控制台；如果没有反应，请在 Dota 2 的按键设置中查看或重新绑定控制台热键，以实际设置为准。</li>
-            <li>点击上方“复制 connect 命令”，在控制台粘贴，按回车。等待游戏载入服务器。</li>
+            <li>点击上方“复制命令”，在控制台粘贴，按回车。等待游戏载入服务器。</li>
           </ol>
-          <p>若入口链接没有反应，也可以始终使用这条 connect 命令。</p>
         </details>
         <p class="join-note">结束服务器会停止当前游戏并等待完整回收。</p>
       </aside>

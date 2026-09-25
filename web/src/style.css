@@ -120,3 +120,130 @@ footer{max-width:1240px;margin:auto;border-top:1px solid #dfe5dc;padding:21px 28
 @media(max-width:900px){.request-layout,.active-layout{grid-template-columns:minmax(0,1.2fr) minmax(265px,1fr)}.game-grid{grid-template-columns:1fr}.game-card{min-height:110px;flex-direction:row;align-items:center}.game-art{width:86px;height:84px;flex:none}.game-art b{font-size:38px;transform:translate(4px,28px)}.game-name{padding:0 0 0 13px}.card-pill{bottom:18px}.facts{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.header-inner{padding:0 17px;min-height:62px}.identity{font-size:0}.identity-dot{width:9px;height:9px}main{padding:0 16px 48px}.intro{padding:44px 2px 28px}.intro h1{font-size:40px}.request-layout,.active-layout{display:grid;grid-template-columns:1fr;gap:12px}.selection-stack{gap:12px}.section-panel,.apply-panel,.join-panel,.side-panel{padding:22px}.game-grid{grid-template-columns:1fr}.game-card{min-height:109px}.preset-grid{grid-template-columns:1fr 1fr}.status-panel{padding:25px 22px}.status-panel h2{margin-top:27px}.facts{grid-template-columns:1fr 1fr}.progress li{font-size:10px}.progress li span{width:23px;height:23px}footer{padding:18px 16px 27px}}
 @media(max-width:390px){.preset-grid{grid-template-columns:1fr}.facts{grid-template-columns:1fr}.progress{gap:3px}.progress li{gap:4px;font-size:9px}}
+
+/* P-1 approved player layout: compact heading, cards, and application summary. */
+@media(min-width:1600px){.header-inner,main,footer{max-width:1400px}}
+main{padding-top:24px;min-height:calc(100vh - 145px)}
+.page-heading{padding:34px 8px 22px}
+.page-heading h1{font-size:34px;font-weight:700;line-height:1.3;margin:0}
+.eyebrow{font-size:12px}
+.request-layout,.active-layout{grid-template-columns:minmax(0,1.63fr) minmax(320px,1fr)}
+.application-sidebar{display:grid;align-content:start;gap:18px}
+.game-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.game-card{min-height:155px}
+.game-art{height:76px}
+.game-art b{font-size:36px;transform:translate(5px,16px)}
+.game-name strong{font-size:16px}
+.game-name small{font-size:13px}
+.card-pill{top:15px;bottom:auto;right:18px}
+.preset-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.preset-card{min-height:108px;gap:4px}
+.preset-main strong{font-size:22px}
+.preset-card small{font-size:12px}
+.owner-panel{padding:24px 25px}
+.owner-line{display:flex;align-items:center;gap:12px;margin-top:17px}
+.owner-avatar{display:grid;place-items:center;width:37px;height:37px;flex:none;border-radius:50%;background:#d9e6d8;font-size:12px;font-weight:800}
+.owner-line>span:nth-child(2){display:flex;flex-direction:column;gap:3px}
+.owner-line strong{font-size:14px}
+.owner-line small{font-size:12px;color:#75867c}
+.owner-count{margin-left:auto;border:1px solid #dbe5db;border-radius:999px;padding:5px 9px;color:#456258;font-size:12px;white-space:nowrap}
+.apply-panel{padding:26px}
+.apply-panel h2{font-family:Inter,"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;font-size:25px;font-weight:700;margin:11px 0 7px}
+.apply-panel>p{font-size:13px}
+.apply-panel>p:first-of-type{margin-bottom:23px}
+.summary-row{font-size:13px}
+.assignment-note{display:flex;align-items:center;gap:12px;margin-top:8px;padding:13px;border:1px solid #d0e2d1;border-radius:14px;background:#eef5ed}
+.assignment-icon{display:grid;place-items:center;flex:none;width:29px;height:29px;border-radius:9px;background:#d4e8d8;font-size:17px}
+.assignment-note>span:nth-child(2){display:flex;flex-direction:column;gap:3px}
+.assignment-note strong{font-size:13px}
+.assignment-note small{font-size:12px;color:#75867c}
+.assignment-check{display:grid;place-items:center;flex:none;width:19px;height:19px;margin-left:auto;border-radius:50%;background:#173d34;color:#fff;font-size:11px}
+.apply-panel .primary-button{margin-top:26px}
+.primary-button{font-size:15px}
+.footnote{font-size:11px!important}
+
+/* P-1 approved normal-flow hierarchy. The business states remain unchanged. */
+.status-panel,.join-panel,.side-panel{padding:30px}
+.status-pill{font-size:12px;font-weight:700}
+.phase-stopping .status-pill{background:#f7eadc;color:#9c6639}
+.phase-stopping .status-dot{background:#cf915e}
+.status-panel h2,.join-panel h2,.side-panel h2{font:700 clamp(27px,3vw,35px)/1.3 Inter,"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;letter-spacing:-.04em;margin:24px 0 9px}
+.join-panel h2,.side-panel h2{margin-top:13px}
+.status-description{font-size:14px;line-height:1.7;margin-bottom:22px}
+.facts{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;border-top:1px solid #dce2d8;border-bottom:0;padding:0}
+.facts div{flex-direction:row;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #dce2d8;font-size:13px}
+.facts span{font-size:13px}
+.facts strong{font-size:13px;text-align:right;overflow-wrap:anywhere}
+.progress{gap:8px;margin-top:25px}
+.progress li{min-height:48px;padding:8px 10px;border:1px solid #dce2d8;border-radius:12px;font-size:12px;font-weight:400;color:#75867c}
+.progress li span{width:23px;height:23px;flex:none;border:0;background:#edf2eb}
+.progress li.active{background:#eaf4e9;border-color:#b6d1bc;color:#173d34;font-weight:700}
+.progress li.active span{background:#d3e8d6}
+.progress li.done{color:#4f795f}
+.progress li.done span{background:#d8e9db;color:#173d34}
+.status-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;margin-top:25px}
+.secondary-button{background:#f7faf6;font-size:13px}
+.secondary-button.danger{border-color:#e5d2be;background:#fcf8f2;color:#9a633a}
+.secondary-button.danger:hover:not(:disabled){background:#f7eadc}
+.join-panel>p,.side-panel>p{font-size:13px;line-height:1.65;color:#456258}
+.connect-box{flex-direction:row;align-items:flex-end;justify-content:space-between;gap:10px;background:#f3f8f2;border-radius:14px;margin:0}
+.connect-box>div{min-width:0}
+.connect-box span{font-size:12px;font-weight:400;letter-spacing:0;color:#75867c}
+.connect-box code{display:block;font-size:16px}
+.copy-button{flex:none;padding:9px 11px;border:1px solid #a9c2ad;border-radius:9px;background:#fffefa;color:#173d34;font-size:12px;font-weight:700}
+.copy-button:hover{background:#eaf4e9}
+.help{border-bottom:1px solid #dce2d8;margin-top:18px;padding:15px 0}
+.help summary{font-size:13px;color:#173d34}
+.help ol{font-size:14px;line-height:1.75;margin:14px 0 8px}
+.help li,.help p{font-size:14px;line-height:1.75}
+.help li+li{margin-top:6px}
+.help code,.help kbd{font-size:1em}
+.inline-button{font-size:13px;color:#173d34}
+.join-note{margin-top:20px!important;font-size:13px!important;color:#75867c!important}
+footer{color:#647a6d;letter-spacing:.04em}
+
+@media(max-width:900px){
+  .request-layout,.active-layout{grid-template-columns:minmax(0,1.35fr) minmax(265px,1fr)}
+  .game-grid,.preset-grid,.facts,.progress{grid-template-columns:1fr}
+  .game-card{min-height:112px;flex-direction:row;align-items:center}
+  .game-art{width:86px;height:85px;flex:none}
+  .game-name{padding:0 0 0 13px}
+  .card-pill{top:auto;bottom:20px;right:14px}
+  .preset-card{min-height:auto}
+  .application-sidebar{gap:12px}
+  .section-panel,.status-panel,.join-panel,.side-panel{padding:23px}
+}
+@media(max-width:700px){
+  main{padding:15px 16px 45px}
+  .page-heading{padding:25px 2px 18px}
+  .page-heading h1{font-size:28px}
+  .request-layout,.active-layout{grid-template-columns:1fr;gap:12px}
+  .selection-stack,.application-sidebar{gap:12px}
+  .section-panel,.owner-panel,.apply-panel,.status-panel,.join-panel,.side-panel{padding:22px}
+  .game-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .game-card{min-height:139px;flex-direction:column;align-items:stretch}
+  .game-art{width:auto;height:72px}
+  .game-name{padding:8px 4px 0}
+  .game-name strong{font-size:14px}
+  .game-name small{font-size:11px}
+  .preset-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .preset-card{min-height:95px;padding:11px}
+  .preset-main strong{font-size:18px}
+  .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .progress{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .status-panel h2,.join-panel h2,.side-panel h2{font-size:28px}
+  .status-description{font-size:13px}
+}
+@media(max-width:410px){
+  .section-panel,.owner-panel,.apply-panel,.status-panel,.join-panel,.side-panel{padding:19px}
+  .game-grid{gap:8px}
+  .game-card{min-height:145px}
+  .card-pill{position:static;align-self:flex-start;margin:auto 0 0 4px}
+  .preset-grid{gap:6px}
+  .preset-card{padding:9px}
+  .preset-main strong{font-size:17px}
+  .facts{grid-template-columns:1fr}
+  .progress li{flex-direction:column;align-items:flex-start;gap:5px;font-size:11px}
+  .connect-box{align-items:stretch;flex-direction:column}
+  .copy-button{align-self:flex-start}
+}
