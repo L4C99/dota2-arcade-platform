@@ -68,3 +68,15 @@ Human Dota join, external game-port reachability, Windows VM real d2core
 operation, and actual 30-day history expiration remain unverified. They are
 not claimed by these P0E tests. No tag, Release, production deployment,
 firewall, cloud security group, or NAT change was made.
+
+## Ready timing clarification
+
+Successful real create acceptance to d2core Ready took about 12.4, 15.6,
+and 10.1 seconds in the three P0E runs. Together with the P0D success at
+about 13 seconds, observed normal Ready latency is approximately 10–16
+seconds. The earlier P0D `START_TIMEOUT` was a separate run using a
+120-second ceiling; its Steam success marker was still missing at that
+deadline. The later 300-second ceiling applies only to the current
+development template variant. It is neither normal startup latency nor a
+frozen production timeout; production `TemplateRevision` and timeout remain
+to be decided from later player end-to-end data and more startup samples.
