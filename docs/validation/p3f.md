@@ -1,0 +1,22 @@
+# P3F real Linux and Windows Controller validation
+
+## Runtime and recovery
+
+The existing authorized Linux amd64 development Node and the owner-selected Windows 10 amd64 VM each ran a Controller built from clean P3E checkpoint `f4d7cb3dd0b9b58b89ca5d78c020d17ce33d96e8`. The transferred binaries' SHA256 values matched on source and destination. Both Controllers started under their ordinary development accounts, authenticated to the development Platform over trusted HTTPS, and sent fresh compatible heartbeats. Platform reports confirmed Node API version 1, fixed d2core v0.1.1 commit `988720ad85af1f0d97bfe98ec4da4fcbb070beea` and protocol 1, hard capacity 1, and Controller-reported `p1-test-v1 / confirmed` content on each Node.
+
+On **each** platform, a manual business request was claimed as one durable NodeJob with one frozen create execution. The Controller used the local d2core protocol, followed the create operation and instance status to real Dota Ready, and reported JoinInfo based on d2core's actual port. Linux reported local/public 28000 and Windows reported local/public 28100. Windows JoinInfo contained the VM's private host; this establishes the local mapping fact only, not public internet reachability.
+
+While each first instance was running, only its Controller was restarted. The d2core manager and Dota process stayed running. A fresh compatible heartbeat followed the restart. The ServerRequest and Allocation remained running with the same Allocation ID, create NodeJob ID, instance ID, and actual port; the database still had one frozen create execution and d2core listed exactly one instance. Thus neither restart duplicated create. The owner then used the formal stop path. Its stop NodeJob succeeded, the Allocation became reclaimed, and direct d2core status showed `lifecycle=reclaimed`, `process=stopped`, `cleanup=complete`; `list` was empty. A second new request was then scheduled to the same reconnected Node and independently reached Ready and full reclaim. This passed separately on Linux and Windows.
+
+Two earlier Linux test-harness attempts stopped before the restart step: the first read a nonexistent player JoinInfo `localPort` field, and the second queried the private d2core data-dir as root. Neither was a platform failure. The first was stopped through the normal owner-checked Store stop method after its test session had already logged out; the second through the test session's normal HTTP stop endpoint. Both resulting Allocations and Stop NodeJobs reached reclaimed/succeeded before the corrected full run. The temporary recovery helper was removed from the development host.
+
+## Verification gate and final state
+
+- `go test ./... -count=1`, `go vet ./...`, and clean-source Linux/Windows Platform and Controller builds: PASS.
+- Web lint, typecheck, four Vitest cases, and production build: PASS.
+- Complete Store and HTTP API PostgreSQL integration binaries against random disposable schemas in the authorized development database: PASS. The post-run schema list contained only `information_schema`, `pg_catalog`, and `public`; temporary binaries, scripts, and logs were removed.
+- Final development Platform loopback health: PASS. Both Node reports were fresh, compatible, `p1-test-v1 / confirmed`, desired/hard 1/1, priority 0, Drain false, and occupied capacity zero. Development history retained 22 ended and one older cancelled ServerRequests, 22 reclaimed Allocations, 26 succeeded create and 27 succeeded stop NodeJobs, plus one explained historical P0 create `failed_with_effect`; no open job or unreclaimed Allocation remained. Both fixed d2core `list` results were empty, and both Controller/d2core manager processes remained running.
+
+## Limits
+
+The Windows VM is on a private network, so public Windows join, public game-node domain, vendor NAT/explicit forwarding, and asymmetric public egress remain **NOT VERIFIED** in a real external topology. No firewall, router, NAT, security-group, VPK, or production service configuration changed. The Windows d2core manager and Controller run in foreground SSH sessions under the ordinary account; unattended restart persistence was not configured or claimed. P3C's stale/offline and unknown-effect matrix passed in disposable-schema integration tests, but a real five-minute stale/offline outage was not repeated on both Nodes in P3F. P3F checkpoint CI and the separate final P3 UI owner confirmation are still pending at this document's checkpoint.
