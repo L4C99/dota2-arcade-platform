@@ -9,6 +9,7 @@ const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
 const copied = ref(false)
+const copiedConsole = ref(false)
 const catalog = ref<Catalog | null>(null)
 const currentRequest = ref<ServerRequest | null>(null)
 const allocation = ref<Allocation | null>(null)
@@ -100,6 +101,14 @@ async function copyConnect(): Promise<void> {
     copied.value = true
     window.setTimeout(() => { copied.value = false }, 2500)
   } catch { error.value = '复制失败。请手动选中并复制下方命令。' }
+}
+
+async function copyConsoleOption(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText('-console')
+    copiedConsole.value = true
+    window.setTimeout(() => { copiedConsole.value = false }, 2500)
+  } catch { error.value = '复制启动项失败。请手动选中并复制 -console。' }
 }
 
 function newRequest(): void {
@@ -216,8 +225,8 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
         <button type="button" class="primary-button" @click="copyConnect">{{ copied ? '已复制' : '复制 connect 命令' }} <span aria-hidden="true">⧉</span></button>
         <details class="help"><summary>如何启用并打开 Dota 2 控制台 <span aria-hidden="true">⌄</span></summary>
           <ol>
-            <li>在 Steam 游戏库找到 Dota 2，打开游戏属性，在启动选项中填入 <code>-console</code>，然后启动或重启游戏。</li>
-            <li>如果控制台没有自动打开，在 Dota 2 的按键设置中找到控制台快捷键，绑定一个按键并按它打开。</li>
+            <li>在 Steam 游戏库中打开 Dota 2「属性 → 启动选项」，填入 <span class="help-copy-pair"><code>-console</code><button type="button" class="inline-button" @click="copyConsoleOption">{{ copiedConsole ? '已复制' : '复制启动项' }}</button></span>，然后重启 Dota 2。</li>
+            <li>可先按默认键 <kbd>&#92;</kbd> 打开控制台；如果没有反应，请在 Dota 2 的按键设置中查看或重新绑定控制台热键，以实际设置为准。</li>
             <li>点击上方“复制 connect 命令”，在控制台粘贴，按回车。等待游戏载入服务器。</li>
           </ol>
           <p>若入口链接没有反应，也可以始终使用这条 connect 命令。</p>
@@ -225,6 +234,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
         <p class="join-note">结束服务器会停止当前游戏并等待完整回收。</p>
       </aside>
       <aside v-else-if="state.phase === 'unavailable'" class="panel side-panel"><span class="eyebrow">连接状态</span><h2>暂时无法给出连接地址</h2><p>服务器仍在运行。当前端口映射信息不足或已变化，页面不会显示未经确认的命令。你可以稍后刷新或结束服务器。</p></aside>
+      <aside v-else-if="state.phase === 'ended'" class="panel side-panel"><span class="eyebrow">本局已结束</span><h2>服务器已回收</h2><p>点击左侧“重新申请”即可回到地图和玩法选择。刷新页面仍能看到本局的结束状态。</p></aside>
       <aside v-else class="panel side-panel"><span class="eyebrow">申请已保存</span><h2>可以稍后回来</h2><p>关闭浏览器或刷新页面后，这台服务器的状态仍会保留在当前匿名会话中。</p></aside>
     </div>
   </main>

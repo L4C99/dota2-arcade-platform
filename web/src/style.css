@@ -109,6 +109,11 @@ main{max-width:1240px;margin:auto;padding:0 28px 76px;min-height:calc(100vh - 14
 .help ol{padding-left:20px;margin:17px 0 8px}
 .help li,.help p{font-size:11px;line-height:1.8;color:#587268;margin-bottom:10px}
 .help code{background:#edf3ea;border-radius:4px;padding:2px 4px;color:#173d34}
+.help-copy-pair{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap}
+.help-copy-pair code{user-select:all}
+.inline-button{border:0;background:transparent;color:#32664a;font-size:11px;font-weight:800;padding:2px 0;text-decoration:underline;text-underline-offset:3px}
+.inline-button:hover{color:#173d34}
+.help kbd{display:inline-block;border:1px solid #cbded0;border-radius:5px;background:#f1f7ef;color:#173d34;padding:0 5px;font:700 11px ui-monospace,Consolas,monospace}
 .join-note{border-top:1px solid #e5eae2;padding-top:17px;margin:18px 0 0!important;font-size:10px!important}
 .side-panel p{margin-bottom:0}
 footer{max-width:1240px;margin:auto;border-top:1px solid #dfe5dc;padding:21px 28px 32px;display:flex;justify-content:space-between;gap:12px;color:#8b9a8e;font-size:11px}

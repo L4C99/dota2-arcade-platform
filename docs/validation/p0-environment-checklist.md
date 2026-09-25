@@ -42,6 +42,7 @@ owner and still subject to host checks.
 | P1B content fact, Allocation and real business create/stop | P1B | confirmed in development | Controller SHA256 readback, migration 5, atomic one-node reservation, real Dota Ready and full reclaim through player-owned business objects. See [P1B](p1b.md). |
 | P1C actual-port JoinInfo and connect data | P1C | confirmed in development; human reachability unverified | Migration 6, actual d2core port to Controller mapping, HTTPS connect command, real Ready and full reclaim. A2S and one-click entries remain disabled. See [P1C](p1c.md). |
 | P1D formal player Web | P1D | HTTPS/API confirmed; human browser view pending | Vue player page, Session/catalog/current request recovery, state and connect help, trusted static Web root; candidate HTTPS page/assets and API returned successfully. See [P1D](p1d.md). |
+| P1E real player flow and full reclaim | P1E | owner-reported complete flow; system cleanup confirmed | Owner supplied ended-page screenshot and reported normal full flow; two real requests reached JoinInfo and full reclaim, no active instance or business job remains. Revised console-help steps were not separately rechecked at owner direction. See [P1E](p1e.md). |
 
 Credential values, keys, TLS private material, VPKs, and private logs must
 never be added to this file or committed to Git.
