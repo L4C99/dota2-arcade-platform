@@ -129,12 +129,19 @@ func TestP1BAllocationCapacityAndLifecycle(t *testing.T) {
 	if _, err := s.ReportJob(ctx, nodeID, job.ID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_test1", OperationID: "o_test1"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ReportJob(ctx, nodeID, job.ID, nodev1.ReportRequest{State: "succeeded", InstanceID: "i_test1", OperationID: "o_test1"}); err != nil {
+	join := &nodev1.JoinInfo{LocalPort: 28000, PublicPort: 28000, ConnectHost: "127.0.0.1",
+		EntryConfigRevision: nodev1.EntryConfigRevision(p1TestHeartbeat("test-v2").Network)}
+	if _, err := s.ReportJob(ctx, nodeID, job.ID, nodev1.ReportRequest{State: "succeeded", InstanceID: "i_test1", OperationID: "o_test1", JoinInfo: join}); err != nil {
 		t.Fatal(err)
 	}
 	var started, ready bool
 	if err := s.Pool.QueryRow(ctx, `SELECT create_started_at IS NOT NULL,ready_at IS NOT NULL FROM allocations WHERE id=$1`, allocationID).Scan(&started, &ready); err != nil || !started || !ready {
 		t.Fatalf("timestamps start=%t ready=%t: %v", started, ready, err)
+	}
+	visible, err := s.UserRequestAllocation(ctx, owner, allocatedRequestID)
+	if err != nil || visible.JoinInfo == nil || visible.JoinInfo.ConnectCommand != "connect 127.0.0.1:28000" ||
+		visible.JoinInfo.SteamURI != "" || visible.JoinInfo.SteamChinaURI != "" || visible.JoinInfoAvailableAt == nil {
+		t.Fatalf("unverified URI or missing connect: %+v %v", visible, err)
 	}
 	if changed, err := s.TryAllocateOne(ctx); err != nil || changed {
 		t.Fatalf("capacity oversold before stop: %t %v", changed, err)

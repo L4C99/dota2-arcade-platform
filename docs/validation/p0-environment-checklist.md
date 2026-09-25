@@ -40,6 +40,7 @@ owner and still subject to host checks.
 | P0 owner acceptance | P0 closure | confirmed | Owner formally accepted P0A–P0E; this is not V1 review, RC, Release, or production acceptance. |
 | P1A development catalog and request API | P1A | confirmed in development | One owner-confirmed test ContentVersion, n6 preset, logical development template binding, migration 4, isolated database tests and HTTP recovery check. See [P1A](p1a.md). |
 | P1B content fact, Allocation and real business create/stop | P1B | confirmed in development | Controller SHA256 readback, migration 5, atomic one-node reservation, real Dota Ready and full reclaim through player-owned business objects. See [P1B](p1b.md). |
+| P1C actual-port JoinInfo and connect data | P1C | confirmed in development; human reachability unverified | Migration 6, actual d2core port to Controller mapping, HTTPS connect command, real Ready and full reclaim. A2S and one-click entries remain disabled. See [P1C](p1c.md). |
 
 Credential values, keys, TLS private material, VPKs, and private logs must
 never be added to this file or committed to Git.

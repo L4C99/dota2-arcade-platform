@@ -168,6 +168,10 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 	if report.State == "failed_with_effect" && instanceID == "" && operationID == "" {
 		return nodev1.Job{}, fmt.Errorf("%w: effectful failure lacks core IDs", ErrJobConflict)
 	}
+	if allocationID != "" && kind == "create" && report.State == "succeeded" &&
+		(report.JoinInfo == nil) == (report.JoinInfoErrorCode == "") {
+		return nodev1.Job{}, fmt.Errorf("%w: business Ready requires JoinInfo or structured error", ErrJobConflict)
+	}
 	if oldState == report.State && instanceID == oldInstanceID && operationID == oldOperationID &&
 		errorCode == report.ErrorCode && errorStage == report.ErrorStage {
 		if err := tx.Commit(ctx); err != nil {
@@ -185,7 +189,8 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 		return nodev1.Job{}, err
 	}
 	if allocationID != "" {
-		if err := applyAllocationJobReport(ctx, tx, allocationID, nodeID, kind, report.State, instanceID, report.ErrorCode); err != nil {
+		if err := applyAllocationJobReport(ctx, tx, allocationID, nodeID, kind, report.State, instanceID,
+			report.ErrorCode, report.JoinInfo, report.JoinInfoErrorCode); err != nil {
 			return nodev1.Job{}, err
 		}
 	}
@@ -206,7 +211,8 @@ func (f FrozenCreate) Contract() nodev1.FrozenCreate {
 		Port: f.Port, FingerprintSHA256: hex.EncodeToString(f.FingerprintSHA)}
 }
 
-func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, nodeID, kind, state, instanceID, errorCode string) error {
+func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, nodeID, kind, state, instanceID, errorCode string,
+	join *nodev1.JoinInfo, joinErrorCode string) error {
 	var requestID string
 	if err := tx.QueryRow(ctx, `SELECT server_request_id FROM allocations WHERE id=$1 FOR UPDATE`, allocationID).Scan(&requestID); err != nil {
 		return err
@@ -246,6 +252,29 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 		WHERE id=$1`, allocationID, allocationState, errorCode, at)
 	if err != nil {
 		return err
+	}
+	if kind == "create" && state == "succeeded" {
+		if join != nil {
+			var currentRevision string
+			if err := tx.QueryRow(ctx, `SELECT entry_config_revision FROM node_entry_capabilities WHERE node_id=$1`, nodeID).Scan(&currentRevision); err != nil {
+				return err
+			}
+			if join.EntryConfigRevision != currentRevision {
+				join, joinErrorCode = nil, "NETWORK_CONFIG_CHANGED"
+			}
+		}
+		if join != nil {
+			_, err = tx.Exec(ctx, `UPDATE allocations SET join_local_port=$2,join_public_port=$3,
+				join_connect_host=$4,join_protocol_ip=NULLIF($5,''),join_entry_config_revision=$6,
+				join_info_error_code=NULL,join_info_available_at=COALESCE(join_info_available_at,$7)
+				WHERE id=$1`, allocationID, join.LocalPort, join.PublicPort, join.ConnectHost, join.ProtocolIP,
+				join.EntryConfigRevision, at)
+		} else {
+			_, err = tx.Exec(ctx, `UPDATE allocations SET join_info_error_code=$2 WHERE id=$1`, allocationID, joinErrorCode)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	_, err = tx.Exec(ctx, `UPDATE server_requests SET state=$2,updated_at=$3 WHERE id=$1`, requestID, requestState, at)
 	if err != nil {

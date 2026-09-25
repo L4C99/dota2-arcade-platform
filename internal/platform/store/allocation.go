@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -129,35 +131,68 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 }
 
 type Allocation struct {
-	ID                  string     `json:"id"`
-	ServerRequestID     string     `json:"serverRequestId"`
-	AttemptSequence     int        `json:"attemptSequence"`
-	NodeID              string     `json:"nodeId"`
-	NodeDisplayName     string     `json:"nodeDisplayName"`
-	ContentVersionID    string     `json:"contentVersionId"`
-	State               string     `json:"state"`
-	AssignedAt          time.Time  `json:"assignedAt"`
-	CreateStartedAt     *time.Time `json:"createStartedAt,omitempty"`
-	ReadyAt             *time.Time `json:"readyAt,omitempty"`
-	JoinInfoAvailableAt *time.Time `json:"joinInfoAvailableAt,omitempty"`
-	ReclaimedAt         *time.Time `json:"reclaimedAt,omitempty"`
-	ErrorCode           string     `json:"errorCode,omitempty"`
+	ID                  string          `json:"id"`
+	ServerRequestID     string          `json:"serverRequestId"`
+	AttemptSequence     int             `json:"attemptSequence"`
+	NodeID              string          `json:"nodeId"`
+	NodeDisplayName     string          `json:"nodeDisplayName"`
+	ContentVersionID    string          `json:"contentVersionId"`
+	State               string          `json:"state"`
+	AssignedAt          time.Time       `json:"assignedAt"`
+	CreateStartedAt     *time.Time      `json:"createStartedAt,omitempty"`
+	ReadyAt             *time.Time      `json:"readyAt,omitempty"`
+	JoinInfoAvailableAt *time.Time      `json:"joinInfoAvailableAt,omitempty"`
+	ReclaimedAt         *time.Time      `json:"reclaimedAt,omitempty"`
+	ErrorCode           string          `json:"errorCode,omitempty"`
+	JoinInfo            *PlayerJoinInfo `json:"joinInfo,omitempty"`
+	JoinInfoErrorCode   string          `json:"joinInfoErrorCode,omitempty"`
+}
+
+type PlayerJoinInfo struct {
+	ConnectCommand string `json:"connectCommand"`
+	ConnectHost    string `json:"connectHost"`
+	PublicPort     int    `json:"publicPort"`
+	SteamURI       string `json:"steamUri,omitempty"`
+	SteamChinaURI  string `json:"steamChinaUri,omitempty"`
 }
 
 func (s *Store) UserRequestAllocation(ctx context.Context, userID, requestID string) (*Allocation, error) {
 	var a Allocation
+	var localPort, publicPort *int
+	var connectHost, protocolIP, joinRevision, currentRevision string
+	var steamVerified, steamEnabled, chinaVerified, chinaEnabled bool
 	err := s.Pool.QueryRow(ctx, `SELECT a.id,a.server_request_id,a.attempt_sequence,a.node_id,n.display_name,
 		a.content_version_id,a.state,a.assigned_at,a.create_started_at,a.ready_at,a.join_info_available_at,
-		a.reclaimed_at,COALESCE(a.error_code,'')
+		a.reclaimed_at,COALESCE(a.error_code,''),a.join_local_port,a.join_public_port,
+		COALESCE(a.join_connect_host,''),COALESCE(a.join_protocol_ip,''),COALESCE(a.join_entry_config_revision,''),
+		COALESCE(a.join_info_error_code,''),COALESCE(c.entry_config_revision,''),
+		COALESCE(c.steam_entry_verified,false),COALESCE(c.steam_entry_enabled,false),
+		COALESCE(c.steamchina_entry_verified,false),COALESCE(c.steamchina_entry_enabled,false)
 		FROM allocations a JOIN server_requests r ON r.id=a.server_request_id JOIN nodes n ON n.id=a.node_id
+		LEFT JOIN node_entry_capabilities c ON c.node_id=a.node_id
 		WHERE r.owner_user_id=$1 AND r.id=$2 ORDER BY a.attempt_sequence DESC LIMIT 1`, userID, requestID).
 		Scan(&a.ID, &a.ServerRequestID, &a.AttemptSequence, &a.NodeID, &a.NodeDisplayName, &a.ContentVersionID,
-			&a.State, &a.AssignedAt, &a.CreateStartedAt, &a.ReadyAt, &a.JoinInfoAvailableAt, &a.ReclaimedAt, &a.ErrorCode)
+			&a.State, &a.AssignedAt, &a.CreateStartedAt, &a.ReadyAt, &a.JoinInfoAvailableAt, &a.ReclaimedAt, &a.ErrorCode,
+			&localPort, &publicPort, &connectHost, &protocolIP, &joinRevision, &a.JoinInfoErrorCode, &currentRevision,
+			&steamVerified, &steamEnabled, &chinaVerified, &chinaEnabled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	if a.State == "running" && a.JoinInfoAvailableAt != nil && a.ReadyAt != nil && localPort != nil && publicPort != nil &&
+		connectHost != "" && joinRevision == currentRevision {
+		a.JoinInfo = &PlayerJoinInfo{ConnectCommand: "connect " + net.JoinHostPort(connectHost, strconv.Itoa(*publicPort)),
+			ConnectHost: connectHost, PublicPort: *publicPort}
+		if protocolIP != "" && steamVerified && steamEnabled {
+			a.JoinInfo.SteamURI = "steam://connect/" + net.JoinHostPort(protocolIP, strconv.Itoa(*publicPort))
+		}
+		if protocolIP != "" && chinaVerified && chinaEnabled {
+			a.JoinInfo.SteamChinaURI = "steamchina://connect/" + net.JoinHostPort(protocolIP, strconv.Itoa(*publicPort))
+		}
+	} else if a.State == "running" && a.JoinInfoAvailableAt != nil && joinRevision != currentRevision {
+		a.JoinInfoErrorCode = "NETWORK_CONFIG_CHANGED"
 	}
 	return &a, nil
 }

@@ -134,6 +134,23 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 	if err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}
+	revision := nodev1.EntryConfigRevision(h.Network)
+	_, err = tx.Exec(ctx, `INSERT INTO node_entry_capabilities(node_id,entry_config_revision,a2s_enabled,a2s_query_ok,reported_at)
+		VALUES($1,$2,$3,$4,$5) ON CONFLICT(node_id) DO UPDATE SET
+		entry_config_revision=EXCLUDED.entry_config_revision,
+		a2s_enabled=EXCLUDED.a2s_enabled,a2s_query_ok=EXCLUDED.a2s_query_ok,
+		steam_entry_verified=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_entry_verified ELSE false END,
+		steam_entry_enabled=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_entry_enabled ELSE false END,
+		steam_verified_at=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verified_at ELSE NULL END,
+		steam_verified_by=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verified_by ELSE NULL END,
+		steamchina_entry_verified=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_entry_verified ELSE false END,
+		steamchina_entry_enabled=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_entry_enabled ELSE false END,
+		steamchina_verified_at=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verified_at ELSE NULL END,
+		steamchina_verified_by=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verified_by ELSE NULL END,
+		reported_at=EXCLUDED.reported_at`, nodeID, revision, h.Network.A2SEnabled, h.Network.A2SEnabled && h.A2SQueryOK, reportedAt)
+	if err != nil {
+		return nodev1.HeartbeatResult{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}

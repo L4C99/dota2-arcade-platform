@@ -12,6 +12,7 @@ import (
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/core"
+	"github.com/L4C99/dota2-arcade-platform/internal/controller/network"
 )
 
 type Platform interface {
@@ -209,7 +210,9 @@ func (r *Runner) observe(ctx context.Context, job nodev1.Job) error {
 	}
 	if op.Status == "succeeded" {
 		if job.Kind == "create" && instance.Lifecycle == "active" && instance.Process == "running" && instance.Room == "ready" {
-			return r.report(ctx, job, nodev1.ReportRequest{State: "succeeded", InstanceID: job.InstanceID, OperationID: job.OperationID})
+			join, joinError := network.JoinInfo(r.Network, instance.Port)
+			return r.report(ctx, job, nodev1.ReportRequest{State: "succeeded", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, JoinInfo: join, JoinInfoErrorCode: joinError})
 		}
 		if job.Kind == "stop" && reclaimed(instance) {
 			return r.report(ctx, job, nodev1.ReportRequest{State: "succeeded", InstanceID: job.InstanceID, OperationID: job.OperationID})

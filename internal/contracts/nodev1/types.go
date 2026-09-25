@@ -3,10 +3,12 @@ package nodev1
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -48,6 +50,7 @@ type Heartbeat struct {
 	D2CoreProtocolVersion int           `json:"d2coreProtocolVersion"`
 	HardMaxInstances      int           `json:"hardMaxInstances"`
 	Network               NetworkFacts  `json:"network"`
+	A2SQueryOK            bool          `json:"a2sQueryOk"`
 	Content               []ContentFact `json:"content"`
 }
 
@@ -93,16 +96,55 @@ type PrepareCreateRequest struct {
 }
 
 type ReportRequest struct {
-	State       string `json:"state"`
-	InstanceID  string `json:"instanceId,omitempty"`
-	OperationID string `json:"operationId,omitempty"`
-	ErrorCode   string `json:"errorCode,omitempty"`
-	ErrorStage  string `json:"errorStage,omitempty"`
+	State             string    `json:"state"`
+	InstanceID        string    `json:"instanceId,omitempty"`
+	OperationID       string    `json:"operationId,omitempty"`
+	ErrorCode         string    `json:"errorCode,omitempty"`
+	ErrorStage        string    `json:"errorStage,omitempty"`
+	JoinInfo          *JoinInfo `json:"joinInfo,omitempty"`
+	JoinInfoErrorCode string    `json:"joinInfoErrorCode,omitempty"`
+}
+
+type JoinInfo struct {
+	LocalPort           int    `json:"localPort"`
+	PublicPort          int    `json:"publicPort"`
+	ConnectHost         string `json:"connectHost"`
+	ProtocolIP          string `json:"protocolIp,omitempty"`
+	EntryConfigRevision string `json:"entryConfigRevision"`
 }
 
 var workshopIDPattern = regexp.MustCompile(`^[0-9]{1,20}$`)
 var domainPattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$`)
 var coreTokenPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
+var revisionPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// EntryConfigRevision covers the complete potential port set and entry
+// configuration. Mapping order in a local JSON file does not affect it.
+func EntryConfigRevision(n NetworkFacts) string {
+	mappings := append([]PortMapping(nil), n.Mappings...)
+	sort.Slice(mappings, func(i, j int) bool { return mappings[i].Local < mappings[j].Local })
+	encoded, _ := json.Marshal(struct {
+		ConnectHost  string        `json:"connectHost"`
+		ProtocolIP   string        `json:"protocolIp"`
+		LocalPortMin int           `json:"localPortMin"`
+		LocalPortMax int           `json:"localPortMax"`
+		MappingMode  string        `json:"mappingMode"`
+		Mappings     []PortMapping `json:"mappings"`
+		A2SEnabled   bool          `json:"a2sEnabled"`
+	}{n.ConnectHost, n.ProtocolIP, n.LocalPortMin, n.LocalPortMax, n.MappingMode, mappings, n.A2SEnabled})
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:])
+}
+
+func (j JoinInfo) Validate() error {
+	if j.LocalPort < 1 || j.LocalPort > 65535 || j.PublicPort < 1 || j.PublicPort > 65535 ||
+		j.ConnectHost == "" || len(j.ConnectHost) > 253 ||
+		(net.ParseIP(j.ConnectHost) == nil && (!domainPattern.MatchString(j.ConnectHost) || strings.Contains(j.ConnectHost, ".."))) ||
+		(j.ProtocolIP != "" && net.ParseIP(j.ProtocolIP) == nil) || !revisionPattern.MatchString(j.EntryConfigRevision) {
+		return fmt.Errorf("invalid JoinInfo")
+	}
+	return nil
+}
 
 func (r ReportRequest) Validate() error {
 	switch r.State {
@@ -114,6 +156,20 @@ func (r ReportRequest) Validate() error {
 		if value != "" && !coreTokenPattern.MatchString(value) {
 			return fmt.Errorf("invalid NodeJob report field")
 		}
+	}
+	if r.JoinInfoErrorCode != "" && !coreTokenPattern.MatchString(r.JoinInfoErrorCode) {
+		return fmt.Errorf("invalid JoinInfo error")
+	}
+	if r.JoinInfo != nil {
+		if r.State != "succeeded" || r.JoinInfoErrorCode != "" {
+			return fmt.Errorf("unexpected JoinInfo")
+		}
+		if err := r.JoinInfo.Validate(); err != nil {
+			return err
+		}
+	}
+	if r.JoinInfoErrorCode != "" && r.State != "succeeded" {
+		return fmt.Errorf("unexpected JoinInfo error")
 	}
 	return nil
 }
@@ -136,6 +192,9 @@ func (h Heartbeat) Validate() error {
 	}
 	if err := h.Network.Validate(h.HardMaxInstances); err != nil {
 		return err
+	}
+	if h.A2SQueryOK && !h.Network.A2SEnabled {
+		return fmt.Errorf("A2S query cannot be OK when disabled")
 	}
 	if len(h.Content) > 128 {
 		return fmt.Errorf("too many content facts")

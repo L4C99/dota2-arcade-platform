@@ -106,13 +106,32 @@ func testTemplate(t *testing.T) string {
 
 func TestCreatePreparedAcceptedThenReady(t *testing.T) {
 	p := &fakePlatform{job: testJob()}
-	c := &fakeCore{result: core.Accepted{Accepted: true, InstanceID: "i_1", OperationID: "o_1"}, op: core.Operation{OperationID: "o_1", Kind: "create", InstanceID: "i_1", Status: "succeeded"}, instance: core.Instance{InstanceID: "i_1", Lifecycle: "active", Process: "running", Room: "ready"}}
-	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
+	c := &fakeCore{result: core.Accepted{Accepted: true, InstanceID: "i_1", OperationID: "o_1"}, op: core.Operation{OperationID: "o_1", Kind: "create", InstanceID: "i_1", Status: "succeeded"}, instance: core.Instance{InstanceID: "i_1", Port: 28000, Lifecycle: "active", Process: "running", Room: "ready"}}
+	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)}, Network: nodev1.NetworkFacts{ConnectHost: "node.example", LocalPortMin: 28000, LocalPortMax: 28000, MappingMode: "identity"}}
 	if err := r.Step(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if !p.prepared || c.creates != 1 || p.job.State != "succeeded" || len(p.reports) != 2 || p.reports[0].State != "accepted" {
 		t.Fatalf("flow: %+v %+v", p, c)
+	}
+	if p.reports[1].JoinInfo == nil || p.reports[1].JoinInfo.PublicPort != 28000 || p.reports[1].JoinInfoErrorCode != "" {
+		t.Fatalf("Ready did not use actual port: %+v", p.reports[1])
+	}
+}
+
+func TestReadyWithoutActualPortMappingReportsError(t *testing.T) {
+	p := &fakePlatform{job: testJob()}
+	c := &fakeCore{result: core.Accepted{Accepted: true, InstanceID: "i_1", OperationID: "o_1"},
+		op:       core.Operation{OperationID: "o_1", Kind: "create", InstanceID: "i_1", Status: "succeeded"},
+		instance: core.Instance{InstanceID: "i_1", Port: 28001, Lifecycle: "active", Process: "running", Room: "ready"}}
+	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)},
+		Network: nodev1.NetworkFacts{ConnectHost: "node.example", LocalPortMin: 28000, LocalPortMax: 28000, MappingMode: "identity"}}
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p.job.State != "succeeded" || p.reports[1].JoinInfo != nil ||
+		p.reports[1].JoinInfoErrorCode != "PORT_MAPPING_UNAVAILABLE" || c.stops != 0 {
+		t.Fatalf("Ready without mapping did not remain running: %+v", p.reports)
 	}
 }
 
