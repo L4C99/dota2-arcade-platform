@@ -40,6 +40,10 @@ Platform 以服务端记录的最新心跳时间判定 Node `online`（小于 2 
 
 Controller 恢复联系后仍先执行 d2core list，再读取本 Node 的 open durable jobs、已冻结 create 参数，并通过 operation/status 对账；可能有副作用的 unknown create 始终保留原 Node 和容量。只有明确的 `rejected_no_effect` 才释放该 attempt。自动请求随后可在另一个 eligible Node 生成顺序递增的新 attempt，并重新快照当前内容版本；曾明确拒绝该请求的 Node 不会立即重复尝试。手动请求不改派到其他 Node。若全部已尝试 Node 均明确无副作用地拒绝，申请进入 `unavailable`，避免无限重试。完整 P4 quarantine/玩家脱困流程不在 P3C。
 
+## P3D 普通 Node Drain
+
+运维人员在 Platform 主机用 `platform-server node drain <node-id>` 关闭该 Node 的新 Allocation admission，用 `platform-server node resume <node-id>` 恢复。命令可重复执行；写入的是 Platform 的 `nodes.draining` 控制值。Drain 后已有 Allocation、NodeJob 与 d2core instance 继续原生命周期，pending 的已有 Job 仍可被该 Node 领取；不自动 stop、cancel、reclaim、切换内容版本或清理端口。自动申请可选其他 eligible Node，手动申请保留原 `requested_at` 并等待目标 Node Resume。Resume 仍需通过所有其他内容、容量、兼容与心跳检查。此操作不执行 P5 内容滚动工作流。
+
 ## Controller 本地配置
 
 Controller 使用显式绝对路径 JSON 配置，其中包含 Platform URL、Node ID、Secret 文件路径、d2core `BUILD.json` 和 data-dir、端口映射、硬上限、逻辑模板到本机绝对路径的绑定，以及可选内容 metadata/当前链接位置。所有 d2core 关键路径须为 ASCII 绝对路径。节点 Secret、真实节点路径、端口和部署参数保存在仓库外的开发或生产专用目录。源码工作树不作为生产运行目录。

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strings"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 )
@@ -77,18 +76,21 @@ func (r *FactReader) readContentFact(binding ContentBinding) nodev1.ContentFact 
 		metadata.ContentVersionID == "" || !filepath.IsAbs(metadata.ReleasePath) || !sha256Pattern.MatchString(metadata.VPKSHA256) {
 		return fact
 	}
-	linkTarget, err := filepath.EvalSymlinks(binding.CurrentLinkPath)
+	linkInfo, err := os.Stat(binding.CurrentLinkPath)
 	if err != nil {
 		return fact
 	}
-	releaseTarget, err := filepath.EvalSymlinks(metadata.ReleasePath)
+	releaseInfo, err := os.Stat(metadata.ReleasePath)
 	if err != nil {
 		return fact
 	}
-	if !samePath(linkTarget, releaseTarget) {
+	// Stat follows both Unix symlinks and Windows junctions. On some Windows
+	// installations EvalSymlinks leaves a junction path unchanged, so compare
+	// the directories' filesystem identity instead of their path strings.
+	if !linkInfo.IsDir() || !releaseInfo.IsDir() || !os.SameFile(linkInfo, releaseInfo) {
 		return fact
 	}
-	vpkPath := filepath.Join(releaseTarget, "pak01_dir.vpk")
+	vpkPath := filepath.Join(metadata.ReleasePath, "pak01_dir.vpk")
 	info, err := os.Stat(vpkPath)
 	if err != nil || info.IsDir() {
 		return fact
@@ -116,12 +118,4 @@ func (r *FactReader) readContentFact(binding ContentBinding) nodev1.ContentFact 
 	fact.ContentVersionID = metadata.ContentVersionID
 	fact.State = "confirmed"
 	return fact
-}
-
-func samePath(a, b string) bool {
-	a, b = filepath.Clean(a), filepath.Clean(b)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(a, b)
-	}
-	return a == b
 }

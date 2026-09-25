@@ -74,6 +74,17 @@ func run(args []string) error {
 		fmt.Println("admin account updated")
 		return nil
 	case "node":
+		if len(args) == 3 && (args[1] == "drain" || args[1] == "resume") {
+			if err := s.SetNodeDrain(ctx, args[2], args[1] == "drain"); err != nil {
+				return err
+			}
+			draining, err := s.NodeDraining(ctx, args[2])
+			if err != nil {
+				return err
+			}
+			fmt.Printf("node_id=%s draining=%t\n", args[2], draining)
+			return nil
+		}
 		if (len(args) == 3 || len(args) == 4) && args[1] == "priority" {
 			if len(args) == 4 {
 				priority, err := strconv.Atoi(args[3])
@@ -147,7 +158,7 @@ func run(args []string) error {
 			fmt.Printf("node_job_id=%s\n", id)
 			return nil
 		}
-		return errors.New("usage: platform-server node register <name> <windows|linux> | node capacity <node-id> [desired] | node priority <node-id> [priority] | node integration-job <node-id> create <template-binding> [port] | node integration-job <node-id> stop <instance-id>")
+		return errors.New("usage: platform-server node register <name> <windows|linux> | node capacity <node-id> [desired] | node priority <node-id> [priority] | node drain|resume <node-id> | node integration-job <node-id> create <template-binding> [port] | node integration-job <node-id> stop <instance-id>")
 	case "serve":
 		if len(args) != 1 {
 			return errors.New("usage: platform-server serve")

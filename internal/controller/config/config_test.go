@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -81,6 +82,41 @@ func TestFactsReadback(t *testing.T) {
 	h = reader.Facts("test", 0)
 	if h.Content[0].State != "unknown" {
 		t.Fatalf("changed VPK retained confirmed fact: %+v", h.Content[0])
+	}
+}
+
+func TestFactsReadbackWindowsJunction(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows junction behavior")
+	}
+	root := t.TempDir()
+	release := filepath.Join(root, "release")
+	if err := os.Mkdir(release, 0700); err != nil {
+		t.Fatal(err)
+	}
+	vpk := []byte("junction content")
+	if err := os.WriteFile(filepath.Join(release, "pak01_dir.vpk"), vpk, 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "current")
+	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", link, release).CombinedOutput(); err != nil {
+		t.Skipf("Windows junction creation unavailable: %v: %s", err, output)
+	}
+	t.Cleanup(func() { _ = os.Remove(link) })
+	digest := sha256.Sum256(vpk)
+	metadata, err := json.Marshal(contentMetadata{WorkshopID: "123", ContentVersionID: "v1", ReleasePath: release, VPKSHA256: hex.EncodeToString(digest[:])})
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadataPath := filepath.Join(root, "current.json")
+	if err := os.WriteFile(metadataPath, metadata, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c := validConfig(root)
+	c.ContentBindings = []ContentBinding{{WorkshopID: "123", CurrentLinkPath: link, MetadataPath: metadataPath}}
+	fact := NewFactReader(c).Facts("test", 1).Content[0]
+	if fact.State != "confirmed" || fact.ContentVersionID != "v1" {
+		t.Fatalf("junction content readback failed: %+v", fact)
 	}
 }
 

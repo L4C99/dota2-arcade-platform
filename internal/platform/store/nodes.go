@@ -16,6 +16,25 @@ import (
 
 var ErrNodeUnauthorized = errors.New("node unauthorized")
 
+// SetNodeDrain is an operator control for new Allocation admission only.
+// Existing jobs and instances continue through their normal lifecycle.
+func (s *Store) SetNodeDrain(ctx context.Context, nodeID string, draining bool) error {
+	command, err := s.Pool.Exec(ctx, `UPDATE nodes SET draining=$2 WHERE id=$1`, nodeID, draining)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() != 1 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) NodeDraining(ctx context.Context, nodeID string) (bool, error) {
+	var draining bool
+	err := s.Pool.QueryRow(ctx, `SELECT draining FROM nodes WHERE id=$1`, nodeID).Scan(&draining)
+	return draining, err
+}
+
 func (s *Store) SetNodePriority(ctx context.Context, nodeID string, priority int) error {
 	command, err := s.Pool.Exec(ctx, `UPDATE nodes SET priority=$2 WHERE id=$1`, nodeID, priority)
 	if err != nil {
