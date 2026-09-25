@@ -38,6 +38,7 @@ owner and still subject to host checks.
 | Windows VM real core/Controller integration | later stage | not verified | VM paths were inspected; no real P0 d2core/Controller run occurred there. |
 | Human join, public game ports, A2S, Steam/steamchina URI | later stage | not verified | No human client or public game-port/URI acceptance was performed in P0. |
 | P0 owner acceptance | P0 closure | confirmed | Owner formally accepted P0A–P0E; this is not V1 review, RC, Release, or production acceptance. |
+| P1A development catalog and request API | P1A | confirmed in development | One owner-confirmed test ContentVersion, n6 preset, logical development template binding, migration 4, isolated database tests and HTTP recovery check. See [P1A](p1a.md). |
 
 Credential values, keys, TLS private material, VPKs, and private logs must
 never be added to this file or committed to Git.
