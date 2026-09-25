@@ -38,6 +38,11 @@ const selectedNode = computed(() => nodes.value.find((item) => item.id === (curr
 const assignedNodeName = computed(() => allocation.value?.nodeDisplayName || (currentRequest.value?.nodeSelectionMode === 'manual' ? selectedNode.value?.displayName : '') || '等待分配')
 const selectionName = computed(() => currentRequest.value?.nodeSelectionMode === 'manual'
   ? (selectedNode.value?.displayName || '所选节点') : '自动选择')
+const selectionSummary = computed(() => nodeSelectionMode.value === 'auto'
+  ? '平台自动选择当前可用节点'
+  : manualNodeId.value
+    ? `只等待 ${selectedNode.value?.displayName || '所选节点'}，不会自动切换`
+    : '手动指定；请先选择要等待的节点')
 const nodeStatus = (node: NodeChoice): string => node.status === 'available'
   ? `可申请 · ${node.availableSlots} 个空位`
   : node.status === 'full' ? '满载 · 可排队'
@@ -353,8 +358,17 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
           <div class="summary-row"><span>地图</span><strong>{{ game?.displayName || '未选择' }}</strong></div>
           <div class="summary-row"><span>玩法</span><strong>{{ preset?.displayName || '未选择' }}</strong></div>
           <div class="summary-row"><span>人数上限</span><strong>{{ preset?.maxPlayers ?? '—' }} 人</strong></div>
-          <label class="assignment-note node-auto-choice" :class="{ selected: nodeSelectionMode === 'auto' }"><input v-model="nodeSelectionMode" type="radio" name="node-mode" value="auto" /><span class="assignment-icon" aria-hidden="true">↗</span><span><strong>自动选择节点</strong><small>优先选择当前可用节点</small></span><span v-if="nodeSelectionMode === 'auto'" class="assignment-check" aria-hidden="true">✓</span></label>
-          <details class="manual-disclosure"><summary>高级选项：手动指定节点 <span aria-hidden="true">⌄</span></summary><p>手动指定后只等待该节点；满载、维护或暂不可达时不会自动换到其他节点。</p><div class="node-list"><label v-for="node in nodes" :key="node.id" :class="{ selected: nodeSelectionMode === 'manual' && manualNodeId === node.id, disabled: !node.selectable }"><input v-model="manualNodeId" type="radio" name="manual-node" :value="node.id" :disabled="!node.selectable" @change="nodeSelectionMode = 'manual'" /><span class="node-state" :class="node.status" aria-hidden="true" /><span><strong>{{ node.displayName }}</strong><small>{{ nodeStatus(node) }}</small></span></label><p v-if="nodes.length === 0">暂无已登记节点，请使用自动选择并等待。</p></div></details>
+          <fieldset class="node-mode-group">
+            <legend>节点选择方式</legend>
+            <label class="node-mode-choice" :class="{ selected: nodeSelectionMode === 'auto' }"><input v-model="nodeSelectionMode" type="radio" name="node-mode" value="auto" @change="manualNodeId = ''" /><span><strong>自动选择</strong><small>平台从当前可用节点分配</small></span></label>
+            <label class="node-mode-choice" :class="{ selected: nodeSelectionMode === 'manual' }"><input v-model="nodeSelectionMode" type="radio" name="node-mode" value="manual" /><span><strong>手动指定</strong><small>只等待选定节点，不自动切换</small></span></label>
+          </fieldset>
+          <div v-if="nodeSelectionMode === 'manual'" class="manual-node-panel">
+            <p class="manual-node-heading">选择要等待的节点</p>
+            <div class="node-list"><label v-for="node in nodes" :key="node.id" :class="{ selected: manualNodeId === node.id, disabled: !node.selectable }"><input v-model="manualNodeId" type="radio" name="manual-node" :value="node.id" :disabled="!node.selectable" /><span class="node-state" :class="node.status" aria-hidden="true" /><span><strong>{{ node.displayName }}</strong><small>{{ nodeStatus(node) }}</small></span></label><p v-if="nodes.length === 0">暂无已登记节点，请改用自动选择并等待。</p></div>
+            <p class="manual-node-hint">满载、维护或暂不可达时，这份申请会继续等待所选节点。</p>
+          </div>
+          <p class="node-selection-summary" role="status">本次分配：<strong>{{ selectionSummary }}</strong></p>
           <p v-if="maintenance" class="maintenance-callout" role="status">{{ maintenance }}</p>
           <p v-if="partyOverPreset" class="maintenance-callout" role="status">当前队伍 {{ party?.members.length }} 人，超过此玩法最多 {{ preset?.maxPlayers }} 人；选择其他玩法后再申请。</p>
           <p v-if="party && !isLeader" class="maintenance-callout" role="status">只有队长可以申请服务器。队员可查看状态与连接信息。</p>
