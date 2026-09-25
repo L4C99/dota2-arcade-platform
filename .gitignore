@@ -19,6 +19,7 @@ Thumbs.db
 data/
 dist/
 .cache/
+.local/
 .local-appdata/
 
 # Local binaries
