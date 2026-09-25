@@ -48,11 +48,17 @@ func auditAdmin(ctx context.Context, tx pgx.Tx, adminID, action, targetType, tar
 	return nil
 }
 
-func auditOperator(ctx context.Context,tx pgx.Tx,kind,action,targetType,targetID string,change map[string]any) error {
-	id,err:=NewID(); if err!=nil { return err }
-	encoded,err:=json.Marshal(change); if err!=nil { return err }
-	_,err=tx.Exec(ctx,`INSERT INTO audit_events(id,actor_kind,action,target_type,target_id,result,state_change)
-		VALUES($1,$2,$3,$4,$5,'succeeded',$6)`,id,kind,action,targetType,targetID,encoded)
+func auditOperator(ctx context.Context, tx pgx.Tx, kind, action, targetType, targetID string, change map[string]any) error {
+	id, err := NewID()
+	if err != nil {
+		return err
+	}
+	encoded, err := json.Marshal(change)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO audit_events(id,actor_kind,action,target_type,target_id,result,state_change)
+		VALUES($1,$2,$3,$4,$5,'succeeded',$6)`, id, kind, action, targetType, targetID, encoded)
 	return err
 }
 
