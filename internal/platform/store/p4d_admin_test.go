@@ -122,6 +122,45 @@ func TestP4DAdminSafeCancelStopAndQuarantine(t *testing.T) {
 	p4aStates(t, s, requestID, allocationID, "abandoned", "quarantined", 1)
 }
 
+func TestP4DAdminCanReclaimAbandonedQuarantine(t *testing.T) {
+	s, nodeID, ownerID, requestID, allocationID := p4cRunning(t)
+	ctx := context.Background()
+	adminID, err := s.CreateAdmin(ctx, "p4d-late-reclaim", "a long test password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "allocation.quarantine", TargetID: allocationID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AbandonQuarantinedUserRequest(ctx, ownerID, requestID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "request.stop", TargetID: requestID}); err != nil {
+		t.Fatalf("stop abandoned quarantined resource: %v", err)
+	}
+	p4aStates(t, s, requestID, allocationID, "abandoned", "quarantined", 1)
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "request.stop", TargetID: requestID}); !errors.Is(err, ErrJobConflict) {
+		t.Fatalf("duplicate stop: %v", err)
+	}
+	job, err := s.ClaimNextJob(ctx, nodeID)
+	if err != nil || job == nil || job.Kind != "stop" {
+		t.Fatalf("stop job: %+v %v", job, err)
+	}
+	if _, err := s.ReportJob(ctx, nodeID, job.ID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_p4c", OperationID: "o_late_stop"}); err != nil {
+		t.Fatal(err)
+	}
+	p4aStates(t, s, requestID, allocationID, "abandoned", "quarantined", 1)
+	if err := s.ReportInstanceFact(ctx, nodeID, allocationID, nodev1.InstanceFact{
+		InstanceID: "i_p4c", Outcome: "reclaimed", Lifecycle: "reclaimed", Process: "stopped", Cleanup: "complete", Port: 28000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	p4aStates(t, s, requestID, allocationID, "abandoned", "reclaimed", 0)
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "request.stop", TargetID: requestID}); !errors.Is(err, ErrJobConflict) {
+		t.Fatalf("reclaimed resource stop: %v", err)
+	}
+}
+
 func TestP4DEntryVerificationRequiresCurrentControllerFacts(t *testing.T) {
 	s := playerTestStore(t)
 	ctx := context.Background()

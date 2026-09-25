@@ -264,16 +264,22 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if err := tx.QueryRow(ctx, `SELECT state FROM server_requests WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&state); err != nil {
 			return err
 		}
-		if state != "running" && state != "quarantined" {
+		if state != "running" && state != "quarantined" && state != "abandoned" {
 			return fmt.Errorf("%w: request cannot be stopped", ErrJobConflict)
 		}
-		var allocationID, nodeID, instanceID, createError string
-		err := tx.QueryRow(ctx, `SELECT a.id,a.node_id,j.instance_id,COALESCE(j.error_code,'') FROM allocations a
+		var allocationID, allocationState, nodeID, instanceID, createError string
+		err := tx.QueryRow(ctx, `SELECT a.id,a.state,a.node_id,j.instance_id,COALESCE(j.error_code,'') FROM allocations a
 			JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create' AND j.instance_id IS NOT NULL
 			WHERE a.server_request_id=$1 AND a.state IN ('running','quarantined')
-			ORDER BY a.attempt_sequence DESC LIMIT 1 FOR UPDATE OF a`, a.TargetID).Scan(&allocationID, &nodeID, &instanceID, &createError)
+			ORDER BY a.attempt_sequence DESC LIMIT 1 FOR UPDATE OF a`, a.TargetID).Scan(&allocationID, &allocationState, &nodeID, &instanceID, &createError)
+		if errors.Is(err, pgx.ErrNoRows) && state == "abandoned" {
+			return fmt.Errorf("%w: abandoned resource is not quarantined", ErrJobConflict)
+		}
 		if err != nil {
 			return err
+		}
+		if state == "abandoned" && allocationState != "quarantined" {
+			return fmt.Errorf("%w: abandoned resource is not quarantined", ErrJobConflict)
 		}
 		if instanceID == "" || createError == "IDENTITY_UNVERIFIED" {
 			return fmt.Errorf("%w: untrusted instance identity", ErrJobConflict)
@@ -301,7 +307,11 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 				return err
 			}
 		}
-		change = map[string]any{"requestBefore": state, "stopJobId": jobID, "allocationId": allocationID, "requestAfter": map[bool]string{true: "stopping", false: "quarantined"}[state == "running"]}
+		requestAfter := state
+		if state == "running" {
+			requestAfter = "stopping"
+		}
+		change = map[string]any{"requestBefore": state, "stopJobId": jobID, "allocationId": allocationID, "requestAfter": requestAfter}
 	case "allocation.quarantine":
 		targetType = "allocation"
 		var requestID, state string
