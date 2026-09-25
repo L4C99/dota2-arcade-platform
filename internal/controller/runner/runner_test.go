@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	coreclient "github.com/L4C99/dota2-arcade-dedicated-core/client"
@@ -73,10 +74,19 @@ func testJob() nodev1.Job {
 	return nodev1.Job{ID: "12345678-1234-1234-1234-1234567890ab", Kind: "create", State: "pending", TemplateBindingKey: "test", RequestedPort: 28000}
 }
 
+func testTemplate(t *testing.T) string {
+	t.Helper()
+	path, err := filepath.Abs("template.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestCreatePreparedAcceptedThenReady(t *testing.T) {
 	p := &fakePlatform{job: testJob()}
 	c := &fakeCore{result: core.Accepted{Accepted: true, InstanceID: "i_1", OperationID: "o_1"}, op: core.Operation{OperationID: "o_1", Kind: "create", InstanceID: "i_1", Status: "succeeded"}, instance: core.Instance{InstanceID: "i_1", Lifecycle: "active", Process: "running", Room: "ready"}}
-	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": "C:/core/template.json"}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
+	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
 	if err := r.Step(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +99,7 @@ func TestExistingClaimedJobNeverBlindlyReplaysCreate(t *testing.T) {
 	p := &fakePlatform{job: testJob()}
 	p.job.State = "claimed"
 	c := &fakeCore{}
-	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": "C:/core/template.json"}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
+	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
 	if err := r.Step(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +111,7 @@ func TestExistingClaimedJobNeverBlindlyReplaysCreate(t *testing.T) {
 func TestTimeoutStaysUnknown(t *testing.T) {
 	p := &fakePlatform{job: testJob()}
 	c := &fakeCore{err: errors.New("response lost")}
-	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": "C:/core/template.json"}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
+	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
 	if err := r.Step(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +129,7 @@ func TestTimeoutStaysUnknown(t *testing.T) {
 func TestIdempotencyConflictCannotReleaseJob(t *testing.T) {
 	p := &fakePlatform{job: testJob()}
 	c := &fakeCore{err: &coreclient.Error{Code: "IDEMPOTENCY_CONFLICT", Stage: "validate"}}
-	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": "C:/core/template.json"}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
+	r := Runner{Platform: p, Core: c, TemplateBindings: map[string]string{"test": testTemplate(t)}, Network: nodev1.NetworkFacts{LocalPortMin: 28000, LocalPortMax: 28000}}
 	if err := r.Step(context.Background()); err != nil {
 		t.Fatal(err)
 	}
