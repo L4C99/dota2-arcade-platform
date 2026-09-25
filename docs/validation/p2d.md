@@ -1,5 +1,7 @@
 # P2D validation — concurrency, authorization, UI and real regression
 
+This is a point-in-time P2D checkpoint. The later [P2 final validation](p2-summary.md) records the project owner's confirmed UI acceptance and overall P2 PASS.
+
 Date: 2026-09-25. P2 start SHA: `93cbc4f70ab7268f0953d57f3bc9f9745a53b8fa`.
 
 ## Automated matrix

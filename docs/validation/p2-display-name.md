@@ -1,5 +1,7 @@
 # P2 UI acceptance supplement: anonymous display names
 
+This is a point-in-time implementation checkpoint. The later [P2 final validation](p2-summary.md) records the project owner's confirmed UI acceptance and overall P2 PASS.
+
 Date: 2026-09-25. Source checkpoint: `f9b373bf5835473c0fef87ded9b988cbb379e445`. The P2A–P2D functional checkpoints remain unchanged. Owner UI acceptance is still **NOT VERIFIED**.
 
 ## Model and migration

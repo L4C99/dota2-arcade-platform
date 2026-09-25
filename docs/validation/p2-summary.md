@@ -1,57 +1,88 @@
-# P2 total exit report — owner UI confirmation pending
+# P2 final validation and owner acceptance
 
-Date: 2026-09-25. Stage boundary: P2A → P2B → P2C → P2D only. P3 has not started.
+Date: 2026-09-25. This is the P2A → P2D stage closure. The project owner confirmed the final Party UI, anonymous display names, map-card layout and related copy/layout follow-ups against the exact `origin/main` baseline `25228ce7c2660724659fb5f77b4597e7e7c25676`.
 
-## Checkpoints
+| Acceptance | Result |
+| --- | --- |
+| P2A | **PASS** |
+| P2B | **PASS** |
+| P2C | **PASS** |
+| P2D | **PASS** |
+| P2 UI owner acceptance | **CONFIRMED** |
+| P2 overall | **PASS** |
+| Owner acceptance | **CONFIRMED** |
 
-| Point | Full SHA / status |
+This is P2 stage acceptance. It is not V1 independent whole-project code review, RC, Release, production deployment or P3 acceptance. No P3 work has started.
+
+## Git checkpoints
+
+The following full SHAs were read from the history between the P1 closure and the owner-confirmed P2 UI baseline. UI and documentation follow-ups are part of P2 closure, not new product stages.
+
+| Checkpoint | Full SHA |
 | --- | --- |
 | P2 start / P1 closure | `93cbc4f70ab7268f0953d57f3bc9f9745a53b8fa` |
-| P2A | `7c8bf955b42814a6fc9b4c2711529f8c2b38159a`, CI SUCCESS |
-| P2B | `dc06e130a877c70c15f6eb2d9148938d0304c67c`, CI SUCCESS |
-| P2C | `b216060fa970f04d564cecab8a8b3b2eddd12028`, CI SUCCESS |
-| P2D functional + UI source | `69450e1eff23a85e3e9dd203b1c8ba4d7a7c4b74`, CI SUCCESS |
-| UI parity | `4bc23c25c70837a1d9e856fad624b83856358ff4`, CI SUCCESS; invite navigation follow-up `e088c2e89b4d23b503281b7a5c1e9abed4f54fe1`, CI SUCCESS |
-| Anonymous display-name supplement | `f9b373bf5835473c0fef87ded9b988cbb379e445`, CI SUCCESS |
-| Long map-name mobile fix | `413f0c529996d2f236837fef3c0fea208bc7ba21`, CI SUCCESS |
-| Origin/main / Git status | Final documentation checkpoint and status recorded at report delivery |
+| P2A | `7c8bf955b42814a6fc9b4c2711529f8c2b38159a` |
+| P2B | `dc06e130a877c70c15f6eb2d9148938d0304c67c` |
+| P2C | `b216060fa970f04d564cecab8a8b3b2eddd12028` |
+| P2D functional and initial UI | `69450e1eff23a85e3e9dd203b1c8ba4d7a7c4b74` |
+| Party UI parity and secure Invite fragment | `4bc23c25c70837a1d9e856fad624b83856358ff4` |
+| Invite fragment navigation follow-up | `e088c2e89b4d23b503281b7a5c1e9abed4f54fe1` |
+| Initial P2 exit evidence, before owner UI acceptance | `e7249f2c8a8f108df99581fe954407664e28226b` |
+| Anonymous display-name implementation | `f9b373bf5835473c0fef87ded9b988cbb379e445` |
+| Display-name validation and documentation | `c2e6c41c962f5225ddc2dde24c6c73d69be63e17` |
+| Narrow-screen long map-name fix | `413f0c529996d2f236837fef3c0fea208bc7ba21` |
+| Narrow-screen map-card validation | `3d9a1748eee983ed17789b96d8e7ca1c1d4b9164` |
+| Server-card owner label, connection action and membership copy | `7a717b749cb8e1d357f2d1301af4cbb70ceaaa27` |
+| Server-card validation | `122158b877afd6f283913e51e5e4899d6071f25e` |
+| Map-card badge order at all widths | `c2b9180245d2e51e8ed584bfea554f42be7349e4` |
+| Map-card badge validation / owner-confirmed final UI baseline | `25228ce7c2660724659fb5f77b4597e7e7c25676` |
 
-## Party model
+All implementation checkpoint CI runs passed. The final UI baseline's GitHub CI run `36152937491` passed Ubuntu Go, Windows Go, PostgreSQL integration and Web. The separate docs-only P2 closure commit and its CI are identified in the final handoff after that commit exists.
+
+## Party model and membership
 
 | Invariant | Result |
 | --- | --- |
-| Persistent Party / PartyMember / PartyInvite | PASS — explicit migrations 7/8 and formal API |
-| One User in at most one Party | PASS — database unique membership, User lock and concurrent test |
-| Leader/member role and no leader transfer | PASS — persistent role, at-most-one leader, deferred leader-role FK; leader leave denied |
-| `PlatformSettings.max_party_size` | PASS — explicit positive deployment value 10 for development; independent of preset size |
-| `GamePreset.max_players` at request time | PASS — Party count checked before insert; existing instance unaffected by later joins |
-| Party persistence after full reclaim | PASS — real d2core regression retained Party, leader, remaining member and invite |
+| Persistent `Party`, `PartyMember`, `PartyInvite` | **PASS** — explicit migrations and formal APIs; no JSON substitute |
+| One User in at most one active Party | **PASS** — database uniqueness, transactional locking and concurrent tests |
+| Leader/member roles | **PASS** — persisted role and backend authorization from the current Session |
+| No leader transfer | **PASS** — leader leave rejected; no leaderless active Party |
+| Party persistence | **PASS** — Party, leader, remaining members and Invite survive stop and full reclaim |
+| `PlatformSettings.max_party_size` | **PASS** — Party membership hard limit, including last-slot concurrency |
+| `GamePreset.max_players` | **PASS** — request-time Party size check before ServerRequest creation; later joins do not stop an existing instance |
 
-## Owner and permissions
+The current development/deployment value of `PlatformSettings.max_party_size` is **10**, explicitly chosen by the owner. It is not a permanent hardcoded value and may be set to another positive integer by a later deployment. It is independent of the n6 GamePreset's `max_players=10` and node instance capacity.
 
-| Behavior | Result |
-| --- | --- |
-| Solo User owner remains functional | PASS — P1 regression suites and P2D solo owner check |
-| Party owner exactly once | PASS — database exactly-one-owner check and Party FK; old owner/history unchanged |
-| Leader create / duplicate POST | PASS — Session-derived role; concurrent POSTs return one blocking Party request |
-| Member current request / Allocation / JoinInfo read | PASS — same IDs/data in integration and real HTTPS flow |
-| Member create / stop rejected | PASS — 403 at Platform before new request/stop NodeJob |
-| Invite retrieval/reset | PASS — leader only; old token invalid after reset |
-| Member leave / leader remove | PASS — membership only, no stop/cancel/kick/capacity release |
-| Idle disband / busy disband | PASS — formal idle API path; blocked with clear conflict during activity |
+## Owner, permissions and active membership
 
-## Concurrency and security
+When a User is outside a Party, its normal `ServerRequest` is User-owned and the P1 solo path remains valid. When a User belongs to a Party, the normal request is Party-owned; only the leader may create or stop it. The database enforces exactly one owner. Party members share one current ServerRequest, Allocation and valid JoinInfo; duplicate leader submissions resolve to one blocking request. A member cannot create a fallback solo request.
 
-Disposable-schema PostgreSQL tests passed for two users contending for the last Party slot, one User concurrently joining two available Parties, invite reset versus consume, same leader's concurrent duplicate submissions, and two Party leaders contending for the sole Node capacity slot. The latter produced only one Allocation and one create NodeJob. HTTP tests used independently server-issued Sessions and rejected forged `partyId`/role/User claims, foreign request/Allocation IDs, ordinary member leader actions, and former-member stale access. Frontend controls are supplemental; authorization is enforced by the backend. Details and evidence are in [P2D validation](p2d.md).
+An ordinary member may view the Party, members, current request/Allocation and JoinInfo, connect, and leave. The Platform backend rejects ordinary member create, stop, Invite reset, member removal and disband. The leader may retrieve/reset Invite, remove an ordinary member and disband while idle. Leader leave/disband is blocked during a blocking request or unreclaimed Allocation. Browser-hidden controls are not the security boundary: authorization follows `Session → User.id → current Party membership/role`, and foreign IDs or client-provided role/owner claims grant nothing.
 
-## P1 lifecycle regression and environment
+During a Party-owned active server, ordinary member leave and leader removal change only membership. They do not stop or cancel the instance/request, release Allocation capacity, rewrite the historical Party owner, create another Allocation/NodeJob, or kick a Dota player. While the Party has room under `max_party_size`, a new User may consume its Invite during activity and immediately see the same request and JoinInfo. The Party remains after leader stop and full reclaim. [P2C validation](p2c.md) records the integration sequence; [P2D validation](p2d.md) records the real fixed-d2core regression.
 
-The real development sequence reached Party-owned ServerRequest → Allocation → business create NodeJob → fixed d2core v0.1.1 Ready → valid JoinInfo. A new member joined the running Party and read that same JoinInfo; another left without stopping it. Leader stop produced a separate stop NodeJob. d2core status confirmed `lifecycle=reclaimed`, `process=stopped`, `cleanup=complete`; Allocation became reclaimed. P1 solo integration and all previous Go tests remain PASS. P1 human connect was not repeated because P2 does not require another Dota client acceptance.
+## Invite, concurrency and authorization
 
-Development PostgreSQL is at migration 9, `max_party_size=10`. The clean display-name Platform build and latest Web assets are served over the existing HTTPS entry; Controller/d2core remain at accepted P1/fixed-release versions. The initial display-name rollout backfilled 22 pre-existing Users and found zero missing names. Subsequent development use has continued: the latest read-only check showed 51 Users, zero missing names, three active Parties with five current members, 11 reclaimed and one running Allocation, no open unknown or failed-unreclaimed attempt, and the explained historical P0 `failed_with_effect`. Fixed d2core reported one Ready/running instance. The sole node has desired/hard capacity 1/1 and occupancy 1. That active instance was left running for its current user; the Web-only map-card fix did not affect it. One earlier automated browser run left an idle Party with destroyed ephemeral Sessions; no database wipe or direct Party deletion was used. Private deployment facts remain in ignored `.local/p0-host-inventory.md`.
+**PASS**: high-entropy 32-byte Invite credentials, leader-only retrieval/reset, old token rejection after reset, Party-full rejection and already-in-Party rejection. PostgreSQL integration covers concurrent Invite consumption, Invite reset/consume race, two Users contending for the last Party slot and one User concurrently joining two Parties. Same-leader duplicate POSTs produce one blocking Party request, one Allocation and one create NodeJob. Two Party leaders contending for the sole node slot cannot oversell capacity. Public validation does not record a real Invite token.
 
-## UI and remaining verification
+**PASS**: backend rejection of forged `partyId`, role and User claims; foreign Party request/Allocation lookup or stop; guessed request/Allocation IDs; ordinary member create/stop/reset/remove/disband; and former-member stale access. These checks use server-issued Sessions rather than edited Cookie identity. See the [P2D matrix](p2d.md).
 
-The formal Party UI implements create/join/leave/remove/disband, role/member display, invite copy/reset, current Party server status, leader application/stop and member read-only JoinInfo. The [display-name supplement](p2-display-name.md) now adds stable Chinese member names without changing owner or permission rules. A focused comparison with the accepted P-1 Party prototype found matching card hierarchy, spacing approach, button hierarchy and mobile grid behavior; existing P1 server panels remain in place. Frontend lint, typecheck, tests and build pass; HTTPS page/JS/CSS return 200. Three independent Edge contexts completed the browser A/B/C flow, and masked desktop/mobile screenshots were inspected without visible layout damage. A [narrow-screen map-card follow-up](p2-mobile-map-card.md) fixed the owner's reported long-name overlap without changing business logic. Project-owner visual confirmation is still **NOT VERIFIED**; P2 overall PASS must not be declared until that confirmation.
+## Anonymous display name
 
-P3/P4/P5 capabilities, production deployment, Windows real node, multi-node scheduling, A2S/URI verified workflows and new human Dota connect are **NOT VERIFIED** and outside this stage. No tag, Release, RC or independent whole-project review was started.
+`User.display_name` is a persistent presentation field. New Users receive a Chinese modifier + animal/noun combination from 48 × 48 words (2,304 combinations), without a numeric suffix. Duplicate names are allowed and there is no global unique business constraint. Migration 9 backfilled existing Users. Tests and a real Platform restart showed the name remains stable with Session recovery. It does not participate in authentication, Session identity, owner selection, Party membership, leader permission, authorization or primary keys. The authorization chain remains `Session → User.id → Party membership/role`. See the [display-name validation](p2-display-name.md).
+
+## P1 lifecycle and UI acceptance
+
+P1 solo behavior remains covered by regression tests. The real Party-owned development flow reached ServerRequest → Allocation → create NodeJob → fixed d2core v0.1.1 Ready → valid JoinInfo. A member joined during activity and saw the same request/JoinInfo; another left without stopping the instance. Leader stop created a separate stop NodeJob and d2core confirmed `lifecycle=reclaimed`, `process=stopped`, `cleanup=complete`. Allocation became terminal and capacity was released. P1's human Dota connect acceptance was not repeated for P2.
+
+The owner has now **confirmed** the Party UI, anonymous display names, leader/member presentation, Invite and Party operations, final map-card layout, desktop/mobile basic behavior, and the necessary copy/layout corrections. Focused P-1 Party parity and independent Edge contexts covered the A/B/C flow with formal Sessions and APIs; later layout probes used mocked API responses against the exact served Web bundle. Earlier P2 validation files that say owner confirmation was pending are point-in-time checkpoint records; this final report supersedes that interim status. No further decorative polish or broad UI refactor is part of P2 closure. Later stages may adjust UI for their own features; a separate final consistency pass may occur before a future Release.
+
+## Final read-only development environment
+
+At the closure check on 2026-09-25 around 23:22 China time: development PostgreSQL migration **9**; 51 Users and zero missing display names; three retained active test Parties with five current members; ServerRequests `cancelled=1`, `ended=13`; Allocations `reclaimed=13`, none active or failed-unreclaimed; NodeJobs `succeeded=35` plus one explained historical P0 `failed_with_effect`, with no open unknown. The sole node reported desired/hard capacity **1/1**, occupancy **0**. Fixed d2core v0.1.1 `list` returned no instances; no Dota dedicated process was observed. Platform, Controller and d2core services were running. The Platform binary remains the clean display-name build `f9b373bf5835473c0fef87ded9b988cbb379e445`; the served Web UI is the final owner-confirmed `c2b9180245d2e51e8ed584bfea554f42be7349e4` build. No new instance was created for closure.
+
+Retained User, Party, membership, ended request and reclaimed Allocation history is explained test state; no database wipe, direct Party deletion or d2core data-dir reset was performed. Non-sensitive deployment details are in ignored `.local/p0-host-inventory.md`.
+
+## Remaining outside P2 — NOT VERIFIED
+
+Multi-node scheduling, a real Windows Node, the P3 network/NAT matrix, P4 next-game/quarantined/Admin flows, P5 content rolling, A2S/Steam/steamchina verified workflows, production deployment and production Release remain **NOT VERIFIED**. No tag, RC, Release, independent whole-project review or production action was started. Work stops at P2 closure pending separate owner authorization for P3.

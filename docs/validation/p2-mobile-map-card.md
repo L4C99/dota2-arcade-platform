@@ -1,5 +1,7 @@
 # P2 UI follow-up: long ArcadeGame name on narrow screens
 
+This is a point-in-time UI checkpoint. The later [P2 final validation](p2-summary.md) records the project owner's confirmed UI acceptance and overall P2 PASS.
+
 Date: 2026-09-25. The project owner reported that a mobile map card's long name collided with its selection badge and Workshop line. The card used an absolutely positioned badge at widths above 410px while the name had no reserved area.
 
 For screens up to 900px, the badge now occupies normal flex layout space. At mobile widths, it sits after the map name and Workshop ID; at tablet widths, it stays in its own flex slot alongside the text. Long names wrap inside the card. Desktop styling and the accepted P1 visual direction remain intact. No API, Party, request, stop, NodeJob, d2core or game content logic changed.

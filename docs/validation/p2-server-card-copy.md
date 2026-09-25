@@ -1,5 +1,7 @@
 # P2 UI follow-up: server card and membership notices
 
+This is a point-in-time UI checkpoint. The later [P2 final validation](p2-summary.md) records the project owner's confirmed UI acceptance and overall P2 PASS.
+
 Date: 2026-09-25. The project owner reported two UI issues while checking P2: leaving a Party claimed the current server would continue even when none was running, and the Party view labelled a solo request as a Party server while displaying the connection command alongside a button to view connection instructions.
 
 The leave and remove confirmations/notices now say **if a server is already running, it continues**. The Party view's server card labels an active request according to the current business owner: solo as `单人服务器`, Party as `队伍服务器`. It omits the duplicate command preview and points to the full server page for connection instructions and copying. Ended/cancelled requests are labelled `本局已结束`. No API, request ownership, Allocation, NodeJob, d2core, content or network behavior changed.

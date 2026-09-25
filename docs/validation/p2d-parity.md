@@ -1,5 +1,7 @@
 # P2 Party UI focused parity checkpoint
 
+This is a point-in-time parity checkpoint. The later [P2 final validation](p2-summary.md) records the project owner's confirmed UI acceptance and overall P2 PASS.
+
 Date: 2026-09-25. Parent functional checkpoint: `69450e1eff23a85e3e9dd203b1c8ba4d7a7c4b74`.
 
 The formal Party page was compared against `prototype/p1/party.html` and `party.css` while keeping the accepted P1 server panels. It has the same two-column desktop/card hierarchy and one-column mobile flow: member rows and leader/member badges in the main card, a separate invitation card with copy/reset emphasis, and a current-server summary card at the side. The formal page uses existing P1 design colors, typography, buttons and spacing rather than mock API/data. Future P3/P4 prototype controls remain absent.
