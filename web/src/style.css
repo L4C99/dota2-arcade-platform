@@ -275,7 +275,6 @@ footer{color:#647a6d;letter-spacing:.04em}
 .party-facts div{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #dce2d8;font-size:13px}
 .party-facts span{color:#75867c}
 .party-facts strong{text-align:right}
-.party-connect{border:1px solid #d4e3d5;border-radius:10px;background:#f3f8f2;padding:11px;overflow-wrap:anywhere;font-size:12px}
 .party-notice{grid-column:1/-1;margin:0;padding:11px 14px;border:1px solid #cbdccf;border-radius:12px;background:#f3f8f2;color:#32664a;font-size:13px}
 @media(max-width:900px){.party-layout{grid-template-columns:minmax(0,1.35fr) minmax(265px,1fr)}.party-card{padding:23px}}
 @media(max-width:700px){.party-layout{grid-template-columns:1fr;gap:12px}.party-main-column{gap:12px}.party-card{padding:22px}.party-card h2{font-size:27px}.party-lead{font-size:13px}.party-link{align-items:stretch;flex-direction:column}.party-link .secondary-button{align-self:flex-start}}

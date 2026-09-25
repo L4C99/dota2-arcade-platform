@@ -31,6 +31,19 @@ const game = computed(() => catalog.value?.games.find((item) => item.id === (cur
 const preset = computed(() => catalog.value?.presets.find((item) => item.id === (currentRequest.value?.gamePresetId || presetId.value)))
 const selectedPresets = computed(() => catalog.value?.presets.filter((item) => item.arcadeGameId === gameId.value) || [])
 const state = computed(() => statusFor(currentRequest.value, allocation.value))
+const serverCardTitle = computed(() => {
+  if (!currentRequest.value) return '暂无活动服务器'
+  if (currentRequest.value.state === 'ended' || currentRequest.value.state === 'cancelled') return '本局已结束'
+  return party.value ? '队伍服务器' : '单人服务器'
+})
+const serverCardDescription = computed(() => {
+  if (!currentRequest.value) return party.value
+    ? '队长可以到“服务器”页面选择地图与玩法并申请。'
+    : '加入或创建队伍后，这里会显示共同的服务器状态。'
+  return state.value.phase === 'ready'
+    ? '连接方式已准备好，前往服务器页面查看并复制命令。'
+    : state.value.description
+})
 const maintenance = computed(() => catalog.value ? maintenanceFor(catalog.value, gameId.value, presetId.value) : '')
 const isLeader = computed(() => !party.value || party.value.currentRole === 'leader')
 const partyOverPreset = computed(() => !!party.value && !!preset.value && party.value.members.length > preset.value.maxPlayers)
@@ -166,13 +179,13 @@ async function copyInvite(): Promise<void> {
 }
 
 async function removeMember(member: Party['members'][number]): Promise<void> {
-  if (!window.confirm(`确定将「${member.displayName}」移出队伍？当前服务器不会因此停止，也不会将其踢出 Dota。`)) return
-  await partyAction(() => api.removeMember(member.userId), `已将「${member.displayName}」移出队伍；当前服务器继续运行。`)
+  if (!window.confirm(`确定将「${member.displayName}」移出队伍？若已有运行中的服务器，它会继续运行；此操作不会将其踢出 Dota。`)) return
+  await partyAction(() => api.removeMember(member.userId), `已将「${member.displayName}」移出队伍；若已有运行中的服务器，它会继续运行。`)
 }
 
 async function leaveParty(): Promise<void> {
-  if (!window.confirm('确定退出队伍？当前服务器会继续运行；退出队伍不会将你踢出已经进入的 Dota 游戏。')) return
-  await partyAction(() => api.leaveParty(), '已退出队伍；当前服务器继续运行。')
+  if (!window.confirm('确定退出队伍？若已有运行中的服务器，它会继续运行；退队不会将你踢出已经进入的 Dota 游戏。')) return
+  await partyAction(() => api.leaveParty(), '已退出队伍；若已有运行中的服务器，它会继续运行。')
 }
 
 async function disband(): Promise<void> {
@@ -271,7 +284,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
           <button type="button" class="party-text-button" :disabled="busy" @click="resetInvite">重置邀请链接</button>
         </section>
       </div>
-      <aside class="panel party-card party-server-card"><div class="party-card-heading"><span class="eyebrow">当前服务器</span><span class="party-pill">{{ state.title }}</span></div><h2>{{ currentRequest ? '队伍服务器' : '暂无活动服务器' }}</h2><p class="party-lead">{{ currentRequest ? state.description : (party ? '队长可以到“服务器”页面选择地图与玩法并申请。' : '加入或创建队伍后，这里会显示共同的服务器状态。') }}</p><div v-if="currentRequest" class="party-facts"><div><span>地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div><div><span>玩法</span><strong>{{ preset?.displayName || '加载中' }}</strong></div><div><span>节点</span><strong>{{ allocation?.nodeDisplayName || '等待分配' }}</strong></div></div><p v-if="allocation?.joinInfo" class="party-connect"><code>{{ allocation.joinInfo.connectCommand }}</code></p><button type="button" class="secondary-button" @click="partyView = false">{{ allocation?.joinInfo ? '查看连接方式' : '前往服务器页面' }}</button></aside>
+      <aside class="panel party-card party-server-card"><div class="party-card-heading"><span class="eyebrow">当前服务器</span><span class="party-pill">{{ state.title }}</span></div><h2>{{ serverCardTitle }}</h2><p class="party-lead">{{ serverCardDescription }}</p><div v-if="currentRequest" class="party-facts"><div><span>地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div><div><span>玩法</span><strong>{{ preset?.displayName || '加载中' }}</strong></div><div><span>节点</span><strong>{{ allocation?.nodeDisplayName || '等待分配' }}</strong></div></div><button type="button" class="secondary-button" @click="partyView = false">{{ allocation?.joinInfo ? '查看连接方式' : '前往服务器页面' }}</button></aside>
       <p v-if="partyNotice" class="party-notice" role="status">{{ partyNotice }}</p>
     </div>
     <div v-else-if="!currentRequest" class="request-layout">
