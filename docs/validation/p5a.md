@@ -24,4 +24,4 @@ P5 start baseline: `ef767be1b7a95a50d4ccbde9117baaa970fce11f` on `origin/main`, 
 
 ## Scope limits
 
-- The Windows binding still rejects new-game allocations despite matching bytes and compatible Controller readback; its private VM address lacks verified public player reachability. The old game's separate `p5-3564393242-legacy` ContentVersion is registered and tested for technical Ready/rollback, but is not published without human gameplay validation. The strict publish-then-open-binding sequence has passed CI but remains a P5B real rollout acceptance item. These do not affect the P5A multi-game/catalog/version publication result on the validated Linux node.
+- The Windows binding still rejects new-game allocations despite matching bytes and compatible Controller readback; its private VM address lacks verified public reachability. The old game's separate `p5-3564393242-legacy` ContentVersion was subsequently human validated and published across both nodes under P5B. These later changes do not affect the P5A multi-game/catalog/version publication result on the validated Linux node.
