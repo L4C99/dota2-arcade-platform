@@ -38,6 +38,18 @@ The Admin UI has three separate controls that are easy to confuse:
 
 The practical order is register only the needed records, prepare the Node with Content Tool, verify and record the matching content on the Node, then publish the new target and reopen the relevant Node × game admission. The Admin UI cannot perform Content Tool operations or create a local validation instance.
 
+### 首次接入一张新地图时
+
+这与下文的「现有地图换 VPK」不同：新 Workshop ID 尚无游戏、版本、玩法和节点模板映射记录。一次完整接入按如下顺序完成；已经存在的记录不要重复创建。
+
+1. 在运维电脑上取得地图 VPK 和该地图各玩法的正式启动模板。把 VPK 分别复制到每台目标节点的**隔离暂存位置**，逐份计算 SHA256；保留原始文件，不让 Content Tool 直接依赖会变化的来源文件。确定临时名称、Workshop ID、不可变 ContentVersion ID、各 TemplateRevision ID、玩法人数上限及每节点本地 Controller 模板绑定键。正式对外名称以后可单独调整。
+2. Admin「地图、玩法与版本」登记游戏、VPK 版本及 SHA256、必要的启动模板修订和玩法预设。新游戏/玩法保持停用与暂停申请。一个玩法对应一份正式模板修订；若不同玩法实际使用不同启动文件，不要把它们都映射到同一模板。这里只写平台目录记录，不上传 VPK、模板文件，也不启动服务器。
+3. 逐台准备节点：在目标节点以普通运行账户，用 Content Tool 对隔离副本执行 `prepare`、`switch`、`status`，命令形式与下文第 3 步相同。先配置该节点 Controller 对新 Workshop ID 的 `metadataPath=<ContentRoot>/<WorkshopID>/metadata/current.json`、`currentLinkPath=<DotaRoot>/game/dota_addons/<WorkshopID>`，使它能报告真实版本和 SHA256；在节点本地准备、检查每种玩法的正式模板文件与 Controller 绑定键。Admin「节点」→「让此节点找到玩法的启动模板」将各平台 TemplateRevision ID 绑定到**此节点已有的** Controller 键。Web 保存映射不会在节点创建文件或键。按部署流程重启/核对 Controller，要求兼容心跳、该地图 `reported_state=confirmed`、版本和 SHA256 都与登记值一致。
+4. 在该节点进入 Node Drain，确认整台节点占用 0；按下文第 5 步用固定 d2core v0.1.1 的正式模板逐一创建本地临时验证实例，真人进入并测试每种要开放的玩法。每局都显式 stop，确认 `reclaimed/stopped/cleanup=complete` 和 `list` 无残留，再测试下一种。请求 Controller resync 并确认临时实例已消失。仍在 Drain 且占用 0 时，Admin「这台节点上的地图」记录此内容版本的真人验证；结束 Node Drain。
+5. 至少一台可用节点完成验证并恢复后，Admin「地图、玩法与版本」将新版本发布为平台新开服目标。先只打开确已完成验证的节点地图分配开关，再启用经过真人测试的游戏及玩法申请。用普通玩家网页发起一次真实开服，确认 Allocation 快照版本、Ready/JoinInfo、实际玩法和最终完整回收。其他节点逐台执行 3–4 步，再单独打开其地图分配；发布后的目标版本不会替节点切换磁盘。
+
+新地图接入与 VPK 更新都必须遵守 [V1 §21 的 Node Drain 临时实例边界](specs/v1.md)。Steam/蒸汽平台 URI 验证按当前入口网络修订单独管理，不因新增地图自动获得真人入口确认，也不因内容变化自动失效既有网络修订下的入口确认。
+
 ### 管理员实际怎么做：现有地图换一份 VPK
 
 **当前页面若显示节点已上报的版本等于平台目标、此版本已有真人验证记录、且「新分配已允许」，无需点击任何按钮。**「地图分配」卡片只控制指定节点上的指定地图能否接受*新的*服务器；按「暂停此图的新分配」不会停止已有服务器，也不会切换文件。下方的真人验证记录是已完成测试的凭据，不要求每次开服重新记录。Steam/蒸汽平台一键入口的真人确认是另一件事。
