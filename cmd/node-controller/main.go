@@ -14,6 +14,7 @@ import (
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/config"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/core"
+	"github.com/L4C99/dota2-arcade-platform/internal/controller/network"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/platformclient"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/runner"
 )
@@ -46,10 +47,14 @@ func run(args []string) error {
 	factReader := config.NewFactReader(conf)
 	send := func(ctx context.Context) (nodev1.HeartbeatResult, error) {
 		protocol := 0
-		if _, err := coreClient.List(ctx); err == nil {
+		list, listErr := coreClient.List(ctx)
+		if listErr == nil {
 			protocol = 1
 		}
 		facts := factReader.Facts(buildinfo.Version, protocol)
+		if conf.Network.A2SEnabled && listErr == nil {
+			facts.A2SQueryOK = network.ProbeReadyInstances(ctx, list.Instances)
+		}
 		result, err := client.Heartbeat(ctx, facts)
 		return result, err
 	}

@@ -38,6 +38,7 @@ type NetworkFacts struct {
 type ContentFact struct {
 	WorkshopID       string `json:"workshopId"`
 	ContentVersionID string `json:"contentVersionId,omitempty"`
+	VPKSHA256        string `json:"vpkSha256,omitempty"`
 	State            string `json:"state"`
 }
 
@@ -177,6 +178,23 @@ func EntryConfigRevision(n NetworkFacts) string {
 	return hex.EncodeToString(digest[:])
 }
 
+// PublicPorts is the complete set of possible game-port entry targets for the
+// current node configuration. It is used to require full human URI coverage.
+func PublicPorts(n NetworkFacts) []int {
+	ports := make([]int, 0)
+	if n.MappingMode == "identity" {
+		for p := n.LocalPortMin; p <= n.LocalPortMax && p <= 65535; p++ {
+			ports = append(ports, p)
+		}
+	} else {
+		for _, mapping := range n.Mappings {
+			ports = append(ports, mapping.Public)
+		}
+	}
+	sort.Ints(ports)
+	return ports
+}
+
 func (j JoinInfo) Validate() error {
 	if j.LocalPort < 1 || j.LocalPort > 65535 || j.PublicPort < 1 || j.PublicPort > 65535 ||
 		!validConnectHost(j.ConnectHost) ||
@@ -253,6 +271,9 @@ func (h Heartbeat) Validate() error {
 		}
 		if len(item.ContentVersionID) > 128 || strings.ContainsAny(item.ContentVersionID, "\r\n\x00") {
 			return fmt.Errorf("invalid content version")
+		}
+		if item.VPKSHA256 != "" && (item.State != "confirmed" || !revisionPattern.MatchString(item.VPKSHA256)) {
+			return fmt.Errorf("invalid content digest fact")
 		}
 	}
 	return nil

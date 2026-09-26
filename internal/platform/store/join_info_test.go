@@ -89,7 +89,8 @@ func TestP1CEntryRevisionInvalidatesVerification(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.Pool.Exec(ctx, `UPDATE node_entry_capabilities SET steam_entry_verified=true,
-		steam_entry_enabled=true,steamchina_entry_verified=true,steamchina_entry_enabled=true WHERE node_id=$1`, nodeID); err != nil {
+		steam_entry_enabled=true,steam_verified_ports='{28000}',steamchina_entry_verified=true,steamchina_entry_enabled=true,
+		steamchina_verified_ports='{28000}' WHERE node_id=$1`, nodeID); err != nil {
 		t.Fatal(err)
 	}
 	h.Network.ProtocolIP = "203.0.113.2"

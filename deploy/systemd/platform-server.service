@@ -1,0 +1,23 @@
+[Unit]
+Description=Dota 2 Arcade Platform Server
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=arcade-platform
+Group=arcade-platform
+EnvironmentFile=/etc/dota-arcade/platform.env
+WorkingDirectory=/var/lib/dota-arcade
+ExecStartPre=/opt/dota-arcade/current/platform-server migrate
+ExecStart=/opt/dota-arcade/current/platform-server serve
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dota-arcade
+
+[Install]
+WantedBy=multi-user.target

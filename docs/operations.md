@@ -1,0 +1,43 @@
+# V1 operations and recovery
+
+This runbook describes the P5 reference assets and development verification workflow. It does not authorize production changes. Fixed d2core is **v0.1.1**, commit `988720ad85af1f0d97bfe98ec4da4fcbb070beea`; Platform Server never calls it directly.
+
+## Baseline checks
+
+Before maintenance, record the current build SHA, schema migration, `/healthz`, Admin Audit, active ServerRequests, Allocations, open NodeJobs, quarantine, next-game intents, node connectivity, Drain, hard/desired/occupied capacity, Controller and fixed d2core build, direct d2core list, Dota processes, template bindings, ContentRoot links and Controller-reported NodeContentBindings. Do not infer reclamation from a stopped UI card or `quarantined` state. A resource is free only after d2core confirms `reclaimed/stopped/complete`.
+
+Keep deployment credentials, database dumps, VPKs and private player logs outside Git. Controller, d2core and Dota run under the same ordinary node account. On each node, the Controller `network.localPortMin/localPortMax` and d2core manager `--port-min/--port-max` must come from one deployment config; fixed d2core v0.1.1 cannot report the manager's bounds over its local API.
+
+## Database and Platform upgrade
+
+1. Announce a maintenance window and pause new requests. Let active instances end or keep the old Platform build available until they do. Record active jobs and capacity.
+2. Take a timestamped PostgreSQL custom-format dump with `deploy/scripts/backup-postgres.sh` into a protected, persistent backup directory. Verify `pg_restore --list` and a restore into a **separate disposable database** before relying on it. Never commit the dump.
+3. Build and package Platform binary and Web assets together under a new immutable release directory. Preserve the previous directory and deployment environment file. Do not run from a source tree.
+4. Point the `current` symlink at the candidate, run `platform-server migrate` explicitly (the systemd unit also refuses startup if migration fails), then start Platform. Verify migration version, health, player/admin UI, AdminSession, Audit, Party and open resource states. Reconcile every node; never clear an unknown job merely to make health green.
+5. For code-only rollback, point `current` back to the previous build and restart after checking schema compatibility. A forward-only migration is **not** undone by replacing a binary. If the old build cannot read the new schema, stop writes, restore the verified pre-upgrade dump into a new database instance, inspect all Node/Allocation side effects independently, then switch the private DB URL to the recovered database. This is a controlled recovery, not `DROP/recreate` of the live DB. Never assume restoring business rows stopped d2core instances.
+
+## Controller update, Linux and Windows
+
+For each node in turn: set Node Drain, wait for all existing Allocations to reach full reclaim, record direct d2core list and processes, replace only the Controller build, restart it, request Controller resync, verify compatible heartbeat and unchanged content/network facts, then Resume. The previous binary remains available for rollback. If a job response is lost, leave its outcome unknown until reconciliation; do not dispatch the same ServerRequest to another node. On Linux use the systemd units in `deploy/systemd/`; on Windows use the two startup tasks and transcripts installed by `deploy/windows/install-node.ps1`.
+
+## d2core or Dota maintenance
+
+The V1 dependency remains fixed at d2core v0.1.1. Any future d2core update requires separate authorization: Drain node, wait for all instances to be fully reclaimed, back up its private data and config, upgrade manually, check build/protocol and direct list, let Controller resync, then Resume. Never update d2core beneath active instances.
+
+Dota/App570 updates are manual and separately authorized. Drain node, let instances end, run SteamCMD update manually, create a local validation instance using the formal TemplateRevision only while drained, test real client entry, explicitly stop and confirm full reclaim, Controller resync, then Resume. Neither Controller nor Content Tool updates Dota.
+
+## ContentVersion and VPK rolling release
+
+Content Tool is offline: `content-tool status <WorkshopID>`, `prepare <WorkshopID> <version> <source-vpk>`, `switch <WorkshopID> <version>`, `rollback <WorkshopID>`. Pass absolute ASCII `CONTENT_ROOT` and `DOTA_ROOT` (or flags). `prepare` copies an immutable VPK into `<ContentRoot>/<WorkshopID>/releases/<version>/pak01_dir.vpk`, stores SHA256/size metadata outside the release, and does not touch the Dota link. `switch` updates the whole addon directory link/Junction and `metadata/current.json`; Controller readback must confirm it. An interrupted operation leaves a transition record that the next explicit `switch`/`rollback` recovers. A leftover lock requires an operator to confirm the old process is gone before manually removing only that lock. Keep old release directories for rollback; never overwrite an old version in place.
+
+For a single content-bearing node: pause ArcadeGame/GamePreset requests and waiting allocation, set that NodeContentBinding `accepting=false`, wait for relevant Allocations to fully reclaim, `prepare`, `switch`, wait for Controller reported target version, briefly Node Drain, use d2core official local CLI/client for a temporary formal-template validation instance, have a human validate content and entry, stop and verify `reclaimed/stopped/complete`, request Controller resync and confirm the temporary instance is absent, record the human validation in Admin, Resume, publish `current_content_version_id`, set binding `accepting=true`, then lift content maintenance. Content Tool never performs Drain or Platform publication.
+
+For two nodes, update A first with binding `accepting=false`; after full content drain and local validation/resync, set A `accepting=true`. While global current is still old, A's new reported version does not match and receives no old-version Allocation. Publish global current only after A is ready. New Allocations go only to matching A. Then update B with `accepting=false`, preserving any active old-version instance until normal reclaim. Validate/resync B and set `accepting=true`. The old release remains available for rollback. No same-node active old/new content coexistence is promised.
+
+If a content switch fails, keep binding `accepting=false` and Node Drain as needed. Read `status`, inspect pending metadata and links, retry the explicit switch to recover, or `rollback` to the previous known release. Controller must again report the rolled-back version and local human validation must pass before publishing the corresponding Platform target or resuming allocations. Never manually copy over the current VPK.
+
+## Entry validation and small human trial
+
+`a2s_query_ok` is a Controller diagnostic on currently Ready local instances; it is not a human join test and does not control connect, capacity or scheduling. For each node and each Steam/steamchina scheme, use real clients to test **every** public port in the current mapping set. Record the exact tested port set and result in Admin; only then set `verified=true`, and independently decide `enabled=true`. Changing protocol IP, local/public mappings or A2S config changes `entry_config_revision` and clears both flags and recorded coverage. Keep unverified entries disabled. The always available fallback after Ready and valid JoinInfo is `connect <host>:<actual-public-port>`.
+
+For a small multiplayer trial, use at least two real people: create or join a Party through the Web, choose Game/Preset and node mode, request, wait for Ready/JoinInfo, join the same real Dota server, play, then normal stop or next game and confirm full reclaim and Party persistence. Record `requested_at`, `assigned_at`, `create_started_at`, `ready_at` and `join_info_available_at` for natural trials. Browser sessions or bots do not count as real people. Do not force faults during their game.

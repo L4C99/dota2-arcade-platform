@@ -1,0 +1,28 @@
+{
+  "platformUrl": "https://platform.example.org",
+  "development": false,
+  "nodeId": "REPLACE-WITH-REGISTERED-UUID",
+  "nodeSecretFile": "/etc/dota-arcade-node/node.secret",
+  "d2coreBuildFile": "/opt/dota-arcade-node/current/BUILD.json",
+  "d2coreDataDir": "/var/lib/dota-arcade-node/d2core-data",
+  "hardMaxInstances": 1,
+  "network": {
+    "connectHost": "node.example.org",
+    "protocolIp": "",
+    "localPortMin": 28000,
+    "localPortMax": 28009,
+    "mappingMode": "identity",
+    "mappings": [],
+    "a2sEnabled": false
+  },
+  "templateBindings": {
+    "example-template-key": "/var/lib/dota-arcade-node/templates/example.json"
+  },
+  "contentBindings": [
+    {
+      "workshopId": "1234567890",
+      "currentLinkPath": "/srv/dota2/game/dota_addons/1234567890",
+      "metadataPath": "/var/lib/dota-arcade-node/content/1234567890/metadata/current.json"
+    }
+  ]
+}

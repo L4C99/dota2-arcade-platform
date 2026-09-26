@@ -143,15 +143,16 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 	// A missing or unrecognized Controller fact cannot leave an older binding
 	// looking confirmed. The Platform controls only the accepting flag.
 	if _, err := tx.Exec(ctx, `UPDATE node_content_bindings SET reported_state='unknown',
-		reported_content_version_id=NULL,reported_at=$2 WHERE node_id=$1`, nodeID, reportedAt); err != nil {
+		reported_content_version_id=NULL,reported_content_sha256=NULL,reported_at=$2 WHERE node_id=$1`, nodeID, reportedAt); err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}
 	for _, fact := range h.Content {
 		var gameID string
 		var versionID *string
-		err := tx.QueryRow(ctx, `SELECT g.id,c.id FROM arcade_games g
+		var expectedHash *string
+		err := tx.QueryRow(ctx, `SELECT g.id,c.id,c.content_sha256 FROM arcade_games g
 			LEFT JOIN content_versions c ON c.arcade_game_id=g.id AND c.id=$2
-			WHERE g.workshop_id=$1`, fact.WorkshopID, fact.ContentVersionID).Scan(&gameID, &versionID)
+			WHERE g.workshop_id=$1`, fact.WorkshopID, fact.ContentVersionID).Scan(&gameID, &versionID, &expectedHash)
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}
@@ -159,16 +160,22 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 			return nodev1.HeartbeatResult{}, err
 		}
 		state := "unknown"
+		var reportedHash *string
 		if fact.State != "confirmed" {
 			versionID = nil
-		} else if versionID != nil {
+		} else if versionID != nil && (fact.VPKSHA256 == "" || expectedHash != nil && fact.VPKSHA256 == *expectedHash) {
 			state = "confirmed"
+			if fact.VPKSHA256 != "" {
+				reportedHash = &fact.VPKSHA256
+			}
+		} else {
+			versionID = nil
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO node_content_bindings(node_id,arcade_game_id,reported_content_version_id,reported_state,reported_at)
-			VALUES($1,$2,$3,$4,$5) ON CONFLICT(node_id,arcade_game_id) DO UPDATE SET
+		_, err = tx.Exec(ctx, `INSERT INTO node_content_bindings(node_id,arcade_game_id,reported_content_version_id,reported_state,reported_at,reported_content_sha256)
+			VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(node_id,arcade_game_id) DO UPDATE SET
 			reported_content_version_id=EXCLUDED.reported_content_version_id,
-			reported_state=EXCLUDED.reported_state,reported_at=EXCLUDED.reported_at`,
-			nodeID, gameID, versionID, state, reportedAt)
+			reported_state=EXCLUDED.reported_state,reported_at=EXCLUDED.reported_at,reported_content_sha256=EXCLUDED.reported_content_sha256`,
+			nodeID, gameID, versionID, state, reportedAt, reportedHash)
 		if err != nil {
 			return nodev1.HeartbeatResult{}, err
 		}
@@ -195,10 +202,14 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 		steam_entry_enabled=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_entry_enabled ELSE false END,
 		steam_verified_at=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verified_at ELSE NULL END,
 		steam_verified_by=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verified_by ELSE NULL END,
+		steam_verified_ports=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verified_ports ELSE '{}'::integer[] END,
+		steam_verification_note=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verification_note ELSE '' END,
 		steamchina_entry_verified=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_entry_verified ELSE false END,
 		steamchina_entry_enabled=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_entry_enabled ELSE false END,
 		steamchina_verified_at=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verified_at ELSE NULL END,
 		steamchina_verified_by=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verified_by ELSE NULL END,
+		steamchina_verified_ports=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verified_ports ELSE '{}'::integer[] END,
+		steamchina_verification_note=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verification_note ELSE '' END,
 		reported_at=EXCLUDED.reported_at`, nodeID, revision, h.Network.A2SEnabled, h.Network.A2SEnabled && h.A2SQueryOK, reportedAt)
 	if err != nil {
 		return nodev1.HeartbeatResult{}, err

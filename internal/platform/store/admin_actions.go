@@ -5,26 +5,41 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/jackc/pgx/v5"
 )
 
 var ErrInvalidAdminAction = errors.New("invalid administrator action")
+var workshopIDPattern = regexp.MustCompile(`^[0-9]+$`)
+var contentSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type AdminAction struct {
-	Action    string  `json:"action"`
-	TargetID  string  `json:"targetId"`
-	GameID    string  `json:"gameId,omitempty"`
-	Accepting *bool   `json:"accepting,omitempty"`
-	Enabled   *bool   `json:"enabled,omitempty"`
-	Draining  *bool   `json:"draining,omitempty"`
-	Priority  *int    `json:"priority,omitempty"`
-	Desired   *int    `json:"desired,omitempty"`
-	Message   *string `json:"message,omitempty"`
-	Entry     string  `json:"entry,omitempty"`
-	Verified  *bool   `json:"verified,omitempty"`
-	Confirmed bool    `json:"confirmed,omitempty"`
+	Action             string  `json:"action"`
+	TargetID           string  `json:"targetId"`
+	GameID             string  `json:"gameId,omitempty"`
+	Accepting          *bool   `json:"accepting,omitempty"`
+	Enabled            *bool   `json:"enabled,omitempty"`
+	Draining           *bool   `json:"draining,omitempty"`
+	Priority           *int    `json:"priority,omitempty"`
+	Desired            *int    `json:"desired,omitempty"`
+	Message            *string `json:"message,omitempty"`
+	Entry              string  `json:"entry,omitempty"`
+	Verified           *bool   `json:"verified,omitempty"`
+	Confirmed          bool    `json:"confirmed,omitempty"`
+	WorkshopID         string  `json:"workshopId,omitempty"`
+	DisplayName        string  `json:"displayName,omitempty"`
+	ContentVersionID   string  `json:"contentVersionId,omitempty"`
+	ContentSHA256      string  `json:"contentSha256,omitempty"`
+	TemplateRevisionID string  `json:"templateRevisionId,omitempty"`
+	BindingKey         string  `json:"bindingKey,omitempty"`
+	Description        string  `json:"description,omitempty"`
+	MaxPlayers         int     `json:"maxPlayers,omitempty"`
+	VerifiedPorts      []int   `json:"verifiedPorts,omitempty"`
+	VerificationNote   string  `json:"verificationNote,omitempty"`
 }
 
 func auditAdmin(ctx context.Context, tx pgx.Tx, adminID, action, targetType, targetID string, change map[string]any) error {
@@ -63,7 +78,9 @@ func auditOperator(ctx context.Context, tx pgx.Tx, kind, action, targetType, tar
 }
 
 func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAction) error {
-	if len(a.TargetID) > 200 || len(a.GameID) > 200 || a.Message != nil && len(*a.Message) > 1000 {
+	if len(a.TargetID) > 200 || len(a.GameID) > 200 || a.Message != nil && len(*a.Message) > 1000 ||
+		len(a.DisplayName) > 128 || len(a.ContentVersionID) > 128 || len(a.TemplateRevisionID) > 128 ||
+		len(a.BindingKey) > 128 || len(a.Description) > 1000 || len(a.VerificationNote) > 500 || len(a.VerifiedPorts) > 4096 {
 		return ErrInvalidAdminAction
 	}
 	tx, err := s.Pool.Begin(ctx)
@@ -75,6 +92,127 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 	targetType := ""
 	targetID := a.TargetID
 	switch a.Action {
+	case "game.create":
+		if a.TargetID != "" || !workshopIDPattern.MatchString(a.WorkshopID) || strings.TrimSpace(a.DisplayName) == "" {
+			return ErrInvalidAdminAction
+		}
+		id, err := NewID()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO arcade_games(id,workshop_id,display_name,enabled,accepting_new_requests)
+			VALUES($1,$2,$3,false,false)`, id, a.WorkshopID, strings.TrimSpace(a.DisplayName)); err != nil {
+			return err
+		}
+		targetType, targetID = "arcade_game", id
+		change = map[string]any{"workshopId": a.WorkshopID, "displayName": strings.TrimSpace(a.DisplayName), "enabled": false, "accepting": false}
+	case "template.create":
+		if a.TargetID == "" || strings.TrimSpace(a.TemplateRevisionID) == "" {
+			return ErrInvalidAdminAction
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO template_revisions(id,arcade_game_id,description) VALUES($1,$2,$3)`,
+			a.TemplateRevisionID, a.TargetID, strings.TrimSpace(a.Description)); err != nil {
+			return err
+		}
+		targetType, targetID = "template_revision", a.TemplateRevisionID
+		change = map[string]any{"arcadeGameId": a.TargetID, "description": strings.TrimSpace(a.Description)}
+	case "content.create":
+		if a.TargetID == "" || strings.TrimSpace(a.ContentVersionID) == "" || !contentSHA256Pattern.MatchString(a.ContentSHA256) {
+			return ErrInvalidAdminAction
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO content_versions(id,arcade_game_id,content_sha256) VALUES($1,$2,$3)`,
+			a.ContentVersionID, a.TargetID, a.ContentSHA256); err != nil {
+			return err
+		}
+		targetType, targetID = "content_version", a.ContentVersionID
+		change = map[string]any{"arcadeGameId": a.TargetID, "sha256": a.ContentSHA256}
+	case "preset.create":
+		if a.TargetID == "" || strings.TrimSpace(a.DisplayName) == "" || a.TemplateRevisionID == "" || a.MaxPlayers <= 0 {
+			return ErrInvalidAdminAction
+		}
+		id, err := NewID()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO game_presets(id,arcade_game_id,display_name,max_players,template_revision_id,enabled,accepting_new_requests)
+			VALUES($1,$2,$3,$4,$5,false,false)`, id, a.TargetID, strings.TrimSpace(a.DisplayName), a.MaxPlayers, a.TemplateRevisionID); err != nil {
+			return err
+		}
+		targetType, targetID = "game_preset", id
+		change = map[string]any{"arcadeGameId": a.TargetID, "displayName": strings.TrimSpace(a.DisplayName), "maxPlayers": a.MaxPlayers, "templateRevisionId": a.TemplateRevisionID, "enabled": false, "accepting": false}
+	case "template_binding.upsert":
+		if a.TargetID == "" || a.TemplateRevisionID == "" || strings.TrimSpace(a.BindingKey) == "" {
+			return ErrInvalidAdminAction
+		}
+		var old string
+		err := tx.QueryRow(ctx, `SELECT binding_key FROM node_template_bindings WHERE node_id=$1 AND template_revision_id=$2 FOR UPDATE`, a.TargetID, a.TemplateRevisionID).Scan(&old)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO node_template_bindings(node_id,template_revision_id,binding_key) VALUES($1,$2,$3)
+			ON CONFLICT(node_id,template_revision_id) DO UPDATE SET binding_key=EXCLUDED.binding_key`,
+			a.TargetID, a.TemplateRevisionID, strings.TrimSpace(a.BindingKey)); err != nil {
+			return err
+		}
+		targetType, targetID = "node_template_binding", a.TargetID+":"+a.TemplateRevisionID
+		change = map[string]any{"before": old, "after": strings.TrimSpace(a.BindingKey)}
+	case "content.validate":
+		if a.TargetID == "" || a.GameID == "" || a.ContentVersionID == "" || !a.Confirmed {
+			return ErrInvalidAdminAction
+		}
+		var drained, compatibleAndFresh bool
+		var state, version, reportedHash, expectedHash string
+		var occupied int
+		err := tx.QueryRow(ctx, `SELECT n.draining,COALESCE(n.last_heartbeat > now()-interval '2 minutes' AND r.compatibility_status='compatible',false),
+			b.reported_state,COALESCE(b.reported_content_version_id,''),COALESCE(b.reported_content_sha256,''),v.content_sha256,
+			(SELECT count(*) FROM allocations x WHERE x.node_id=n.id AND x.state NOT IN ('reclaimed','released_no_effect'))
+			FROM nodes n JOIN node_content_bindings b ON b.node_id=n.id AND b.arcade_game_id=$2
+			JOIN node_reports r ON r.node_id=n.id
+			JOIN content_versions v ON v.arcade_game_id=b.arcade_game_id AND v.id=$3
+			WHERE n.id=$1 FOR UPDATE OF n,b`,
+			a.TargetID, a.GameID, a.ContentVersionID).Scan(&drained, &compatibleAndFresh, &state, &version, &reportedHash, &expectedHash, &occupied)
+		if err != nil {
+			return err
+		}
+		if !drained || !compatibleAndFresh || state != "confirmed" || version != a.ContentVersionID || reportedHash != expectedHash || occupied != 0 {
+			return fmt.Errorf("%w: validation requires drained, empty node and confirmed version", ErrJobConflict)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO content_release_validations(node_id,arcade_game_id,content_version_id,verified_by)
+			VALUES($1,$2,$3,$4) ON CONFLICT(node_id,arcade_game_id,content_version_id)
+			DO UPDATE SET verified_by=EXCLUDED.verified_by,verified_at=now()`, a.TargetID, a.GameID, a.ContentVersionID, adminID); err != nil {
+			return err
+		}
+		targetType, targetID = "content_validation", a.TargetID+":"+a.ContentVersionID
+		change = map[string]any{"arcadeGameId": a.GameID, "contentVersionId": a.ContentVersionID, "humanConfirmed": true}
+	case "content.publish":
+		if a.TargetID == "" || a.ContentVersionID == "" || !a.Confirmed {
+			return ErrInvalidAdminAction
+		}
+		var old string
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(current_content_version_id,'') FROM arcade_games WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&old); err != nil {
+			return err
+		}
+		var readyNode string
+		err := tx.QueryRow(ctx, `SELECT b.node_id FROM content_release_validations v
+			JOIN node_content_bindings b ON b.node_id=v.node_id AND b.arcade_game_id=v.arcade_game_id
+			JOIN content_versions c ON c.arcade_game_id=v.arcade_game_id AND c.id=v.content_version_id
+			JOIN nodes n ON n.id=v.node_id JOIN node_reports r ON r.node_id=n.id
+			WHERE v.arcade_game_id=$1 AND v.content_version_id=$2 AND b.reported_state='confirmed'
+			AND b.reported_content_version_id=v.content_version_id AND b.reported_content_sha256=c.content_sha256
+			AND b.accepting_new_allocations
+			AND n.enabled AND n.accepting_new_requests AND NOT n.draining AND r.compatibility_status='compatible'
+			AND n.last_heartbeat > now()-interval '2 minutes' LIMIT 1 FOR SHARE OF b,n`, a.TargetID, a.ContentVersionID).Scan(&readyNode)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("%w: no validated, currently eligible target node", ErrJobConflict)
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE arcade_games SET current_content_version_id=$2 WHERE id=$1`, a.TargetID, a.ContentVersionID); err != nil {
+			return err
+		}
+		targetType, targetID = "arcade_game", a.TargetID
+		change = map[string]any{"contentVersionBefore": old, "contentVersionAfter": a.ContentVersionID, "validatedNodeId": readyNode}
 	case "global.update":
 		targetType, targetID = "platform_settings", "global"
 		if a.Accepting == nil && a.Message == nil {
@@ -207,14 +345,16 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if a.Verified != nil && *a.Verified && !a.Confirmed {
 			return ErrInvalidAdminAction
 		}
-		verifiedCol, enabledCol, atCol, byCol := "steam_entry_verified", "steam_entry_enabled", "steam_verified_at", "steam_verified_by"
+		verifiedCol, enabledCol, atCol, byCol, portsCol, noteCol := "steam_entry_verified", "steam_entry_enabled", "steam_verified_at", "steam_verified_by", "steam_verified_ports", "steam_verification_note"
 		if a.Entry == "steamchina" {
-			verifiedCol, enabledCol, atCol, byCol = "steamchina_entry_verified", "steamchina_entry_enabled", "steamchina_verified_at", "steamchina_verified_by"
+			verifiedCol, enabledCol, atCol, byCol, portsCol, noteCol = "steamchina_entry_verified", "steamchina_entry_enabled", "steamchina_verified_at", "steamchina_verified_by", "steamchina_verified_ports", "steamchina_verification_note"
 		}
 		var oldVerified, oldEnabled bool
 		var a2sEnabled, a2sOK bool
 		var revision string
-		if err := tx.QueryRow(ctx, `SELECT `+verifiedCol+`,`+enabledCol+`,a2s_enabled,a2s_query_ok,entry_config_revision FROM node_entry_capabilities WHERE node_id=$1 FOR UPDATE`, a.TargetID).Scan(&oldVerified, &oldEnabled, &a2sEnabled, &a2sOK, &revision); err != nil {
+		var ports []int
+		var note string
+		if err := tx.QueryRow(ctx, `SELECT `+verifiedCol+`,`+enabledCol+`,a2s_enabled,a2s_query_ok,entry_config_revision,`+portsCol+`,`+noteCol+` FROM node_entry_capabilities WHERE node_id=$1 FOR UPDATE`, a.TargetID).Scan(&oldVerified, &oldEnabled, &a2sEnabled, &a2sOK, &revision, &ports, &note); err != nil {
 			return err
 		}
 		verified, enabled := oldVerified, oldEnabled
@@ -222,6 +362,8 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			verified = *a.Verified
 			if !verified {
 				enabled = false
+				ports = []int{}
+				note = ""
 			}
 		}
 		if a.Enabled != nil {
@@ -235,12 +377,37 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if a.Verified != nil && *a.Verified && (!a2sEnabled || !a2sOK) {
 			return ErrInvalidAdminAction
 		}
-		query := fmt.Sprintf(`UPDATE node_entry_capabilities SET %s=$2,%s=$3,%s=CASE WHEN $2 AND NOT %s THEN now() WHEN $2 THEN %s ELSE NULL END,
-			%s=CASE WHEN $2 AND NOT %s THEN $4::uuid WHEN $2 THEN %s ELSE NULL END WHERE node_id=$1`, verifiedCol, enabledCol, atCol, verifiedCol, atCol, byCol, verifiedCol, byCol)
-		if _, err := tx.Exec(ctx, query, a.TargetID, verified, enabled, adminID); err != nil {
+		if a.Verified != nil && *a.Verified {
+			if strings.TrimSpace(a.VerificationNote) == "" {
+				return ErrInvalidAdminAction
+			}
+			var networkRaw []byte
+			if err := tx.QueryRow(ctx, `SELECT network_facts FROM node_reports WHERE node_id=$1`, a.TargetID).Scan(&networkRaw); err != nil {
+				return err
+			}
+			var network nodev1.NetworkFacts
+			if err := json.Unmarshal(networkRaw, &network); err != nil {
+				return err
+			}
+			expected := nodev1.PublicPorts(network)
+			provided := append([]int(nil), a.VerifiedPorts...)
+			slices.Sort(provided)
+			if len(expected) == 0 || !slices.Equal(expected, provided) {
+				return fmt.Errorf("%w: verification must cover every configured public port", ErrJobConflict)
+			}
+			ports = provided
+			note = strings.TrimSpace(a.VerificationNote)
+		} else if a.Verified == nil && (len(a.VerifiedPorts) != 0 || a.VerificationNote != "") {
+			return ErrInvalidAdminAction
+		}
+		query := fmt.Sprintf(`UPDATE node_entry_capabilities SET %s=$2,%s=$3,
+			%s=CASE WHEN $7 THEN CASE WHEN $2 THEN now() ELSE NULL END ELSE %s END,
+			%s=CASE WHEN $7 THEN CASE WHEN $2 THEN $4::uuid ELSE NULL END ELSE %s END,
+			%s=$5,%s=$6 WHERE node_id=$1`, verifiedCol, enabledCol, atCol, atCol, byCol, byCol, portsCol, noteCol)
+		if _, err := tx.Exec(ctx, query, a.TargetID, verified, enabled, adminID, ports, note, a.Verified != nil); err != nil {
 			return err
 		}
-		change = map[string]any{"verifiedBefore": oldVerified, "verifiedAfter": verified, "enabledBefore": oldEnabled, "enabledAfter": enabled, "revision": revision}
+		change = map[string]any{"verifiedBefore": oldVerified, "verifiedAfter": verified, "enabledBefore": oldEnabled, "enabledAfter": enabled, "revision": revision, "verifiedPorts": ports, "verificationNote": note}
 	case "request.cancel":
 		targetType = "server_request"
 		var state string

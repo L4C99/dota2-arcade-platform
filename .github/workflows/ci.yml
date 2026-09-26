@@ -24,7 +24,20 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Build
-        run: go build ./cmd/platform-server ./cmd/node-controller
+        run: go build ./cmd/platform-server ./cmd/node-controller ./cmd/content-tool
+      - name: Linux deployment script syntax
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash -n deploy/systemd/start-d2core-manager.sh deploy/scripts/backup-postgres.sh
+      - name: Windows deployment script syntax
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($file in Get-ChildItem deploy/windows -Filter *.ps1) {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { throw "$($file.Name): $($errors[0].Message)" }
+          }
 
   postgres-integration:
     runs-on: ubuntu-24.04

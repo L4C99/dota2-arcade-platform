@@ -1,0 +1,28 @@
+{
+  "platformUrl": "https://platform.example.org",
+  "development": false,
+  "nodeId": "REPLACE-WITH-REGISTERED-UUID",
+  "nodeSecretFile": "C:\\ProgramData\\DotaArcadeNode\\config\\node.secret",
+  "d2coreBuildFile": "C:\\ProgramData\\DotaArcadeNode\\bin\\BUILD.json",
+  "d2coreDataDir": "C:\\ProgramData\\DotaArcadeNode\\data",
+  "hardMaxInstances": 1,
+  "network": {
+    "connectHost": "node.example.org",
+    "protocolIp": "",
+    "localPortMin": 28100,
+    "localPortMax": 28109,
+    "mappingMode": "identity",
+    "mappings": [],
+    "a2sEnabled": false
+  },
+  "templateBindings": {
+    "example-template-key": "C:\\ProgramData\\DotaArcadeNode\\templates\\example.json"
+  },
+  "contentBindings": [
+    {
+      "workshopId": "1234567890",
+      "currentLinkPath": "D:\\SteamLibrary\\steamapps\\common\\dota 2 beta\\game\\dota_addons\\1234567890",
+      "metadataPath": "C:\\ProgramData\\DotaArcadeNode\\content\\1234567890\\metadata\\current.json"
+    }
+  ]
+}

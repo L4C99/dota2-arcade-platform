@@ -213,6 +213,12 @@ main{padding-top:24px;min-height:calc(100vh - 145px)}
 .secondary-button.danger{border-color:#e5d2be;background:#fcf8f2;color:#9a633a}
 .secondary-button.danger:hover:not(:disabled){background:#f7eadc}
 .join-panel>p,.side-panel>p{font-size:13px;line-height:1.65;color:#456258}
+.protocol-entry{display:grid;gap:10px;margin:16px 0}
+.protocol-entry-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px;border:1px solid #cbded0;border-radius:10px;background:#f3f8f2}
+.protocol-entry-button{display:inline-block;padding:9px 12px;border-radius:8px;background:#204b3c;color:#fff;text-decoration:none;font-size:13px;font-weight:700}
+.protocol-entry-button:hover{background:#14382d}
+.protocol-entry-row code{width:100%;overflow-wrap:anywhere;color:#587268;font-size:11px}
+.join-panel .protocol-help{margin:12px 0 18px;color:#587268}
 .connect-box{flex-direction:row;align-items:flex-end;justify-content:space-between;gap:10px;background:#f3f8f2;border-radius:14px;margin:0}
 .connect-box>div{min-width:0}
 .connect-box span{font-size:12px;font-weight:400;letter-spacing:0;color:#75867c}

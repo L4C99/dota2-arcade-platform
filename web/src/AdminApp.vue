@@ -4,17 +4,21 @@ import { computed, onMounted, reactive, ref } from 'vue'
 interface Settings { acceptingNewRequests: boolean; maintenanceMessage: string; siteAnnouncement: string }
 interface Game { id: string; displayName: string; workshopId: string; currentContentVersionId: string; maintenanceMessage: string; enabled: boolean; acceptingNewRequests: boolean }
 interface Preset { id: string; arcadeGameId: string; displayName: string; templateRevisionId: string; maintenanceMessage: string; enabled: boolean; acceptingNewRequests: boolean; maxPlayers: number }
+interface ContentVersion { id: string; arcadeGameId: string; contentSha256: string; createdAt: string }
+interface TemplateRevision { id: string; arcadeGameId: string; description: string }
+interface TemplateBinding { nodeId: string; templateRevisionId: string; bindingKey: string }
+interface ContentValidation { nodeId: string; arcadeGameId: string; contentVersionId: string; verifiedAt: string; verifiedBy: string }
 interface Node { id: string; displayName: string; os: string; connectivity: string; controllerVersion: string; d2coreVersion: string; d2coreCommit: string; compatibility: string; recentErrorCode: string; enabled: boolean; acceptingNewRequests: boolean; draining: boolean; priority: number; hard: number; desired: number; occupied: number; lastHeartbeat?: string; reconcileRequested: number; reconcileCompleted: number }
-interface Binding { nodeId: string; arcadeGameId: string; reportedContentVersionId: string; reportedState: string; reportedAt?: string; acceptingNewAllocations: boolean }
-interface Entry { nodeId: string; a2sEnabled: boolean; a2sQueryOk: boolean; steamVerified: boolean; steamEnabled: boolean; steamChinaVerified: boolean; steamChinaEnabled: boolean; steamVerifiedAt?: string; steamChinaVerifiedAt?: string }
+interface Binding { nodeId: string; arcadeGameId: string; reportedContentVersionId: string; reportedContentSha256: string; reportedState: string; reportedAt?: string; acceptingNewAllocations: boolean }
+interface Entry { nodeId: string; entryConfigRevision: string; publicPorts: number[]; steamVerifiedPorts: number[]; steamChinaVerifiedPorts: number[]; steamVerificationNote: string; steamChinaVerificationNote: string; a2sEnabled: boolean; a2sQueryOk: boolean; steamVerified: boolean; steamEnabled: boolean; steamChinaVerified: boolean; steamChinaEnabled: boolean; steamVerifiedAt?: string; steamChinaVerifiedAt?: string }
 interface ServerRequest { id: string; arcadeGameId: string; gamePresetId: string; state: string; ownerPartyId?: string; nodeSelectionMode: string; manualNodeId?: string; requestedAt: string }
 interface Party { id: string; leaderDisplayName: string; memberCount: number; dissolvedAt?: string }
 interface Allocation { id: string; serverRequestId: string; nodeId: string; contentVersionId: string; templateRevisionId: string; state: string; errorCode: string; attemptSequence: number; assignedAt: string }
 interface Job { id: string; nodeId: string; allocationId: string; kind: string; state: string; errorCode: string; updatedAt: string }
 interface Audit { id: string; actorUsername: string; actorKind: string; action: string; targetType: string; targetId: string; result: string; stateChange: Record<string, unknown>; createdAt: string }
 interface Counts { waiting: number; creating: number; running: number; stopping: number; quarantined: number; failedUnreclaimed: number }
-interface Overview { settings: Settings; counts: Counts; games: Game[]; presets: Preset[]; nodes: Node[]; bindings: Binding[]; entries: Entry[]; requests: ServerRequest[]; parties: Party[]; allocations: Allocation[]; jobs: Job[]; audit: Audit[] }
-interface Action { action: string; targetId?: string; gameId?: string; accepting?: boolean; enabled?: boolean; draining?: boolean; priority?: number; desired?: number; message?: string; entry?: string; verified?: boolean; confirmed?: boolean }
+interface Overview { settings: Settings; counts: Counts; games: Game[]; presets: Preset[]; contentVersions: ContentVersion[]; templateRevisions: TemplateRevision[]; templateBindings: TemplateBinding[]; contentValidations: ContentValidation[]; nodes: Node[]; bindings: Binding[]; entries: Entry[]; requests: ServerRequest[]; parties: Party[]; allocations: Allocation[]; jobs: Job[]; audit: Audit[] }
+interface Action { action: string; targetId?: string; gameId?: string; accepting?: boolean; enabled?: boolean; draining?: boolean; priority?: number; desired?: number; message?: string; entry?: string; verified?: boolean; confirmed?: boolean; verifiedPorts?: number[]; verificationNote?: string; workshopId?: string; displayName?: string; contentVersionId?: string; contentSha256?: string; templateRevisionId?: string; bindingKey?: string; description?: string; maxPlayers?: number }
 
 const username = ref('')
 const password = ref('')
@@ -31,12 +35,14 @@ const selectedNodeId = ref('')
 const selectedRequestId = ref('')
 const requestView = ref<'active' | 'history'>('active')
 const selectedAuditId = ref('')
+const catalogDraft = reactive({ workshopId: '', gameName: '', gameId: '', versionId: '', sha256: '', templateId: '', templateDescription: '', presetName: '', presetMaxPlayers: 1, presetTemplateId: '', publishVersionId: '' })
+const templateBindingDraft = reactive({ revisionId: '', bindingKey: '' })
 
 const requestStates: Record<string, string> = { waiting: '排队中', allocating: '分配中', creating: '启动中', running: '运行中', stopping: '停止中', quarantined: '异常隔离', failed_unreclaimed: '回收异常', unavailable: '无法继续分配', ended: '已结束', reclaimed: '已回收', abandoned: '已放弃', cancelled: '已取消' }
 const activeRequestStates = ['waiting', 'allocating', 'creating', 'running', 'stopping', 'quarantined', 'failed_unreclaimed']
 const allocationStates: Record<string, string> = { reserved: '资源已预留', creating: '启动中', create_unknown: '启动结果待确认', running: '运行中', stopping: '停止中', unknown: '状态待确认', failed_unreclaimed: '回收异常', quarantined: '异常隔离', reclaimed: '已回收', released_no_effect: '未启动，名额已释放' }
 const jobStates: Record<string, string> = { pending: '待执行', claimed: '节点已领取', accepted: '已接收', running: '执行中', unknown: '状态待确认', succeeded: '已完成', failed: '失败' }
-const auditActions: Record<string, string> = { 'global.update': '调整全站申请设置', 'announcement.update': '更新站点公告', 'game.update': '调整游廊游戏', 'preset.update': '调整玩法预设', 'node.update': '调整节点设置', 'node.reconcile': '请求节点重新核对', 'binding.update': '调整地图分配', 'entry.update': '调整一键入口', 'request.cancel': '取消等待申请', 'request.stop': '请求结束服务器', 'allocation.quarantine': '标记异常隔离', 'allocation.quarantine.unreachable': '失联后自动隔离', 'admin.create': '创建管理员', 'admin.reset_password': '重设管理员密码', 'admin.disable': '停用管理员' }
+const auditActions: Record<string, string> = { 'global.update': '调整全站申请设置', 'announcement.update': '更新站点公告', 'game.create': '登记游廊游戏', 'game.update': '调整游廊游戏', 'template.create': '登记模板修订', 'content.create': '登记内容版本', 'preset.create': '登记玩法预设', 'template_binding.upsert': '设置节点模板映射', 'content.validate': '记录内容真人验证', 'content.publish': '发布内容版本', 'preset.update': '调整玩法预设', 'node.update': '调整节点设置', 'node.reconcile': '请求节点重新核对', 'binding.update': '调整地图分配', 'entry.update': '调整一键入口', 'request.cancel': '取消等待申请', 'request.stop': '请求结束服务器', 'allocation.quarantine': '标记异常隔离', 'allocation.quarantine.unreachable': '失联后自动隔离', 'admin.create': '创建管理员', 'admin.reset_password': '重设管理员密码', 'admin.disable': '停用管理员' }
 const auditFields: Record<string, string> = { acceptingBefore: '原申请状态', acceptingAfter: '新申请状态', enabledBefore: '原启用状态', enabledAfter: '新启用状态', drainingBefore: '原维护状态', drainingAfter: '新维护状态', priorityBefore: '原优先级', priorityAfter: '新优先级', desiredBefore: '原期望容量', desiredAfter: '新期望容量', verifiedBefore: '原验证状态', verifiedAfter: '新验证状态', requestBefore: '原申请状态', requestAfter: '新申请状态', before: '原状态', after: '新状态', messageBefore: '原提示', messageAfter: '新提示', capacityReleased: '释放容量', sessionsInvalidated: '旧会话失效', requestedGeneration: '核对批次', revision: '配置版本', username: '用户名', entry: '入口', jobId: '节点任务', stopJobId: '停止任务编号', allocationId: '资源分配编号' }
 function stateLabel(state: string): string { return requestStates[state] || allocationStates[state] || jobStates[state] || state || '未知' }
 function connectivityLabel(value: string): string { return ({ online: '在线', stale: '心跳延迟', offline: '离线' } as Record<string, string>)[value] || '状态未知' }
@@ -74,6 +80,8 @@ const selectedRequest = computed(() => filteredRequests.value.find(request => re
 const selectedAudit = computed(() => overview.value?.audit.find(event => event.id === selectedAuditId.value) || overview.value?.audit[0])
 function bindingsFor(nodeId: string): Binding[] { return overview.value?.bindings.filter(binding => binding.nodeId === nodeId) || [] }
 function entriesFor(nodeId: string): Entry[] { return overview.value?.entries.filter(entry => entry.nodeId === nodeId) || [] }
+function versionsFor(gameId: string): ContentVersion[] { return overview.value?.contentVersions.filter(version => version.arcadeGameId === gameId) || [] }
+function validationFor(nodeId: string, gameId: string, versionId: string): ContentValidation | undefined { return overview.value?.contentValidations.find(v => v.nodeId === nodeId && v.arcadeGameId === gameId && v.contentVersionId === versionId) }
 
 async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await fetch(`/api/v1/admin${path}`, { method, credentials: 'same-origin',
@@ -103,6 +111,7 @@ async function refresh(): Promise<void> {
     maintenance: data.settings.maintenanceMessage, announcement: data.settings.siteAnnouncement })
   for (const node of data.nodes) nodeDraft[node.id] = { priority: node.priority, desired: node.desired }
   if (!data.nodes.some(node => node.id === selectedNodeId.value)) selectedNodeId.value = data.nodes[0]?.id || ''
+  if (!data.games.some(game => game.id === catalogDraft.gameId)) catalogDraft.gameId = data.games[0]?.id || ''
 }
 
 onMounted(async () => {
@@ -137,16 +146,39 @@ async function saveGlobal(): Promise<void> {
   await act({ action: 'global.update', accepting: globalDraft.accepting, message: globalDraft.maintenance })
 }
 async function saveAnnouncement(): Promise<void> { await act({ action: 'announcement.update', message: globalDraft.announcement }) }
+async function createGame(): Promise<void> {
+  await act({ action: 'game.create', workshopId: catalogDraft.workshopId, displayName: catalogDraft.gameName })
+}
+async function createContentVersion(): Promise<void> {
+  await act({ action: 'content.create', targetId: catalogDraft.gameId, contentVersionId: catalogDraft.versionId, contentSha256: catalogDraft.sha256 })
+}
+async function createTemplateRevision(): Promise<void> {
+  await act({ action: 'template.create', targetId: catalogDraft.gameId, templateRevisionId: catalogDraft.templateId, description: catalogDraft.templateDescription })
+}
+async function createPreset(): Promise<void> {
+  await act({ action: 'preset.create', targetId: catalogDraft.gameId, displayName: catalogDraft.presetName, maxPlayers: catalogDraft.presetMaxPlayers, templateRevisionId: catalogDraft.presetTemplateId })
+}
+async function publishVersion(): Promise<void> {
+  await act({ action: 'content.publish', targetId: catalogDraft.gameId, contentVersionId: catalogDraft.publishVersionId, confirmed: true }, '确认目标版本已在至少一台当前可接收分配的节点完成准备、真人验证、完整回收和 Controller 核对？发布只更新新 Allocation 的目标版本，不切换节点文件，也不改变已有 Allocation。')
+}
 function editMessage(kind: 'game.update' | 'preset.update', id: string, current: string): void {
   const message = window.prompt(kind === 'game.update' ? '地图维护提示' : '玩法维护提示', current)
   if (message !== null) void act({ action: kind, targetId: id, message })
 }
 
-function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified' | 'enabled', value: boolean): void {
+function entryAction(node: Node, entry: Entry, kind: 'steam' | 'steamchina', field: 'verified' | 'enabled', value: boolean): void {
   const base: Action = { action: 'entry.update', targetId: node.id, entry: kind }
   if (field === 'verified') {
     base.verified = value
     base.confirmed = value
+    if (value) {
+      const ports = window.prompt(`请填写已用真实客户端逐一成功进入的全部公网端口，逗号分隔。当前配置要求：${entry.publicPorts.join(', ')}`, '')
+      if (ports === null) return
+      base.verifiedPorts = ports.split(',').map(item => Number(item.trim()))
+      const note = window.prompt('请记录真人验证结果与测试窗口（不要填写凭据或私人玩家信息）', '')
+      if (note === null) return
+      base.verificationNote = note.trim()
+    }
     void act(base, value ? '确认你已经在当前节点、当前网络配置、所有可能分配的公网端口映射上，用真实客户端验证此入口可以进入游戏？此操作会记录你的管理员身份。' : '撤销此入口的真人验证并关闭入口？')
   } else { base.enabled = value; void act(base, value ? '确认开启此入口给玩家？请先核对真人验证状态。' : '') }
 }
@@ -172,7 +204,16 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
         <section class="panel admin-card"><span class="eyebrow">节点摘要</span><h2>容量与连接</h2><div class="admin-list"><div v-for="node in overview.nodes" :key="node.id" class="admin-row"><div><strong>{{ node.displayName }}</strong><small>{{ node.os === 'windows' ? 'Windows' : 'Linux' }} · {{ compatibilityLabel(node.compatibility) }} · 最近心跳 {{ stamp(node.lastHeartbeat) }}</small></div><div class="admin-row-side"><span class="admin-badge" :class="node.connectivity">{{ connectivityLabel(node.connectivity) }}</span><span class="admin-capacity"><strong>{{ node.occupied }} / {{ node.desired }}</strong><small>已占用 / 期望容量</small></span></div></div></div></section>
       </template>
       <template v-else-if="tab === 'content'">
-        <div class="admin-section-heading"><div><span class="eyebrow">内容与维护</span><h2>地图与玩法</h2><p>地图和玩法可分别暂停申请；这里仅查看当前内容版本，不切换版本。</p></div></div>
+        <div class="admin-section-heading"><div><span class="eyebrow">内容与维护</span><h2>地图、玩法与版本</h2><p>平台登记和发布内容版本；节点磁盘由运维使用 Content Tool 单独准备和切换。</p></div></div>
+        <section class="panel admin-card"><span class="eyebrow">新增内容</span><h2>登记游戏与玩法</h2><p>新游戏和玩法默认停用且暂停申请。内容文件不会从这里上传或修改。</p>
+          <form class="admin-form-row" @submit.prevent="createGame"><label>Workshop ID<input v-model.trim="catalogDraft.workshopId" required pattern="[0-9]+" maxlength="32" /></label><label>游戏名称<input v-model.trim="catalogDraft.gameName" required maxlength="128" /></label><button class="secondary-button" type="submit" :disabled="busy">登记游戏</button></form>
+          <div v-if="overview.games.length" class="admin-catalog-create"><label>目标游戏<select v-model="catalogDraft.gameId"><option v-for="game in overview.games" :key="game.id" :value="game.id">{{ game.displayName }} · {{ game.workshopId }}</option></select></label>
+            <form class="admin-form-row" @submit.prevent="createContentVersion"><label>新内容版本 ID<input v-model.trim="catalogDraft.versionId" required maxlength="128" /></label><label>VPK SHA256<input v-model.trim="catalogDraft.sha256" required pattern="[0-9a-f]{64}" maxlength="64" /></label><button class="secondary-button" type="submit" :disabled="busy">登记不可变版本</button></form>
+            <form class="admin-form-row" @submit.prevent="createTemplateRevision"><label>模板修订 ID<input v-model.trim="catalogDraft.templateId" required maxlength="128" /></label><label>启动语义说明<input v-model.trim="catalogDraft.templateDescription" maxlength="1000" /></label><button class="secondary-button" type="submit" :disabled="busy">登记模板修订</button></form>
+            <form class="admin-form-row" @submit.prevent="createPreset"><label>玩法名称<input v-model.trim="catalogDraft.presetName" required maxlength="128" /></label><label>最大玩家数<input v-model.number="catalogDraft.presetMaxPlayers" required type="number" min="1" step="1" /></label><label>模板修订<select v-model="catalogDraft.presetTemplateId" required><option value="" disabled>请选择</option><option v-for="revision in overview.templateRevisions.filter(item => item.arcadeGameId === catalogDraft.gameId)" :key="revision.id" :value="revision.id">{{ revision.id }}</option></select></label><button class="secondary-button" type="submit" :disabled="busy">登记玩法</button></form>
+          </div>
+        </section>
+        <section v-if="catalogDraft.gameId" class="panel admin-card"><span class="eyebrow">正式发布</span><h2>切换新分配的内容目标</h2><p>必须先在节点完成排空、Content Tool 切换、Controller readback、本地真人验证与完整回收。发布不会修改节点磁盘或已有分配记录。</p><div class="admin-form-row"><label>目标版本<select v-model="catalogDraft.publishVersionId"><option value="" disabled>请选择</option><option v-for="version in versionsFor(catalogDraft.gameId)" :key="version.id" :value="version.id">{{ version.id }}</option></select></label><button type="button" class="primary-button" :disabled="busy || !catalogDraft.publishVersionId" @click="publishVersion">发布目标版本</button></div><div v-for="version in versionsFor(catalogDraft.gameId)" :key="version.id" class="admin-compact-row"><div><strong>{{ version.id }}</strong><small>SHA256 {{ version.contentSha256 }} · {{ stamp(version.createdAt) }}</small></div><span class="admin-badge">{{ overview.games.find(game => game.id === catalogDraft.gameId)?.currentContentVersionId === version.id ? '当前目标' : '保留版本' }}</span></div></section>
         <section class="panel admin-card">
           <div class="admin-card-heading"><div><span class="eyebrow">游廊游戏</span><h2>地图设置</h2></div><span class="admin-count">{{ overview.games.length }} 张地图</span></div>
           <div v-for="game in overview.games" :key="game.id" class="admin-entity">
@@ -219,11 +260,13 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
               <span class="eyebrow">节点 × 地图</span><h2>地图分配</h2><p>内容版本和准备状态由节点上报；这里仅控制是否继续向该节点分配这张地图。</p>
               <div v-for="binding in bindingsFor(selectedNode.id)" :key="binding.arcadeGameId" class="admin-entity admin-binding-detail"><div class="admin-entity-head"><div><h3>{{ gameName(binding.arcadeGameId) }}</h3><p>已上报版本 <code>{{ binding.reportedContentVersionId || '未知' }}</code> · {{ reportedStateLabel(binding.reportedState) }}</p><small>上报时间 {{ stamp(binding.reportedAt) }}</small></div><span class="admin-badge">{{ binding.acceptingNewAllocations ? '允许分配' : '暂停分配' }}</span></div><button type="button" class="secondary-button" :disabled="busy" @click="act({action:'binding.update',targetId:selectedNode.id,gameId:binding.arcadeGameId,accepting:!binding.acceptingNewAllocations})">{{ binding.acceptingNewAllocations ? '暂停这张地图' : '恢复这张地图' }}</button></div>
               <p v-if="bindingsFor(selectedNode.id).length === 0" class="admin-empty">这台节点没有地图分配记录。</p>
+              <div v-for="binding in bindingsFor(selectedNode.id)" :key="`${binding.arcadeGameId}-validation`" class="admin-content-validation"><strong>{{ gameName(binding.arcadeGameId) }} · {{ binding.reportedContentVersionId || '版本未知' }}</strong><small v-if="validationFor(selectedNode.id,binding.arcadeGameId,binding.reportedContentVersionId)">真人验证记录：{{ stamp(validationFor(selectedNode.id,binding.arcadeGameId,binding.reportedContentVersionId)?.verifiedAt) }}</small><small v-else>尚无此节点此版本的真人验证记录</small><button type="button" class="secondary-button" :disabled="busy || !selectedNode.draining || selectedNode.occupied !== 0 || binding.reportedState !== 'confirmed'" @click="act({action:'content.validate',targetId:selectedNode.id,gameId:binding.arcadeGameId,contentVersionId:binding.reportedContentVersionId,confirmed:true},'确认该节点已 Drain，目标版本完成本地真人进房验证，临时实例已 stop 并完整 reclaimed/stopped/complete，Controller 已 resync 且无遗留实例？此操作仅记录人工验证，不修改节点内容。')">记录真人验证</button></div>
             </section>
           </div>
+          <section class="panel admin-card"><span class="eyebrow">启动模板</span><h2>节点模板映射</h2><p>这里只登记逻辑绑定键；请先确认 Controller 本地配置和正式模板文件已准备好。</p><div v-for="binding in overview.templateBindings.filter(item => item.nodeId === selectedNode?.id)" :key="binding.templateRevisionId" class="admin-compact-row"><div><strong>{{ binding.templateRevisionId }}</strong><small>绑定键 {{ binding.bindingKey }}</small></div></div><form class="admin-form-row" @submit.prevent="act({action:'template_binding.upsert',targetId:selectedNode?.id,templateRevisionId:templateBindingDraft.revisionId,bindingKey:templateBindingDraft.bindingKey})"><label>模板修订<select v-model="templateBindingDraft.revisionId" required><option value="" disabled>请选择</option><option v-for="revision in overview.templateRevisions" :key="revision.id" :value="revision.id">{{ gameName(revision.arcadeGameId) }} · {{ revision.id }}</option></select></label><label>Controller 绑定键<input v-model.trim="templateBindingDraft.bindingKey" required maxlength="128" /></label><button type="submit" class="secondary-button" :disabled="busy">保存映射</button></form></section>
           <section v-for="entry in entriesFor(selectedNode.id)" :key="entry.nodeId" class="panel admin-card">
-            <span class="eyebrow">玩家入口</span><h2>一键进入游戏</h2><p>服务器查询：{{ entry.a2sEnabled ? (entry.a2sQueryOk ? '已报告可用' : '查询失败') : '未启用' }}。真人验证须覆盖当前配置和全部可分配的公网端口。</p>
-            <div class="admin-entry-grid"><div v-for="kind in (['steam','steamchina'] as const)" :key="kind" class="admin-entry-option"><div><h3>{{ kind === 'steam' ? 'Steam' : '蒸汽平台' }}</h3><p>真人验证 {{ kind === 'steam' ? (entry.steamVerified ? '已确认' : '未确认') : (entry.steamChinaVerified ? '已确认' : '未确认') }} · 玩家入口 {{ kind === 'steam' ? (entry.steamEnabled ? '开启' : '关闭') : (entry.steamChinaEnabled ? '开启' : '关闭') }}</p></div><div class="admin-actions"><button type="button" class="secondary-button" :disabled="busy || (!(entry.a2sEnabled && entry.a2sQueryOk) && !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified))" @click="entryAction(selectedNode,kind,'verified',kind === 'steam' ? !entry.steamVerified : !entry.steamChinaVerified)">{{ kind === 'steam' ? (entry.steamVerified ? '撤销验证' : '确认真人验证') : (entry.steamChinaVerified ? '撤销验证' : '确认真人验证') }}</button><button type="button" class="secondary-button" :disabled="busy || !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" @click="entryAction(selectedNode,kind,'enabled',kind === 'steam' ? !entry.steamEnabled : !entry.steamChinaEnabled)">{{ kind === 'steam' ? (entry.steamEnabled ? '关闭入口' : '开启入口') : (entry.steamChinaEnabled ? '关闭入口' : '开启入口') }}</button></div></div></div>
+            <span class="eyebrow">玩家入口</span><h2>一键进入游戏</h2><p>服务器查询：{{ entry.a2sEnabled ? (entry.a2sQueryOk ? '已报告可用' : '查询失败') : '未启用' }}。真人验证须覆盖当前配置和全部可分配的公网端口。</p><p>当前入口配置修订 {{ entry.entryConfigRevision.slice(0, 12) }} · 需逐一测试的公网端口：{{ entry.publicPorts.join('、') || '未配置' }}</p>
+            <div class="admin-entry-grid"><div v-for="kind in (['steam','steamchina'] as const)" :key="kind" class="admin-entry-option"><div><h3>{{ kind === 'steam' ? 'Steam' : '蒸汽平台' }}</h3><p>真人验证 {{ kind === 'steam' ? (entry.steamVerified ? '已确认' : '未确认') : (entry.steamChinaVerified ? '已确认' : '未确认') }} · 玩家入口 {{ kind === 'steam' ? (entry.steamEnabled ? '开启' : '关闭') : (entry.steamChinaEnabled ? '开启' : '关闭') }}</p><small>已验证端口 {{ (kind === 'steam' ? entry.steamVerifiedPorts : entry.steamChinaVerifiedPorts).join('、') || '无' }} · 验证时间 {{ stamp(kind === 'steam' ? entry.steamVerifiedAt : entry.steamChinaVerifiedAt) }}</small></div><div class="admin-actions"><button type="button" class="secondary-button" :disabled="busy || (!(entry.a2sEnabled && entry.a2sQueryOk) && !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified))" @click="entryAction(selectedNode,entry,kind,'verified',kind === 'steam' ? !entry.steamVerified : !entry.steamChinaVerified)">{{ kind === 'steam' ? (entry.steamVerified ? '撤销验证' : '确认真人验证') : (entry.steamChinaVerified ? '撤销验证' : '确认真人验证') }}</button><button type="button" class="secondary-button" :disabled="busy || !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" @click="entryAction(selectedNode,entry,kind,'enabled',kind === 'steam' ? !entry.steamEnabled : !entry.steamChinaEnabled)">{{ kind === 'steam' ? (entry.steamEnabled ? '关闭入口' : '开启入口') : (entry.steamChinaEnabled ? '关闭入口' : '开启入口') }}</button></div></div></div>
           </section>
         </div>
         <p v-else class="admin-empty">还没有游戏节点。</p>

@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"time"
+
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 )
 
 type AdminSettings struct {
@@ -41,6 +44,33 @@ type AdminPreset struct {
 	MaxPlayers           int    `json:"maxPlayers"`
 }
 
+type AdminContentVersion struct {
+	ID            string    `json:"id"`
+	ArcadeGameID  string    `json:"arcadeGameId"`
+	ContentSHA256 string    `json:"contentSha256"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+type AdminTemplateRevision struct {
+	ID           string `json:"id"`
+	ArcadeGameID string `json:"arcadeGameId"`
+	Description  string `json:"description"`
+}
+
+type AdminTemplateBinding struct {
+	NodeID             string `json:"nodeId"`
+	TemplateRevisionID string `json:"templateRevisionId"`
+	BindingKey         string `json:"bindingKey"`
+}
+
+type AdminContentValidation struct {
+	NodeID           string    `json:"nodeId"`
+	ArcadeGameID     string    `json:"arcadeGameId"`
+	ContentVersionID string    `json:"contentVersionId"`
+	VerifiedAt       time.Time `json:"verifiedAt"`
+	VerifiedBy       string    `json:"verifiedBy"`
+}
+
 type AdminNode struct {
 	ID                   string     `json:"id"`
 	DisplayName          string     `json:"displayName"`
@@ -67,21 +97,28 @@ type AdminBinding struct {
 	NodeID                   string     `json:"nodeId"`
 	ArcadeGameID             string     `json:"arcadeGameId"`
 	ReportedContentVersionID string     `json:"reportedContentVersionId"`
+	ReportedContentSHA256    string     `json:"reportedContentSha256"`
 	ReportedState            string     `json:"reportedState"`
 	ReportedAt               *time.Time `json:"reportedAt"`
 	AcceptingNewAllocations  bool       `json:"acceptingNewAllocations"`
 }
 
 type AdminEntry struct {
-	NodeID               string     `json:"nodeId"`
-	A2SEnabled           bool       `json:"a2sEnabled"`
-	A2SQueryOK           bool       `json:"a2sQueryOk"`
-	SteamVerified        bool       `json:"steamVerified"`
-	SteamEnabled         bool       `json:"steamEnabled"`
-	SteamChinaVerified   bool       `json:"steamChinaVerified"`
-	SteamChinaEnabled    bool       `json:"steamChinaEnabled"`
-	SteamVerifiedAt      *time.Time `json:"steamVerifiedAt"`
-	SteamChinaVerifiedAt *time.Time `json:"steamChinaVerifiedAt"`
+	NodeID                     string     `json:"nodeId"`
+	EntryConfigRevision        string     `json:"entryConfigRevision"`
+	PublicPorts                []int      `json:"publicPorts"`
+	SteamVerifiedPorts         []int      `json:"steamVerifiedPorts"`
+	SteamChinaVerifiedPorts    []int      `json:"steamChinaVerifiedPorts"`
+	SteamVerificationNote      string     `json:"steamVerificationNote"`
+	SteamChinaVerificationNote string     `json:"steamChinaVerificationNote"`
+	A2SEnabled                 bool       `json:"a2sEnabled"`
+	A2SQueryOK                 bool       `json:"a2sQueryOk"`
+	SteamVerified              bool       `json:"steamVerified"`
+	SteamEnabled               bool       `json:"steamEnabled"`
+	SteamChinaVerified         bool       `json:"steamChinaVerified"`
+	SteamChinaEnabled          bool       `json:"steamChinaEnabled"`
+	SteamVerifiedAt            *time.Time `json:"steamVerifiedAt"`
+	SteamChinaVerifiedAt       *time.Time `json:"steamChinaVerifiedAt"`
 }
 
 type AdminRequest struct {
@@ -137,24 +174,29 @@ type AuditEvent struct {
 }
 
 type AdminOverview struct {
-	Settings    AdminSettings     `json:"settings"`
-	Counts      AdminCounts       `json:"counts"`
-	Games       []AdminGame       `json:"games"`
-	Presets     []AdminPreset     `json:"presets"`
-	Nodes       []AdminNode       `json:"nodes"`
-	Bindings    []AdminBinding    `json:"bindings"`
-	Entries     []AdminEntry      `json:"entries"`
-	Requests    []AdminRequest    `json:"requests"`
-	Parties     []AdminParty      `json:"parties"`
-	Allocations []AdminAllocation `json:"allocations"`
-	Jobs        []AdminJob        `json:"jobs"`
-	Audit       []AuditEvent      `json:"audit"`
+	Settings           AdminSettings            `json:"settings"`
+	Counts             AdminCounts              `json:"counts"`
+	Games              []AdminGame              `json:"games"`
+	Presets            []AdminPreset            `json:"presets"`
+	ContentVersions    []AdminContentVersion    `json:"contentVersions"`
+	TemplateRevisions  []AdminTemplateRevision  `json:"templateRevisions"`
+	TemplateBindings   []AdminTemplateBinding   `json:"templateBindings"`
+	ContentValidations []AdminContentValidation `json:"contentValidations"`
+	Nodes              []AdminNode              `json:"nodes"`
+	Bindings           []AdminBinding           `json:"bindings"`
+	Entries            []AdminEntry             `json:"entries"`
+	Requests           []AdminRequest           `json:"requests"`
+	Parties            []AdminParty             `json:"parties"`
+	Allocations        []AdminAllocation        `json:"allocations"`
+	Jobs               []AdminJob               `json:"jobs"`
+	Audit              []AuditEvent             `json:"audit"`
 }
 
 // AdminOverview deliberately omits node secrets, private network facts,
 // frozen local paths, operation tokens, and raw Controller errors.
 func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
-	o := AdminOverview{Games: []AdminGame{}, Presets: []AdminPreset{}, Nodes: []AdminNode{},
+	o := AdminOverview{Games: []AdminGame{}, Presets: []AdminPreset{}, ContentVersions: []AdminContentVersion{},
+		TemplateRevisions: []AdminTemplateRevision{}, TemplateBindings: []AdminTemplateBinding{}, ContentValidations: []AdminContentValidation{}, Nodes: []AdminNode{},
 		Bindings: []AdminBinding{}, Entries: []AdminEntry{}, Requests: []AdminRequest{}, Parties: []AdminParty{},
 		Allocations: []AdminAllocation{}, Jobs: []AdminJob{}, Audit: []AuditEvent{}}
 	if err := s.Pool.QueryRow(ctx, `SELECT p.accepting_new_requests,p.maintenance_message,a.message
@@ -184,6 +226,74 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 			return AdminOverview{}, err
 		}
 		o.Games = append(o.Games, x)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return AdminOverview{}, err
+	}
+	rows.Close()
+	rows, err = s.Pool.Query(ctx, `SELECT id,arcade_game_id,content_sha256,created_at FROM content_versions ORDER BY created_at,id`)
+	if err != nil {
+		return AdminOverview{}, err
+	}
+	for rows.Next() {
+		var x AdminContentVersion
+		if err := rows.Scan(&x.ID, &x.ArcadeGameID, &x.ContentSHA256, &x.CreatedAt); err != nil {
+			rows.Close()
+			return AdminOverview{}, err
+		}
+		o.ContentVersions = append(o.ContentVersions, x)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return AdminOverview{}, err
+	}
+	rows.Close()
+	rows, err = s.Pool.Query(ctx, `SELECT id,arcade_game_id,description FROM template_revisions ORDER BY created_at,id`)
+	if err != nil {
+		return AdminOverview{}, err
+	}
+	for rows.Next() {
+		var x AdminTemplateRevision
+		if err := rows.Scan(&x.ID, &x.ArcadeGameID, &x.Description); err != nil {
+			rows.Close()
+			return AdminOverview{}, err
+		}
+		o.TemplateRevisions = append(o.TemplateRevisions, x)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return AdminOverview{}, err
+	}
+	rows.Close()
+	rows, err = s.Pool.Query(ctx, `SELECT node_id,template_revision_id,binding_key FROM node_template_bindings ORDER BY node_id,template_revision_id`)
+	if err != nil {
+		return AdminOverview{}, err
+	}
+	for rows.Next() {
+		var x AdminTemplateBinding
+		if err := rows.Scan(&x.NodeID, &x.TemplateRevisionID, &x.BindingKey); err != nil {
+			rows.Close()
+			return AdminOverview{}, err
+		}
+		o.TemplateBindings = append(o.TemplateBindings, x)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return AdminOverview{}, err
+	}
+	rows.Close()
+	rows, err = s.Pool.Query(ctx, `SELECT node_id,arcade_game_id,content_version_id,verified_at,verified_by FROM content_release_validations ORDER BY verified_at DESC`)
+	if err != nil {
+		return AdminOverview{}, err
+	}
+	for rows.Next() {
+		var x AdminContentValidation
+		if err := rows.Scan(&x.NodeID, &x.ArcadeGameID, &x.ContentVersionID, &x.VerifiedAt, &x.VerifiedBy); err != nil {
+			rows.Close()
+			return AdminOverview{}, err
+		}
+		o.ContentValidations = append(o.ContentValidations, x)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -250,14 +360,14 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT node_id,arcade_game_id,COALESCE(reported_content_version_id,''),reported_state,reported_at,accepting_new_allocations
+	rows, err = s.Pool.Query(ctx, `SELECT node_id,arcade_game_id,COALESCE(reported_content_version_id,''),COALESCE(reported_content_sha256,''),reported_state,reported_at,accepting_new_allocations
 		FROM node_content_bindings ORDER BY node_id,arcade_game_id`)
 	if err != nil {
 		return AdminOverview{}, err
 	}
 	for rows.Next() {
 		var x AdminBinding
-		if err := rows.Scan(&x.NodeID, &x.ArcadeGameID, &x.ReportedContentVersionID, &x.ReportedState, &x.ReportedAt, &x.AcceptingNewAllocations); err != nil {
+		if err := rows.Scan(&x.NodeID, &x.ArcadeGameID, &x.ReportedContentVersionID, &x.ReportedContentSHA256, &x.ReportedState, &x.ReportedAt, &x.AcceptingNewAllocations); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
@@ -268,17 +378,27 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT node_id,a2s_enabled,a2s_query_ok,steam_entry_verified,steam_entry_enabled,steam_verified_at,
-		steamchina_entry_verified,steamchina_entry_enabled,steamchina_verified_at FROM node_entry_capabilities ORDER BY node_id`)
+	rows, err = s.Pool.Query(ctx, `SELECT c.node_id,c.a2s_enabled,c.a2s_query_ok,c.steam_entry_verified,c.steam_entry_enabled,c.steam_verified_at,
+		c.steamchina_entry_verified,c.steamchina_entry_enabled,c.steamchina_verified_at,c.entry_config_revision,
+		c.steam_verified_ports,c.steamchina_verified_ports,c.steam_verification_note,c.steamchina_verification_note,r.network_facts
+		FROM node_entry_capabilities c JOIN node_reports r ON r.node_id=c.node_id ORDER BY c.node_id`)
 	if err != nil {
 		return AdminOverview{}, err
 	}
 	for rows.Next() {
 		var x AdminEntry
-		if err := rows.Scan(&x.NodeID, &x.A2SEnabled, &x.A2SQueryOK, &x.SteamVerified, &x.SteamEnabled, &x.SteamVerifiedAt, &x.SteamChinaVerified, &x.SteamChinaEnabled, &x.SteamChinaVerifiedAt); err != nil {
+		var networkRaw []byte
+		if err := rows.Scan(&x.NodeID, &x.A2SEnabled, &x.A2SQueryOK, &x.SteamVerified, &x.SteamEnabled, &x.SteamVerifiedAt, &x.SteamChinaVerified, &x.SteamChinaEnabled, &x.SteamChinaVerifiedAt,
+			&x.EntryConfigRevision, &x.SteamVerifiedPorts, &x.SteamChinaVerifiedPorts, &x.SteamVerificationNote, &x.SteamChinaVerificationNote, &networkRaw); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
+		var network nodev1.NetworkFacts
+		if err := json.Unmarshal(networkRaw, &network); err != nil {
+			rows.Close()
+			return AdminOverview{}, err
+		}
+		x.PublicPorts = nodev1.PublicPorts(network)
 		o.Entries = append(o.Entries, x)
 	}
 	if err := rows.Err(); err != nil {

@@ -116,6 +116,7 @@ func (r *FactReader) readContentFact(binding ContentBinding) nodev1.ContentFact 
 		return fact
 	}
 	fact.ContentVersionID = metadata.ContentVersionID
+	fact.VPKSHA256 = digest
 	fact.State = "confirmed"
 	return fact
 }
