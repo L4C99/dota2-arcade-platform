@@ -107,13 +107,15 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, method = 'GET', body?: object): Promise<T> {
+async function request<T>(path: string, method = 'GET', body?: object, observedAt?: (serverMs: number) => void): Promise<T> {
   const response = await fetch(`/api/v1${path}`, {
     method,
     credentials: 'same-origin',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
+  const serverMs = Date.parse(response.headers.get('Date') || '')
+  if (Number.isFinite(serverMs)) observedAt?.(serverMs)
   if (!response.ok) {
     const contentType = response.headers.get('Content-Type') || ''
     const error = contentType.includes('application/json') ? await response.json() : { message: await response.text() }
@@ -137,11 +139,11 @@ export const api = {
   leaveParty: () => request<void>('/party/leave', 'POST'),
   removeMember: (id: string) => request<void>(`/party/members/${encodeURIComponent(id)}/remove`, 'POST'),
   disbandParty: () => request<void>('/party/disband', 'POST'),
-  current: () => request<ServerRequest | null>('/server-requests/current'),
-  getRequest: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}`),
+  current: (observedAt?: (serverMs: number) => void) => request<ServerRequest | null>('/server-requests/current', 'GET', undefined, observedAt),
+  getRequest: (id: string, observedAt?: (serverMs: number) => void) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}`, 'GET', undefined, observedAt),
   createRequest: (arcadeGameId: string, gamePresetId: string, nodeSelectionMode: 'auto' | 'manual' = 'auto', manualNodeId = '') =>
     request<ServerRequest>('/server-requests', 'POST', { arcadeGameId, gamePresetId, nodeSelectionMode, manualNodeId }),
-  allocation: (id: string) => request<Allocation | null>(`/server-requests/${encodeURIComponent(id)}/allocation`),
+  allocation: (id: string, observedAt?: (serverMs: number) => void) => request<Allocation | null>(`/server-requests/${encodeURIComponent(id)}/allocation`, 'GET', undefined, observedAt),
   stop: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/stop`, 'POST'),
   nextGame: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/next-game`, 'POST'),
   nextGameIntent: (id: string) => request<NextGameIntent | null>(`/server-requests/${encodeURIComponent(id)}/next-game`),

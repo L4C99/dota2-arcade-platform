@@ -15,10 +15,13 @@ const allocation: Allocation = {
 }
 
 describe('player elapsed time', () => {
-  it('uses the request and actual create-start timestamps for live states', () => {
+  it('keeps the total continuous when waiting changes to creating', () => {
     expect(elapsedFor(request, null, 'waiting', Date.parse('2026-09-26T10:00:12.300Z'))?.summary).toBe('正在等待服务器 · 已等待 12 秒')
-    expect(elapsedFor(request, allocation, 'creating', Date.parse('2026-09-26T10:00:38.000Z'))?.summary).toBe('正在启动服务器 · 已用时 23 秒')
-    expect(elapsedFor(request, { ...allocation, createStartedAt: undefined }, 'creating', Date.parse('2026-09-26T10:00:20.000Z'))?.summary).toBe('正在准备服务器 · 已用时 8 秒')
+    expect(elapsedFor(request, allocation, 'creating', Date.parse('2026-09-26T10:00:20.000Z'))).toEqual({
+      summary: '正在启动服务器 · 已用时 20 秒',
+      detail: '其中启动阶段 5 秒',
+    })
+    expect(elapsedFor(request, { ...allocation, createStartedAt: undefined }, 'creating', Date.parse('2026-09-26T10:00:20.000Z'))?.summary).toBe('正在准备服务器 · 已用时 20 秒')
   })
 
   it('uses Platform JoinInfo time for the final total and separates a real queue', () => {
