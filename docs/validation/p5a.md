@@ -11,7 +11,7 @@ P5 start baseline: `ef767be1b7a95a50d4ccbde9117baaa970fce11f` on `origin/main`, 
 
 ## Verification
 
-- Local `go test ./...` passes, but PostgreSQL Store/HTTP tests skip without `PLATFORM_TEST_DATABASE_URL`; CI PostgreSQL result is pending.
+- Local `go test ./...` passes; PostgreSQL Store/HTTP tests skip locally without `PLATFORM_TEST_DATABASE_URL`. GitHub Actions [run 36231578148](https://github.com/L4C99/dota2-arcade-platform/actions/runs/36231578148) passed all four jobs, including the disposable PostgreSQL integration suite and migration-13 upgrade test. The first CI run found and led to correction of an older P4 test's hard-coded final migration number.
 - Local read-only development inventory found one verified real Workshop (`3564393242`, `p1-test-v1`) on Linux and Windows. No confirmed second VPK or game was found.
 
 ## NOT VERIFIED

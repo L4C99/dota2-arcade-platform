@@ -14,7 +14,9 @@ Controller 在首次真正连接 d2core 之前上报 `d2coreProtocolVersion=0`�
 
 P3E 的 `connectHost` 可是节点的直连 IP、自有域名或厂商 NAT 域名；域名按完整 DNS label 校验，但不推断其公网可达性。`protocolIp` 只接受显式 IP，可以留空；Controller 不会把 NAT 域名解析成 Steam URI 所需的 IP。`identity` 将 d2core 实际本地端口映射到同号公网端口，`explicit` 必须逐一覆盖本地池并保持公网端口唯一。JoinInfo 使用该实例由 d2core `status` 报告的实际端口，未覆盖时返回 `PORT_MAPPING_UNAVAILABLE` 且实例继续占容量。网络事实变更会改变 entry revision，使旧 JoinInfo 不再展示。固定 d2core v0.1.1 API 不能读取管理器当前 serve 端口范围，部署时必须从同一配置生成 Controller 与 serve 参数并核对运行中的参数；不声称从本地 API 自动发现。
 
-内容事实只在 Controller 能同时读回当前目录链接、metadata 指向和 VPK 文件时报告 `confirmed`；读不到或不一致时报告 `unknown`。P0C 保存原始节点事实快照供诊断；P1B 将建立正式 `NodeContentBinding` 调度模型。Web/Admin 不能通过节点 API 伪造这些事实。
+内容事实只在 Controller 能同时读回当前目录链接、metadata 指向和 VPK 文件时报告 `confirmed`；读不到或不一致时报告 `unknown`。P5 Controller 还会核对实际 VPK SHA256 与 metadata，并在心跳里上报可选的 `vpkSha256`。Platform 将它与不可变 ContentVersion SHA256 对照；不匹配则绑定状态为 `unknown`。旧 Controller 缺少该字段时，升级期间可继续读取原有确认状态，但新的真人内容验证必须有匹配的实际 SHA256。Web/Admin 不能通过节点 API 伪造这些事实。
+
+P5 Controller 只在本地存在 Ready 实例时对这些实例逐一发送 A2S_INFO UDP 查询，处理服务端 challenge 后上报 `a2sQueryOk`。没有 Ready 实例时该值为 false。它只说明本机查询诊断结果，不证明公网 Steam/steamchina URI 可以让真人进入，也不影响 `connect`、容量或调度。
 
 ## durable NodeJob
 

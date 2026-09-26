@@ -5,7 +5,7 @@
 - Controller checks A2S_INFO over local UDP for every currently Ready instance, including challenge handling. A2S remains a diagnostic and does not determine `connect` or scheduling eligibility.
 - Admin entry verification requires an explicit human confirmation, note and exact full set of currently configured public ports. Verified and enabled remain separate. A network revision change clears verification, enabled state and port evidence. Migration invalidates legacy verifications that lacked full-port evidence.
 - Player page displays a Steam or steamchina URI only when the backend supplies it after verified and enabled checks. It always retains `connect` help, including the client cold-start and Windows Win+R fallback.
-- Unit tests exercise A2S challenge. PostgreSQL tests cover partial-port rejection, full-port acceptance and revision invalidation; their CI result is pending.
+- Unit tests exercise A2S challenge. PostgreSQL tests cover partial-port rejection, full-port acceptance and revision invalidation. GitHub Actions [run 36231578148](https://github.com/L4C99/dota2-arcade-platform/actions/runs/36231578148) passed all four jobs.
 
 ## NOT VERIFIED
 
