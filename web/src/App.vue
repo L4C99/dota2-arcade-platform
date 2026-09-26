@@ -33,6 +33,8 @@ const manualNodeId = ref('')
 let timer: number | undefined
 let polling = false
 let elapsedRequestId = ''
+let lastRefreshAtMs = 0
+let lastContextRefreshAtMs = 0
 const observedServerMs = ref(Date.now())
 
 const game = computed(() => catalog.value?.games.find((item) => item.id === (currentRequest.value?.arcadeGameId || gameId.value)))
@@ -105,13 +107,16 @@ async function refreshParty(): Promise<void> {
   } else invite.value = null
 }
 
-async function refresh(): Promise<void> {
+async function refresh(forceContext = false): Promise<void> {
   if (polling || busy.value) return
   polling = true
+  lastRefreshAtMs = Date.now()
+  const pending = ['waiting', 'allocating', 'creating'].includes(state.value.phase)
+  const refreshContext = forceContext || !pending || Date.now() - lastContextRefreshAtMs >= 5000
   let observedAtMs = Date.now()
   const observe = (serverMs: number) => { observedAtMs = serverMs }
   try {
-    await refreshParty()
+    if (refreshContext) await refreshParty()
     let request = await api.current(observe)
     if (!request) {
       const lastId = localStorage.getItem(savedRequestKey)
@@ -123,14 +128,15 @@ async function refresh(): Promise<void> {
     currentRequest.value = request
     const choiceGame = request?.arcadeGameId || gameId.value
     const choicePreset = request?.gamePresetId || presetId.value
-    if (choiceGame && choicePreset) nodes.value = await api.nodes(choiceGame, choicePreset)
+    if (refreshContext && choiceGame && choicePreset) nodes.value = await api.nodes(choiceGame, choicePreset)
     if (request) {
       localStorage.setItem(savedRequestKey, request.id)
       allocation.value = await api.allocation(request.id, observe)
-      nextGameIntent.value = await api.nextGameIntent(request.id)
+      if (refreshContext) nextGameIntent.value = await api.nextGameIntent(request.id)
     } else { allocation.value = null; nextGameIntent.value = null }
     observedServerMs.value = request?.id === elapsedRequestId ? Math.max(observedServerMs.value, observedAtMs) : observedAtMs
     elapsedRequestId = request?.id || ''
+    if (refreshContext) lastContextRefreshAtMs = Date.now()
     error.value = ''
   } catch (cause) { error.value = describeError(cause) }
   finally { polling = false }
@@ -150,12 +156,12 @@ async function start(): Promise<void> {
     const submissionError = describeError(cause)
     // A lost POST response may still have created the request.
     busy.value = false
-    await refresh()
+    await refresh(true)
     if (!currentRequest.value) error.value = submissionError
     return
   }
   busy.value = false
-  await refresh()
+  await refresh(true)
 }
 
 async function stop(): Promise<void> {
@@ -166,7 +172,7 @@ async function stop(): Promise<void> {
   try { currentRequest.value = await api.stop(request.id) }
   catch (cause) { error.value = describeError(cause) }
   finally { busy.value = false }
-  await refresh()
+  await refresh(true)
 }
 
 async function nextGame(): Promise<void> {
@@ -177,7 +183,7 @@ async function nextGame(): Promise<void> {
   try { currentRequest.value = await api.nextGame(request.id) }
   catch (cause) { error.value = describeError(cause) }
   finally { busy.value = false }
-  await refresh()
+  await refresh(true)
 }
 
 async function abandonQuarantined(): Promise<void> {
@@ -196,7 +202,7 @@ async function abandonQuarantined(): Promise<void> {
     allocation.value = null
   } catch (cause) { error.value = describeError(cause) }
   finally { busy.value = false }
-  await refresh()
+  await refresh(true)
 }
 
 async function cancelWaiting(): Promise<void> {
@@ -207,7 +213,7 @@ async function cancelWaiting(): Promise<void> {
   try { currentRequest.value = await api.cancel(request.id) }
   catch (cause) { error.value = describeError(cause) }
   finally { busy.value = false }
-  await refresh()
+  await refresh(true)
 }
 
 async function partyAction(action: () => Promise<unknown>, notice: string): Promise<void> {
@@ -222,7 +228,7 @@ async function partyAction(action: () => Promise<unknown>, notice: string): Prom
     invite.value = null
   } catch (cause) { actionError = describeError(cause) }
   finally { busy.value = false }
-  await refresh()
+  await refresh(true)
   if (actionError) error.value = actionError
 }
 
@@ -320,10 +326,13 @@ onMounted(async () => {
     catalog.value = await api.catalog()
     gameId.value = catalog.value.games[0]?.id || ''
     presetId.value = catalog.value.presets.find((item) => item.arcadeGameId === gameId.value)?.id || ''
-    await refresh()
+    await refresh(true)
   } catch (cause) { error.value = describeError(cause) }
   finally { loading.value = false }
-  timer = window.setInterval(refresh, 2500)
+  timer = window.setInterval(() => {
+    const pending = ['waiting', 'allocating', 'creating'].includes(state.value.phase)
+    if (pending || Date.now() - lastRefreshAtMs >= 2500) void refresh()
+  }, 1000)
 })
 onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventListener('hashchange', syncInviteHash) })
 </script>
