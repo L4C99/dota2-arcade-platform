@@ -1,6 +1,6 @@
 # P4 owner UI review follow-up
 
-The project owner reported no issue in manual functional flows, including the player next-game flow, but withheld final P4 UI acceptance pending visual changes. This follow-up is part of P4 UI parity, not P4 closure. Performance discussion is deferred at the owner's request.
+The project owner reported no issue in manual functional flows, including the player next-game flow, but withheld final P4 UI acceptance pending visual changes. This follow-up is part of P4 UI parity, not P4 closure. Performance discussion is deferred at the owner's request. UI checkpoint `dbc466864b24fc0dc4647bfcd6ac1fee4faa0b04` passed [GitHub Actions run 36225225011](https://github.com/L4C99/dota2-arcade-platform/actions/runs/36225225011).
 
 ## IMPLEMENTED
 
@@ -17,8 +17,10 @@ The project owner reported no issue in manual functional flows, including the pl
 
 ## REAL-ENVIRONMENT VERIFIED
 
-- Pending deployment and recheck of this follow-up Web bundle on the authorized development site. Earlier P4E real lifecycle verification remains recorded in `p4e.md`; the local browser fixture is not real Dota evidence.
+- The exact production Web bundle from the UI checkpoint was uploaded to the authorized development Web host after SHA-256 archive verification (`8f13f890d081a287e323d6ab92b656787f67fd681f5bba75bfbf54277698fc41`). The previous Web directory and launcher backup were preserved. The P4E Platform binary and business database were unchanged. The short development Platform restart returned healthy.
+- With normal HTTPS verification, `/healthz`, `/`, `/admin`, and both new hashed JS/CSS assets returned HTTP 200. Read-only preflight and post-switch database checks showed zero active requests, occupied Allocations, open Jobs, or pending/paused next-game intents; both development Nodes had fresh heartbeats, Drain false and occupied capacity zero.
+- Earlier P4E real lifecycle verification remains recorded in `p4e.md`; the local browser fixture is not real Dota evidence.
 
 ## NOT VERIFIED
 
-- Final player and administrator UI owner acceptance remains pending. P4 overall and owner acceptance remain pending until the owner accepts the revised UI and the separate closure commit passes CI.
+- Authenticated browser interaction against the newly deployed administrator UI was not rechecked in this follow-up. The local fixture checked all administrator sections and the HTTPS resource check confirmed the deployed bundle. Final player and administrator UI owner acceptance remains pending. P4 overall and owner acceptance remain pending until the owner accepts the revised UI and the separate closure commit passes CI.

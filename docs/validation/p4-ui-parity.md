@@ -22,3 +22,5 @@ Implementation baseline: P4E checkpoint `ea034bd823bf3d3920809c414087ee2966c2b8a
 
 - Project-owner final player **and** administrator UI inspection/acceptance is pending. The development database currently has no enabled AdminUser for owner login; a one-time request for secure owner-controlled credential preparation was made separately. The test account was disabled and its password was not retained, logged or committed.
 - A real Steam/steamchina entry experience, Windows VM public human connection, second public topology and external NAT variants remain outside P4 UI parity and are NOT VERIFIED.
+
+The owner's subsequent visual feedback and revised UI checkpoint are recorded in `p4-ui-owner-followup.md`. Final owner acceptance remains pending there.
