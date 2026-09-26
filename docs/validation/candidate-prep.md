@@ -21,7 +21,7 @@ Embedded migration numbers are unique and continuous from 0001 through **0018**.
 
 Local checks after cleanup: `gofmt -l cmd internal` clean; `go test ./...` PASS; `go vet ./...` PASS; `go build ./cmd/platform-server ./cmd/node-controller ./cmd/content-tool` PASS; Web `npm run lint`, `npm run typecheck`, `npm test` (22 tests) and `npm run build` PASS; Windows deployment PowerShell scripts parsed; example JSON parsed; `git diff --check` PASS. The initial sandboxed Vitest launch could not spawn esbuild (`EPERM`); the same test and production build passed outside that restriction. `PLATFORM_TEST_DATABASE_URL` was not set locally, so PostgreSQL integration tests rely on the exact-SHA CI job. Linux shell syntax is checked by CI.
 
-The CI workflow has four required jobs: Ubuntu Go, Windows Go, Web and PostgreSQL integration/migration. Exact-SHA CI is run by pushing the cleanup/candidate commits; the final Candidate decision and run URL are recorded with the final handoff. Prior P5 CI is historical evidence and does not satisfy this gate.
+The CI workflow has four required jobs: Ubuntu Go, Windows Go, Web and PostgreSQL integration/migration. Cleanup commit `6c018546250917eea650e2b37fd902ccd2c617fa` passed all four in [CI run 36271411983](https://github.com/L4C99/dota2-arcade-platform/actions/runs/36271411983). This result is for the cleanup tree before this record was updated. The final document-containing Candidate SHA must independently pass the same workflow; its exact run URL and freeze decision are recorded with the final handoff. Prior P5 CI is historical evidence and does not satisfy this gate.
 
 ## Deferred and not verified
 
