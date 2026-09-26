@@ -69,7 +69,7 @@ func TestP4DAdminControlsAuditAndControllerFacts(t *testing.T) {
 		t.Fatalf("unverified entry: %v", err)
 	}
 	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); !errors.Is(err, ErrInvalidAdminAction) {
-		t.Fatalf("no A2S fact verification: %v", err)
+		t.Fatalf("verification without full-port human evidence: %v", err)
 	}
 	var audits int
 	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE actor_kind='admin'`).Scan(&audits); err != nil || audits != len(actions) {

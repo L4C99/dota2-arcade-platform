@@ -349,11 +349,10 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			verifiedCol, enabledCol, atCol, byCol, portsCol, noteCol = "steamchina_entry_verified", "steamchina_entry_enabled", "steamchina_verified_at", "steamchina_verified_by", "steamchina_verified_ports", "steamchina_verification_note"
 		}
 		var oldVerified, oldEnabled bool
-		var a2sEnabled, a2sOK bool
 		var revision string
 		var ports []int
 		var note string
-		if err := tx.QueryRow(ctx, `SELECT `+verifiedCol+`,`+enabledCol+`,a2s_enabled,a2s_query_ok,entry_config_revision,`+portsCol+`,`+noteCol+` FROM node_entry_capabilities WHERE node_id=$1 FOR UPDATE`, a.TargetID).Scan(&oldVerified, &oldEnabled, &a2sEnabled, &a2sOK, &revision, &ports, &note); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT `+verifiedCol+`,`+enabledCol+`,entry_config_revision,`+portsCol+`,`+noteCol+` FROM node_entry_capabilities WHERE node_id=$1 FOR UPDATE`, a.TargetID).Scan(&oldVerified, &oldEnabled, &revision, &ports, &note); err != nil {
 			return err
 		}
 		verified, enabled := oldVerified, oldEnabled
@@ -372,10 +371,7 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			return ErrInvalidAdminAction
 		}
 		// Verification is an explicit human claim for the current Controller-reported revision.
-		// It never updates network/A2S facts and is deliberately withheld when A2S evidence is absent.
-		if a.Verified != nil && *a.Verified && (!a2sEnabled || !a2sOK) {
-			return ErrInvalidAdminAction
-		}
+		// A2S is a separate diagnostic fact and cannot substitute for real-client evidence.
 		if a.Verified != nil && *a.Verified {
 			if strings.TrimSpace(a.VerificationNote) == "" {
 				return ErrInvalidAdminAction

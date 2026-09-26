@@ -17,9 +17,7 @@ func TestP5CEntryVerificationRequiresCompletePortCoverage(t *testing.T) {
 	h := p1TestHeartbeat("test-v1")
 	h.HardMaxInstances = 2
 	h.Network.LocalPortMax = 28001
-	h.Network.A2SEnabled = true
 	h.Network.ProtocolIP = "203.0.113.10"
-	h.A2SQueryOK = true
 	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +40,7 @@ func TestP5CEntryVerificationRequiresCompletePortCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	o, err := s.AdminOverview(ctx)
-	if err != nil || len(o.Entries) != 1 || len(o.Entries[0].PublicPorts) != 2 || len(o.Entries[0].SteamVerifiedPorts) != 2 || !o.Entries[0].SteamEnabled {
+	if err != nil || len(o.Entries) != 1 || len(o.Entries[0].PublicPorts) != 2 || len(o.Entries[0].SteamVerifiedPorts) != 2 || !o.Entries[0].SteamEnabled || o.Entries[0].A2SEnabled || o.Entries[0].A2SQueryOK {
 		t.Fatalf("entry overview: %+v %v", o.Entries, err)
 	}
 	h.Network.ProtocolIP = "203.0.113.11"
