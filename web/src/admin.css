@@ -76,7 +76,6 @@
 .admin-capacity-strip span{display:grid;gap:6px;min-width:0;padding:12px;border:1px solid #dfe8dd;border-radius:11px;background:#fffefb;color:#71867c;font-size:11px;line-height:1.4}
 .admin-capacity-strip strong{color:#174137;font-size:21px;line-height:1.1}
 .admin-capacity-note{font-size:11px;margin:0 0 18px;color:#72877d!important}
-.admin-warning{padding:9px 12px;background:#fcf5e9;border-radius:9px;color:#94633e!important;font-size:12px}
 .admin-control-row{display:flex;align-items:center;flex-wrap:wrap;gap:11px;margin:18px 0}
 .admin-control-row span{font-size:12px;color:#72877d}
 .admin-form-row{display:grid;grid-template-columns:repeat(2,minmax(0,170px));gap:12px;margin:16px 0}

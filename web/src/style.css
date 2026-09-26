@@ -216,7 +216,7 @@ main{padding-top:24px;min-height:calc(100vh - 145px)}
 .secondary-button.danger{border-color:#e5d2be;background:#fcf8f2;color:#9a633a}
 .secondary-button.danger:hover:not(:disabled){background:#f7eadc}
 .join-panel>p,.side-panel>p{font-size:13px;line-height:1.65;color:#456258}
-.protocol-entry{display:grid;gap:10px;margin:16px 0 12px}
+.protocol-entry{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:16px 0 12px}
 .protocol-entry-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .protocol-entry-button{display:inline-block;padding:12px 17px;border-radius:9px;background:#204b3c;color:#fff;text-decoration:none;font-size:14px;font-weight:700}
 .protocol-entry-button:hover{background:#14382d}
