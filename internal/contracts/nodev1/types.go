@@ -264,7 +264,9 @@ func (h Heartbeat) Validate() error {
 	if h.A2SQueryOK && !h.Network.A2SEnabled {
 		return fmt.Errorf("A2S query cannot be OK when disabled")
 	}
-	if len(h.A2SDiagnostics) > h.HardMaxInstances || len(h.A2SDiagnostics) > 128 || len(h.A2SDiagnostics) > 0 && !h.Network.A2SEnabled {
+	// Existing instances may temporarily exceed a newly lowered hard limit;
+	// diagnostics must not turn that operational state into a rejected heartbeat.
+	if len(h.A2SDiagnostics) > 4096 || len(h.A2SDiagnostics) > 0 && !h.Network.A2SEnabled {
 		return fmt.Errorf("invalid A2S diagnostic count")
 	}
 	seenInstances := make(map[string]bool)
