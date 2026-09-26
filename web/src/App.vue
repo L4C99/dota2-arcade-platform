@@ -513,5 +513,5 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
       <aside v-else class="panel side-panel"><span class="eyebrow">申请已保存</span><h2>可以稍后回来</h2><p>关闭浏览器或刷新页面后，这台服务器的状态仍会保留在当前匿名会话中。</p></aside>
     </div>
   </main>
-  <footer><span>Dota 2 Arcade Platform</span><span>玩家专服</span></footer>
+  <footer><span>Dota 2 Arcade Platform</span><span>自助专服</span></footer>
 </template>
