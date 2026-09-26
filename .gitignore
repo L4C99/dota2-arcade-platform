@@ -13,9 +13,13 @@ Thumbs.db
 *.db
 *.sqlite*
 *.dump
+*.backup
+*.pgdump
+*.sql.gz
 *.bak
 *.vpk
 *.dmp
+*.log
 data/
 dist/
 node_modules/
@@ -28,6 +32,8 @@ node_modules/
 /platform-server.exe
 /node-controller
 /node-controller.exe
+/content-tool
+/content-tool.exe
 
 # Temporary preview output
 prototype/p1/screenshots/
