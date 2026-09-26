@@ -2,6 +2,8 @@
 
 All routes are same-origin `/api/v1` JSON routes. A server-issued anonymous Session cookie identifies the current User. State-changing calls require the configured `Origin`. Request bodies reject unknown fields, including `userId`, `partyId`, `role`, and `leaderId`; no client-supplied identity or role authorizes an action.
 
+Under [V1.0 Amendment 001](specs/v1-amendment-001-entry-verification.md), Player API and JoinInfo expose only the final Ready/entry result and the permanent `connect` fallback. They do not expose Node A2S configuration, per-instance query status or check time. A2S failure does not hide an otherwise valid URI.
+
 | Method | Route | Session-derived behavior |
 | --- | --- | --- |
 | POST | `/session` | Create or restore an anonymous User Session; return `userId` and stable `displayName` |

@@ -47,17 +47,48 @@ func TestA2SChallengeAndReadyFact(t *testing.T) {
 		}
 		done <- nil
 	}()
-	if !ProbeReadyInstances(context.Background(), []core.Instance{{Lifecycle: "active", Process: "running", Room: "ready", Port: port}}) {
+	diagnostics := ProbeReadyInstances(context.Background(), []core.Instance{{InstanceID: "ready-a", Lifecycle: "active", Process: "running", Room: "ready", Port: port}})
+	if len(diagnostics) != 1 || diagnostics[0].Status != "ok" || diagnostics[0].InstanceID != "ready-a" || diagnostics[0].CheckedAt == "" {
 		t.Fatal("live challenge query was not reported")
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if ProbeReadyInstances(context.Background(), nil) {
+	if len(ProbeReadyInstances(context.Background(), nil)) != 0 {
 		t.Fatal("idle node reported query success")
 	}
-	if ProbeReadyInstances(context.Background(), []core.Instance{{Lifecycle: "active", Process: "running", Room: "starting", Port: port}}) {
+	if len(ProbeReadyInstances(context.Background(), []core.Instance{{Lifecycle: "active", Process: "running", Room: "starting", Port: port}})) != 0 {
 		t.Fatal("non-Ready instance reported query success")
+	}
+}
+
+func TestReadyInstancesHaveIndependentA2SFacts(t *testing.T) {
+	server, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	port := server.LocalAddr().(*net.UDPAddr).Port
+	go func() {
+		buf := make([]byte, 128)
+		_ = server.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, addr, err := server.ReadFromUDP(buf)
+		if err == nil {
+			_, _ = server.WriteToUDP([]byte{0xff, 0xff, 0xff, 0xff, 0x49, 0x11, 0x00, 0x00}, addr)
+		}
+	}()
+	closed, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failedPort := closed.LocalAddr().(*net.UDPAddr).Port
+	_ = closed.Close()
+	diagnostics := ProbeReadyInstances(context.Background(), []core.Instance{
+		{InstanceID: "a", Lifecycle: "active", Process: "running", Room: "ready", Port: port},
+		{InstanceID: "b", Lifecycle: "active", Process: "running", Room: "ready", Port: failedPort},
+	})
+	if len(diagnostics) != 2 || diagnostics[0].Status != "ok" || diagnostics[1].Status != "failed" || diagnostics[1].InstanceID != "b" {
+		t.Fatalf("expected independent ok/failed facts, got %+v", diagnostics)
 	}
 }
 

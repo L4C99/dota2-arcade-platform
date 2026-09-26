@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 )
@@ -124,6 +125,7 @@ func TestP3EExplicitMappingJoinInfoAndRevision(t *testing.T) {
 	h.Network = nodev1.NetworkFacts{ConnectHost: "vendor-nat.example.cn", ProtocolIP: "203.0.113.8",
 		LocalPortMin: 28000, LocalPortMax: 28001, MappingMode: "explicit",
 		Mappings: []nodev1.PortMapping{{Local: 28000, Public: 45123}, {Local: 28001, Public: 46781}}}
+	h.Network.A2SEnabled = true
 	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {
 		t.Fatal(err)
 	}
@@ -158,6 +160,19 @@ func TestP3EExplicitMappingJoinInfoAndRevision(t *testing.T) {
 		ProtocolIP: h.Network.ProtocolIP, EntryConfigRevision: nodev1.EntryConfigRevision(h.Network)}
 	if _, err := s.ReportJob(ctx, nodeID, job.ID, nodev1.ReportRequest{State: "succeeded", InstanceID: "i_mapped", OperationID: "o_mapped", JoinInfo: join}); err != nil {
 		t.Fatal(err)
+	}
+	h.A2SDiagnostics = []nodev1.A2SDiagnostic{{InstanceID: "i_mapped", LocalPort: 28001, Status: "failed", CheckedAt: time.Now().UTC().Format(time.RFC3339Nano)}}
+	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {
+		t.Fatal(err)
+	}
+	adminView, err := s.AdminOverview(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(adminView.Allocations) != 1 || adminView.Allocations[0].InstanceID == nil || *adminView.Allocations[0].InstanceID != "i_mapped" ||
+		adminView.Allocations[0].A2SStatus == nil || *adminView.Allocations[0].A2SStatus != "failed" ||
+		adminView.Allocations[0].A2SLocalPort == nil || *adminView.Allocations[0].A2SLocalPort != 28001 || adminView.Allocations[0].A2SCheckedAt == nil {
+		t.Fatalf("Admin Allocation lost per-instance A2S diagnostic: %+v", adminView.Allocations)
 	}
 	allocation, err := s.UserRequestAllocation(ctx, userID, request.ID)
 	if err != nil || allocation == nil || allocation.JoinInfo == nil ||

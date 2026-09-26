@@ -1,6 +1,34 @@
 package nodev1
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestA2SDiagnosticHeartbeatValidation(t *testing.T) {
+	h := Heartbeat{OS: "linux", ControllerVersion: "dev", HardMaxInstances: 2,
+		Network: NetworkFacts{ConnectHost: "node.example", LocalPortMin: 28000, LocalPortMax: 28001, MappingMode: "identity", A2SEnabled: true}}
+	checkedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	h.A2SDiagnostics = []A2SDiagnostic{{InstanceID: "a", LocalPort: 28000, Status: "ok", CheckedAt: checkedAt},
+		{InstanceID: "b", LocalPort: 28001, Status: "failed", CheckedAt: checkedAt}}
+	if err := h.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	h.A2SDiagnostics[1].LocalPort = 28000
+	if err := h.Validate(); err == nil {
+		t.Fatal("duplicate instance port accepted")
+	}
+	h.A2SDiagnostics[1].LocalPort = 28001
+	h.A2SDiagnostics[1].Status = "unknown"
+	if err := h.Validate(); err == nil {
+		t.Fatal("fabricated unknown result accepted")
+	}
+	h.A2SDiagnostics[1].Status = "failed"
+	h.Network.A2SEnabled = false
+	if err := h.Validate(); err == nil {
+		t.Fatal("diagnostic accepted with A2S disabled")
+	}
+}
 
 func TestHeartbeatValidation(t *testing.T) {
 	h := Heartbeat{OS: "windows", ControllerVersion: "dev", HardMaxInstances: 2,

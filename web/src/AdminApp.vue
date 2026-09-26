@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { a2sStatus } from './adminEntry'
+import { instanceA2SLabel } from './adminEntry'
 
 interface Settings { acceptingNewRequests: boolean; maintenanceMessage: string; siteAnnouncement: string }
 interface Game { id: string; displayName: string; workshopId: string; currentContentVersionId: string; maintenanceMessage: string; enabled: boolean; acceptingNewRequests: boolean }
@@ -11,10 +11,10 @@ interface TemplateBinding { nodeId: string; templateRevisionId: string; bindingK
 interface ContentValidation { nodeId: string; arcadeGameId: string; contentVersionId: string; verifiedAt: string; verifiedBy: string }
 interface Node { id: string; displayName: string; os: string; connectivity: string; controllerVersion: string; d2coreVersion: string; d2coreCommit: string; compatibility: string; recentErrorCode: string; enabled: boolean; acceptingNewRequests: boolean; draining: boolean; priority: number; hard: number; desired: number; occupied: number; lastHeartbeat?: string; reconcileRequested: number; reconcileCompleted: number }
 interface Binding { nodeId: string; arcadeGameId: string; reportedContentVersionId: string; reportedContentSha256: string; reportedState: string; reportedAt?: string; acceptingNewAllocations: boolean }
-interface Entry { nodeId: string; entryConfigRevision: string; publicPorts: number[]; a2sEnabled: boolean; a2sQueryOk: boolean; steamVerified: boolean; steamEnabled: boolean; steamChinaVerified: boolean; steamChinaEnabled: boolean; steamVerifiedAt?: string; steamChinaVerifiedAt?: string }
+interface Entry { nodeId: string; entryConfigRevision: string; publicPorts: number[]; a2sEnabled: boolean; steamVerified: boolean; steamEnabled: boolean; steamChinaVerified: boolean; steamChinaEnabled: boolean; steamVerifiedAt?: string; steamChinaVerifiedAt?: string }
 interface ServerRequest { id: string; arcadeGameId: string; gamePresetId: string; state: string; ownerPartyId?: string; nodeSelectionMode: string; manualNodeId?: string; requestedAt: string }
 interface Party { id: string; leaderDisplayName: string; memberCount: number; dissolvedAt?: string }
-interface Allocation { id: string; serverRequestId: string; nodeId: string; contentVersionId: string; templateRevisionId: string; state: string; errorCode: string; attemptSequence: number; assignedAt: string }
+interface Allocation { id: string; serverRequestId: string; nodeId: string; contentVersionId: string; templateRevisionId: string; state: string; errorCode: string; attemptSequence: number; assignedAt: string; instanceId?: string; a2sLocalPort?: number; a2sStatus?: 'ok' | 'failed'; a2sCheckedAt?: string }
 interface Job { id: string; nodeId: string; allocationId: string; kind: string; state: string; errorCode: string; updatedAt: string }
 interface Audit { id: string; actorUsername: string; actorKind: string; action: string; targetType: string; targetId: string; result: string; stateChange: Record<string, unknown>; createdAt: string }
 interface Counts { waiting: number; creating: number; running: number; stopping: number; quarantined: number; failedUnreclaimed: number }
@@ -172,7 +172,7 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
   if (field === 'verified') {
     base.verified = value
     base.confirmed = value
-    void act(base, value ? `我确认已经在当前入口配置修订下，使用真实${kind === 'steam' ? 'Steam' : '蒸汽平台'}客户端通过一键 URI 成功进入真实 Ready 服务器。此操作会记录我的管理员身份。` : '仅当验证记录有误或同一入口配置下实测失效时撤销。撤销后也会关闭玩家入口。确定继续？')
+    void act(base, `我确认已经在当前入口配置修订下，使用真实${kind === 'steam' ? 'Steam' : '蒸汽平台'}客户端通过一键 URI 成功进入真实 Ready 服务器。此操作会记录我的管理员身份。`)
   } else { base.enabled = value; void act(base, value ? '确认开启此入口给玩家？请先核对真人验证状态。' : '') }
 }
 </script>
@@ -244,6 +244,7 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
               <div class="admin-capacity-strip" aria-label="节点容量"><span>已占用<strong>{{ selectedNode.occupied }}</strong></span><span>期望容量<strong>{{ selectedNode.desired }}</strong></span><span>节点上报上限<strong>{{ selectedNode.hard }}</strong></span></div>
               <p class="admin-capacity-note">期望容量是平台允许使用的名额，不得超过节点上报上限。</p>
               <p v-if="selectedNode.recentErrorCode" class="admin-warning">最近错误代码：{{ selectedNode.recentErrorCode }}</p>
+              <p v-for="entry in entriesFor(selectedNode.id)" :key="entry.nodeId">A2S 配置：{{ entry.a2sEnabled ? '已启用' : '未启用' }}</p>
               <div class="admin-control-row"><button type="button" class="secondary-button" :disabled="busy" @click="act({action:'node.update',targetId:selectedNode.id,draining:!selectedNode.draining})">{{ selectedNode.draining ? '结束节点维护' : '进入节点维护' }}</button><span>维护时暂停新分配，已有服务器继续运行。</span></div>
               <div class="admin-form-row"><label>分配优先级<input v-model.number="nodeDraft[selectedNode.id].priority" type="number" step="1" /></label><label>期望容量<input v-model.number="nodeDraft[selectedNode.id].desired" type="number" min="0" :max="selectedNode.hard" /></label></div>
               <button type="button" class="secondary-button" :disabled="busy" @click="act({action:'node.update',targetId:selectedNode.id,priority:nodeDraft[selectedNode.id].priority,desired:nodeDraft[selectedNode.id].desired})">保存调度设置</button>
@@ -266,10 +267,10 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
                   <button v-if="!(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" type="button" class="secondary-button" :disabled="busy" @click="entryAction(selectedNode,kind,'verified',true)">确认真人验证</button>
                   <button type="button" class="secondary-button" :disabled="busy || !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" @click="entryAction(selectedNode,kind,'enabled',kind === 'steam' ? !entry.steamEnabled : !entry.steamChinaEnabled)">{{ kind === 'steam' ? (entry.steamEnabled ? '关闭入口' : '开启入口') : (entry.steamChinaEnabled ? '关闭入口' : '开启入口') }}</button>
                 </div>
-                <details v-if="kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified" class="admin-entry-record"><summary>验证记录与撤销</summary><p>验证时间 {{ stamp(kind === 'steam' ? entry.steamVerifiedAt : entry.steamChinaVerifiedAt) }}。仅在记录有误或同配置实测失效时撤销。</p><button type="button" class="secondary-button" :disabled="busy" @click="entryAction(selectedNode,kind,'verified',false)">撤销真人验证</button></details>
+                <p v-if="kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified" class="admin-entry-record">验证时间 {{ stamp(kind === 'steam' ? entry.steamVerifiedAt : entry.steamChinaVerifiedAt) }}</p>
               </div>
             </div>
-            <details class="admin-technical admin-entry-diagnostics"><summary>网络诊断与配置修订</summary><p>A2S：{{ a2sStatus(entry.a2sEnabled, entry.a2sQueryOk) }}。只查询当前 Ready 实例；空闲时没有实时查询事实。诊断结果不控制玩家入口。</p><p>入口配置修订 {{ entry.entryConfigRevision.slice(0, 12) }}</p></details>
+            <details class="admin-technical admin-entry-diagnostics"><summary>入口配置修订</summary><p>{{ entry.entryConfigRevision.slice(0, 12) }}</p></details>
           </section>
         </div>
         <p v-else class="admin-empty">还没有游戏节点。</p>
@@ -286,7 +287,7 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
             <div class="admin-detail-facts"><span>玩法<strong>{{ overview.presets.find(p => p.id === selectedRequest?.gamePresetId)?.displayName || '未知' }}</strong></span><span>节点选择<strong>{{ selectionLabel(selectedRequest.nodeSelectionMode) }}{{ selectedRequest.manualNodeId ? ' · ' + nodeName(selectedRequest.manualNodeId) : '' }}</strong></span><span>申请编号<strong>{{ selectedRequest.id.slice(0, 8) }}</strong></span></div>
             <div class="admin-actions"><button v-if="selectedRequest.state === 'waiting' && !overview.allocations.some(a => a.serverRequestId === selectedRequest?.id)" type="button" class="secondary-button" :disabled="busy" @click="act({action:'request.cancel',targetId:selectedRequest.id},'仅取消尚未占用节点的等待申请。确定继续？')">取消等待申请</button><button v-if="selectedRequest.state === 'running' || selectedRequest.state === 'quarantined' || (selectedRequest.state === 'abandoned' && overview.allocations.some(a => a.serverRequestId === selectedRequest?.id && a.state === 'quarantined'))" type="button" class="secondary-button danger" :disabled="busy" @click="act({action:'request.stop',targetId:selectedRequest.id},'向原节点请求停止并完整回收。确定继续？')">请求停止服务器</button></div>
             <div class="admin-detail-divider"><span class="eyebrow">资源分配记录</span><span>{{ overview.allocations.filter(a => a.serverRequestId === selectedRequest?.id).length }} 次尝试</span></div>
-            <div v-for="allocation in overview.allocations.filter(a => a.serverRequestId === selectedRequest?.id)" :key="allocation.id" class="admin-attempt"><div class="admin-entity-head"><div><h3>第 {{ allocation.attemptSequence }} 次分配 · {{ stateLabel(allocation.state) }}</h3><p>{{ nodeName(allocation.nodeId) }} · 内容版本 <code>{{ allocation.contentVersionId }}</code> · 模板 <code>{{ allocation.templateRevisionId }}</code></p><small v-if="allocation.errorCode">诊断代码 {{ allocation.errorCode }}</small></div><button v-if="!['reclaimed','released_no_effect','quarantined'].includes(allocation.state)" type="button" class="secondary-button danger" :disabled="busy" @click="act({action:'allocation.quarantine',targetId:allocation.id},'依据诊断提前隔离这次分配？容量和端口仍占用，不能据此认定旧服务器已停止。')">标记异常隔离</button></div></div>
+            <div v-for="allocation in overview.allocations.filter(a => a.serverRequestId === selectedRequest?.id)" :key="allocation.id" class="admin-attempt"><div class="admin-entity-head"><div><h3>第 {{ allocation.attemptSequence }} 次分配 · {{ stateLabel(allocation.state) }}</h3><p>{{ nodeName(allocation.nodeId) }} · 内容版本 <code>{{ allocation.contentVersionId }}</code> · 模板 <code>{{ allocation.templateRevisionId }}</code></p><small v-if="allocation.errorCode">诊断代码 {{ allocation.errorCode }}</small><small v-if="allocation.instanceId">实例 {{ allocation.instanceId }}<template v-if="allocation.a2sLocalPort"> · 本地端口 {{ allocation.a2sLocalPort }}</template></small><small v-if="allocation.state === 'running' && allocation.instanceId">A2S：{{ instanceA2SLabel(allocation.a2sStatus) }}<template v-if="allocation.a2sCheckedAt"> · 最近检查 {{ stamp(allocation.a2sCheckedAt) }}</template></small></div><button v-if="!['reclaimed','released_no_effect','quarantined'].includes(allocation.state)" type="button" class="secondary-button danger" :disabled="busy" @click="act({action:'allocation.quarantine',targetId:allocation.id},'依据诊断提前隔离这次分配？容量和端口仍占用，不能据此认定旧服务器已停止。')">标记异常隔离</button></div></div>
             <p v-if="!overview.allocations.some(a => a.serverRequestId === selectedRequest?.id)" class="admin-empty">此申请尚未分配节点。</p>
           </section>
         </div>

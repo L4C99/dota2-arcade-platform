@@ -210,6 +210,21 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 	if err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}
+	// Replace only this node's live instance facts. An idle or old Controller
+	// reports no diagnostics; absence is never converted into a failure.
+	if _, err := tx.Exec(ctx, `DELETE FROM node_instance_a2s_diagnostics WHERE node_id=$1`, nodeID); err != nil {
+		return nodev1.HeartbeatResult{}, err
+	}
+	for _, diagnostic := range h.A2SDiagnostics {
+		checkedAt, err := time.Parse(time.RFC3339Nano, diagnostic.CheckedAt)
+		if err != nil {
+			return nodev1.HeartbeatResult{}, err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO node_instance_a2s_diagnostics(node_id,instance_id,local_port,status,checked_at,reported_at)
+			VALUES($1,$2,$3,$4,$5,$6)`, nodeID, diagnostic.InstanceID, diagnostic.LocalPort, diagnostic.Status, checkedAt, reportedAt); err != nil {
+			return nodev1.HeartbeatResult{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}

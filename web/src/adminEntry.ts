@@ -1,4 +1,5 @@
-export function a2sStatus(enabled: boolean, queryOk: boolean): string {
-  if (!enabled) return '未启用'
-  return queryOk ? '当前 Ready 实例查询成功' : '当前没有成功的实时 A2S 查询结果'
+export function instanceA2SLabel(status?: 'ok' | 'failed'): string {
+  if (status === 'ok') return '查询正常'
+  if (status === 'failed') return '查询失败'
+  return '尚无查询事实'
 }

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
@@ -43,16 +44,25 @@ type ContentFact struct {
 }
 
 type Heartbeat struct {
-	OS                    string        `json:"os"`
-	ControllerVersion     string        `json:"controllerVersion"`
-	NodeAPIVersion        int           `json:"nodeApiVersion"`
-	D2CoreVersion         string        `json:"d2coreVersion"`
-	D2CoreCommit          string        `json:"d2coreCommit"`
-	D2CoreProtocolVersion int           `json:"d2coreProtocolVersion"`
-	HardMaxInstances      int           `json:"hardMaxInstances"`
-	Network               NetworkFacts  `json:"network"`
-	A2SQueryOK            bool          `json:"a2sQueryOk"`
-	Content               []ContentFact `json:"content"`
+	OS                    string          `json:"os"`
+	ControllerVersion     string          `json:"controllerVersion"`
+	NodeAPIVersion        int             `json:"nodeApiVersion"`
+	D2CoreVersion         string          `json:"d2coreVersion"`
+	D2CoreCommit          string          `json:"d2coreCommit"`
+	D2CoreProtocolVersion int             `json:"d2coreProtocolVersion"`
+	HardMaxInstances      int             `json:"hardMaxInstances"`
+	Network               NetworkFacts    `json:"network"`
+	A2SQueryOK            bool            `json:"a2sQueryOk"` // Deprecated: derived compatibility fact only.
+	A2SDiagnostics        []A2SDiagnostic `json:"a2sDiagnostics,omitempty"`
+	Content               []ContentFact   `json:"content"`
+}
+
+// A2SDiagnostic is an administrator-only fact about one currently Ready instance.
+type A2SDiagnostic struct {
+	InstanceID string `json:"instanceId"`
+	LocalPort  int    `json:"localPort"`
+	Status     string `json:"status"`
+	CheckedAt  string `json:"checkedAt"`
 }
 
 type HeartbeatResult struct {
@@ -253,6 +263,21 @@ func (h Heartbeat) Validate() error {
 	}
 	if h.A2SQueryOK && !h.Network.A2SEnabled {
 		return fmt.Errorf("A2S query cannot be OK when disabled")
+	}
+	if len(h.A2SDiagnostics) > h.HardMaxInstances || len(h.A2SDiagnostics) > 128 || len(h.A2SDiagnostics) > 0 && !h.Network.A2SEnabled {
+		return fmt.Errorf("invalid A2S diagnostic count")
+	}
+	seenInstances := make(map[string]bool)
+	seenPorts := make(map[int]bool)
+	for _, diagnostic := range h.A2SDiagnostics {
+		checkedAt, err := time.Parse(time.RFC3339Nano, diagnostic.CheckedAt)
+		if !coreTokenPattern.MatchString(diagnostic.InstanceID) || seenInstances[diagnostic.InstanceID] || seenPorts[diagnostic.LocalPort] ||
+			diagnostic.LocalPort < h.Network.LocalPortMin || diagnostic.LocalPort > h.Network.LocalPortMax ||
+			(diagnostic.Status != "ok" && diagnostic.Status != "failed") || err != nil || checkedAt.IsZero() {
+			return fmt.Errorf("invalid A2S instance diagnostic")
+		}
+		seenInstances[diagnostic.InstanceID] = true
+		seenPorts[diagnostic.LocalPort] = true
 	}
 	if len(h.Content) > 128 {
 		return fmt.Errorf("too many content facts")

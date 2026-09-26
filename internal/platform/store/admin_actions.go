@@ -338,6 +338,9 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if a.TargetID == "" || (a.Entry != "steam" && a.Entry != "steamchina") || a.Verified == nil && a.Enabled == nil {
 			return ErrInvalidAdminAction
 		}
+		if a.Verified != nil && !*a.Verified {
+			return ErrInvalidAdminAction // Same-revision attestation is monotonic.
+		}
 		if a.Verified != nil && *a.Verified && !a.Confirmed {
 			return ErrInvalidAdminAction
 		}
@@ -355,10 +358,10 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		}
 		verified, enabled := oldVerified, oldEnabled
 		if a.Verified != nil {
-			verified = *a.Verified
-			if !verified {
-				enabled = false
+			if oldVerified {
+				return fmt.Errorf("%w: entry already verified for this revision", ErrJobConflict)
 			}
+			verified = true
 		}
 		if a.Enabled != nil {
 			enabled = *a.Enabled

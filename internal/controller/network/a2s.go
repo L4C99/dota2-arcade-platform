@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/core"
 )
 
@@ -64,18 +65,20 @@ func QueryA2SInfo(ctx context.Context, port int) error {
 	return errors.New("A2S info response absent")
 }
 
-// ProbeReadyInstances checks every currently Ready local server. No Ready
-// instance means no live query fact; an idle node never claims query success.
-func ProbeReadyInstances(ctx context.Context, instances []core.Instance) bool {
-	queried := 0
+// ProbeReadyInstances records an independent diagnostic for every Ready server.
+// An empty slice means there is no live query fact, not a query failure.
+func ProbeReadyInstances(ctx context.Context, instances []core.Instance) []nodev1.A2SDiagnostic {
+	diagnostics := make([]nodev1.A2SDiagnostic, 0)
 	for _, instance := range instances {
 		if instance.Lifecycle != "active" || instance.Process != "running" || instance.Room != "ready" {
 			continue
 		}
-		queried++
+		status := "ok"
 		if QueryA2SInfo(ctx, instance.Port) != nil {
-			return false
+			status = "failed"
 		}
+		diagnostics = append(diagnostics, nodev1.A2SDiagnostic{InstanceID: instance.InstanceID, LocalPort: instance.Port,
+			Status: status, CheckedAt: time.Now().UTC().Format(time.RFC3339Nano)})
 	}
-	return queried > 0
+	return diagnostics
 }

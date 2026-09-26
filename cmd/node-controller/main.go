@@ -53,7 +53,13 @@ func run(args []string) error {
 		}
 		facts := factReader.Facts(buildinfo.Version, protocol)
 		if conf.Network.A2SEnabled && listErr == nil {
-			facts.A2SQueryOK = network.ProbeReadyInstances(ctx, list.Instances)
+			facts.A2SDiagnostics = network.ProbeReadyInstances(ctx, list.Instances)
+			facts.A2SQueryOK = len(facts.A2SDiagnostics) > 0
+			for _, diagnostic := range facts.A2SDiagnostics {
+				if diagnostic.Status != "ok" {
+					facts.A2SQueryOK = false
+				}
+			}
 		}
 		result, err := client.Heartbeat(ctx, facts)
 		return result, err

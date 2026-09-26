@@ -1,5 +1,11 @@
 # P5C entry checkpoint and Amendment 001
 
+## Amendment 001 final convergence (2026-09-27)
+
+The project owner further clarified the existing Amendment 001 after reviewing the Admin UI. This remains Amendment 001, not a new release candidate. The historical implementation and observations below are retained in their original context. The final contract separates Node `a2s_enabled`, per-Ready-instance administrator A2S diagnostics, revision-bound human `verified`, and routine `enabled`. The previous Node aggregate `a2s_query_ok` is deprecated/derived for compatibility. Admin Entry no longer displays query status; Allocation details show instance ID, local port, independent `ok/failed` result and check time, with absence meaning no query fact. Player API, JoinInfo and player UI have no A2S diagnostics.
+
+Within one entry revision, human verification is a one-way confirmation: normal Admin `verified=false` is rejected and the revoke button is removed. Operational closure uses `enabled=false`, preserving the human record. An actual network revision change automatically clears both schemes. Forward migration 18 stores the current per-instance snapshot; migrations 15 and 17 remain unchanged. Existing Linux Steam URI evidence and the verified/enabled deployment fact must be preserved if its revision remains unchanged. Steamchina and Windows public entry remain unverified. This convergence does not require testing the rest of the port pool.
+
 ## Amendment 001 supersession (2026-09-27)
 
 P5C began under the frozen V1 full-port rule and implemented exact port-list evidence, a required note and complete coverage checks. During real operation the project owner found this model unmaintainable and formally replaced it with [V1.0 Amendment 001](../specs/v1-amendment-001-entry-verification.md). The historical observations below remain accurate for the rule and deployed code at that time; their old **partial evidence only** conclusion is superseded. Forward migration 17 removes the old coverage constraint and columns without editing migration 15. The new Admin API records an explicit, audited real-client confirmation for each scheme on the current Node entry revision, independent of A2S. No per-port evidence or note is required.

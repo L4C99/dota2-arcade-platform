@@ -16,7 +16,7 @@ P3E 的 `connectHost` 可是节点的直连 IP、自有域名或厂商 NAT 域�
 
 内容事实只在 Controller 能同时读回当前目录链接、metadata 指向和 VPK 文件时报告 `confirmed`；读不到或不一致时报告 `unknown`。P5 Controller 还会核对实际 VPK SHA256 与 metadata，并在心跳里上报可选的 `vpkSha256`。Platform 将它与不可变 ContentVersion SHA256 对照；不匹配则绑定状态为 `unknown`。旧 Controller 缺少该字段时，升级期间可继续读取原有确认状态，但新的真人内容验证必须有匹配的实际 SHA256。Web/Admin 不能通过节点 API 伪造这些事实。
 
-P5 Controller 只在本地存在 Ready 实例时对这些实例逐一发送 A2S_INFO UDP 查询，处理服务端 challenge 后上报 `a2sQueryOk`。没有 Ready 实例时该值为 false。它只说明本机查询诊断结果，不证明公网 Steam/steamchina URI 可以让真人进入，也不影响 `connect`、容量或调度。
+P5 Controller 只对本地 `active/running/ready` 实例逐一发送 A2S_INFO UDP 查询，处理服务端 challenge。心跳中的可选 `a2sDiagnostics` 对每个实例分别报告 `instanceId`、`localPort`、`status=ok|failed`、UTC `checkedAt`；Platform 以认证的 Node ID 和服务端 `reportedAt` 存储当前快照，供管理员 Allocation 详情读取。空数组表示尚无实时查询事实，包括空闲节点与旧 Controller，不等于查询失败。旧 `a2sQueryOk` 暂留为**deprecated/derived** 协议兼容字段：至少一个 Ready 实例且本次全部查询成功时为 true；数据库旧列同样不承担正式业务语义。A2S 不进入 Player API、JoinInfo 或页面，不证明公网 URI 进房，也不影响验证、开关、`connect`、容量或调度。迁移 18 新增逐实例诊断表，不修改旧迁移。
 
 ## durable NodeJob
 

@@ -108,7 +108,6 @@ type AdminEntry struct {
 	EntryConfigRevision  string     `json:"entryConfigRevision"`
 	PublicPorts          []int      `json:"publicPorts"`
 	A2SEnabled           bool       `json:"a2sEnabled"`
-	A2SQueryOK           bool       `json:"a2sQueryOk"`
 	SteamVerified        bool       `json:"steamVerified"`
 	SteamEnabled         bool       `json:"steamEnabled"`
 	SteamChinaVerified   bool       `json:"steamChinaVerified"`
@@ -136,15 +135,19 @@ type AdminParty struct {
 }
 
 type AdminAllocation struct {
-	ID                 string    `json:"id"`
-	ServerRequestID    string    `json:"serverRequestId"`
-	NodeID             string    `json:"nodeId"`
-	ContentVersionID   string    `json:"contentVersionId"`
-	TemplateRevisionID string    `json:"templateRevisionId"`
-	State              string    `json:"state"`
-	ErrorCode          string    `json:"errorCode"`
-	AttemptSequence    int       `json:"attemptSequence"`
-	AssignedAt         time.Time `json:"assignedAt"`
+	ID                 string     `json:"id"`
+	ServerRequestID    string     `json:"serverRequestId"`
+	NodeID             string     `json:"nodeId"`
+	ContentVersionID   string     `json:"contentVersionId"`
+	TemplateRevisionID string     `json:"templateRevisionId"`
+	State              string     `json:"state"`
+	ErrorCode          string     `json:"errorCode"`
+	AttemptSequence    int        `json:"attemptSequence"`
+	AssignedAt         time.Time  `json:"assignedAt"`
+	InstanceID         *string    `json:"instanceId,omitempty"`
+	A2SLocalPort       *int       `json:"a2sLocalPort,omitempty"`
+	A2SStatus          *string    `json:"a2sStatus,omitempty"`
+	A2SCheckedAt       *time.Time `json:"a2sCheckedAt,omitempty"`
 }
 
 type AdminJob struct {
@@ -374,7 +377,7 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT c.node_id,c.a2s_enabled,c.a2s_query_ok,c.steam_entry_verified,c.steam_entry_enabled,c.steam_verified_at,
+	rows, err = s.Pool.Query(ctx, `SELECT c.node_id,c.a2s_enabled,c.steam_entry_verified,c.steam_entry_enabled,c.steam_verified_at,
 		c.steamchina_entry_verified,c.steamchina_entry_enabled,c.steamchina_verified_at,c.entry_config_revision,r.network_facts
 		FROM node_entry_capabilities c JOIN node_reports r ON r.node_id=c.node_id ORDER BY c.node_id`)
 	if err != nil {
@@ -383,7 +386,7 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 	for rows.Next() {
 		var x AdminEntry
 		var networkRaw []byte
-		if err := rows.Scan(&x.NodeID, &x.A2SEnabled, &x.A2SQueryOK, &x.SteamVerified, &x.SteamEnabled, &x.SteamVerifiedAt, &x.SteamChinaVerified, &x.SteamChinaEnabled, &x.SteamChinaVerifiedAt,
+		if err := rows.Scan(&x.NodeID, &x.A2SEnabled, &x.SteamVerified, &x.SteamEnabled, &x.SteamVerifiedAt, &x.SteamChinaVerified, &x.SteamChinaEnabled, &x.SteamChinaVerifiedAt,
 			&x.EntryConfigRevision, &networkRaw); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
@@ -419,14 +422,19 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT id,server_request_id,node_id,content_version_id,template_revision_id,state,COALESCE(error_code,''),attempt_sequence,assigned_at
-		FROM allocations ORDER BY assigned_at DESC,id DESC LIMIT 100`)
+	rows, err = s.Pool.Query(ctx, `SELECT a.id,a.server_request_id,a.node_id,a.content_version_id,a.template_revision_id,a.state,
+		COALESCE(a.error_code,''),a.attempt_sequence,a.assigned_at,j.instance_id,d.local_port,d.status,d.checked_at
+		FROM allocations a
+		LEFT JOIN LATERAL (SELECT instance_id FROM node_jobs WHERE allocation_id=a.id AND kind='create' AND instance_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1) j ON true
+		LEFT JOIN node_instance_a2s_diagnostics d ON d.node_id=a.node_id AND d.instance_id=j.instance_id
+		ORDER BY a.assigned_at DESC,a.id DESC LIMIT 100`)
 	if err != nil {
 		return AdminOverview{}, err
 	}
 	for rows.Next() {
 		var x AdminAllocation
-		if err := rows.Scan(&x.ID, &x.ServerRequestID, &x.NodeID, &x.ContentVersionID, &x.TemplateRevisionID, &x.State, &x.ErrorCode, &x.AttemptSequence, &x.AssignedAt); err != nil {
+		if err := rows.Scan(&x.ID, &x.ServerRequestID, &x.NodeID, &x.ContentVersionID, &x.TemplateRevisionID, &x.State, &x.ErrorCode, &x.AttemptSequence, &x.AssignedAt,
+			&x.InstanceID, &x.A2SLocalPort, &x.A2SStatus, &x.A2SCheckedAt); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
