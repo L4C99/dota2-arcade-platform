@@ -141,8 +141,8 @@ export const api = {
   disbandParty: () => request<void>('/party/disband', 'POST'),
   current: (observedAt?: (serverMs: number) => void) => request<ServerRequest | null>('/server-requests/current', 'GET', undefined, observedAt),
   getRequest: (id: string, observedAt?: (serverMs: number) => void) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}`, 'GET', undefined, observedAt),
-  createRequest: (arcadeGameId: string, gamePresetId: string, nodeSelectionMode: 'auto' | 'manual' = 'auto', manualNodeId = '') =>
-    request<ServerRequest>('/server-requests', 'POST', { arcadeGameId, gamePresetId, nodeSelectionMode, manualNodeId }),
+  createRequest: (arcadeGameId: string, gamePresetId: string, nodeSelectionMode: 'auto' | 'manual' = 'auto', manualNodeId = '', observedAt?: (serverMs: number) => void) =>
+    request<ServerRequest>('/server-requests', 'POST', { arcadeGameId, gamePresetId, nodeSelectionMode, manualNodeId }, observedAt),
   allocation: (id: string, observedAt?: (serverMs: number) => void) => request<Allocation | null>(`/server-requests/${encodeURIComponent(id)}/allocation`, 'GET', undefined, observedAt),
   stop: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/stop`, 'POST'),
   nextGame: (id: string) => request<ServerRequest>(`/server-requests/${encodeURIComponent(id)}/next-game`, 'POST'),

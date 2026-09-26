@@ -22,13 +22,13 @@ export function elapsedFor(request: ServerRequest | null, allocation: Allocation
   if (phase === 'waiting' || phase === 'allocating') {
     const seconds = liveSeconds(request.requestedAt, nowMs)
     if (seconds === null) return null
-    return { summary: `${phase === 'waiting' ? '正在等待服务器' : '正在分配服务器'} · 已等待 ${seconds} 秒` }
+    return { summary: `${phase === 'waiting' ? '正在等待服务器' : '正在分配服务器'} · 已等待约 ${seconds} 秒` }
   }
   if (phase === 'creating') {
     const started = allocation?.createStartedAt
     const seconds = liveSeconds(request.requestedAt, nowMs)
     if (seconds === null) return null
-    return { summary: `${started ? '正在启动服务器' : '正在准备服务器'} · 已用时 ${seconds} 秒` }
+    return { summary: `${started ? '正在启动服务器' : '正在准备服务器'} · 已用时约 ${seconds} 秒` }
   }
   if (phase !== 'ready' || !allocation?.joinInfo) return null
   const requestedMs = timestamp(request.requestedAt)

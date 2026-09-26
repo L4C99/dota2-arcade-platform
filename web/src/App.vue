@@ -4,6 +4,7 @@ import { ApiError, api } from './api'
 import type { Allocation, Catalog, NextGameIntent, NodeChoice, Party, PartyInvite, ServerRequest } from './api'
 import { maintenanceFor, statusFor } from './state'
 import { elapsedFor } from './elapsed'
+import { ElapsedClock } from './elapsedClock'
 import { inviteTokenFromHash, partyInviteLink, tokenFromInviteInput } from './partyInvite'
 
 const savedRequestKey = 'arcade.lastRequestId'
@@ -32,16 +33,16 @@ const nodeSelectionMode = ref<'auto' | 'manual'>('auto')
 const manualNodeId = ref('')
 let timer: number | undefined
 let polling = false
-let elapsedRequestId = ''
 let lastRefreshAtMs = 0
 let lastContextRefreshAtMs = 0
-const observedServerMs = ref(Date.now())
+const elapsedClock = new ElapsedClock()
+const elapsedNowMs = ref(Date.now())
 
 const game = computed(() => catalog.value?.games.find((item) => item.id === (currentRequest.value?.arcadeGameId || gameId.value)))
 const preset = computed(() => catalog.value?.presets.find((item) => item.id === (currentRequest.value?.gamePresetId || presetId.value)))
 const selectedPresets = computed(() => catalog.value?.presets.filter((item) => item.arcadeGameId === gameId.value) || [])
 const state = computed(() => statusFor(currentRequest.value, allocation.value, nodes.value, nextGameIntent.value))
-const elapsed = computed(() => elapsedFor(currentRequest.value, allocation.value, state.value.phase, observedServerMs.value))
+const elapsed = computed(() => elapsedFor(currentRequest.value, allocation.value, state.value.phase, elapsedNowMs.value))
 const selectedNode = computed(() => nodes.value.find((item) => item.id === (currentRequest.value?.manualNodeId || manualNodeId.value)))
 const assignedNodeName = computed(() => allocation.value?.nodeDisplayName || (currentRequest.value?.nodeSelectionMode === 'manual' ? selectedNode.value?.displayName : '') || '等待分配')
 const selectionName = computed(() => currentRequest.value?.nodeSelectionMode === 'manual'
@@ -114,7 +115,11 @@ async function refresh(forceContext = false): Promise<void> {
   const pending = ['waiting', 'allocating', 'creating'].includes(state.value.phase)
   const refreshContext = forceContext || !pending || Date.now() - lastContextRefreshAtMs >= 5000
   let observedAtMs = Date.now()
-  const observe = (serverMs: number) => { observedAtMs = serverMs }
+  let observedAtLocalMs = performance.now()
+  const observe = (serverMs: number) => {
+    observedAtMs = serverMs
+    observedAtLocalMs = performance.now()
+  }
   try {
     if (refreshContext) await refreshParty()
     let request = await api.current(observe)
@@ -134,8 +139,13 @@ async function refresh(forceContext = false): Promise<void> {
       allocation.value = await api.allocation(request.id, observe)
       if (refreshContext) nextGameIntent.value = await api.nextGameIntent(request.id)
     } else { allocation.value = null; nextGameIntent.value = null }
-    observedServerMs.value = request?.id === elapsedRequestId ? Math.max(observedServerMs.value, observedAtMs) : observedAtMs
-    elapsedRequestId = request?.id || ''
+    if (request) {
+      const now = performance.now()
+      elapsedNowMs.value = elapsedClock.observe(request.id, observedAtMs + now - observedAtLocalMs, now)
+    } else {
+      elapsedClock.reset()
+      elapsedNowMs.value = Date.now()
+    }
     if (refreshContext) lastContextRefreshAtMs = Date.now()
     error.value = ''
   } catch (cause) { error.value = describeError(cause) }
@@ -147,10 +157,12 @@ async function start(): Promise<void> {
   busy.value = true
   error.value = ''
   try {
+    let observedAtMs = Date.now()
     const request = await api.createRequest(gameId.value, presetId.value, nodeSelectionMode.value,
-      nodeSelectionMode.value === 'manual' ? manualNodeId.value : '')
+      nodeSelectionMode.value === 'manual' ? manualNodeId.value : '', (serverMs) => { observedAtMs = serverMs })
     currentRequest.value = request
     allocation.value = null
+    elapsedNowMs.value = elapsedClock.observe(request.id, observedAtMs, performance.now())
     localStorage.setItem(savedRequestKey, request.id)
   } catch (cause) {
     const submissionError = describeError(cause)
@@ -200,6 +212,7 @@ async function abandonQuarantined(): Promise<void> {
     localStorage.removeItem(savedRequestKey)
     currentRequest.value = null
     allocation.value = null
+    elapsedClock.reset()
   } catch (cause) { error.value = describeError(cause) }
   finally { busy.value = false }
   await refresh(true)
@@ -305,6 +318,7 @@ function newRequest(): void {
   if (!currentRequest.value || !['ended', 'cancelled', 'abandoned'].includes(currentRequest.value.state)) return
   currentRequest.value = null
   allocation.value = null
+  elapsedClock.reset()
   nextGameIntent.value = null
   localStorage.removeItem(savedRequestKey)
   error.value = ''
@@ -331,6 +345,10 @@ onMounted(async () => {
   finally { loading.value = false }
   timer = window.setInterval(() => {
     const pending = ['waiting', 'allocating', 'creating'].includes(state.value.phase)
+    if (pending) {
+      const now = elapsedClock.tick(performance.now())
+      if (now !== null) elapsedNowMs.value = now
+    }
     if (pending || Date.now() - lastRefreshAtMs >= 2500) void refresh()
   }, 1000)
 })
