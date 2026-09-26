@@ -23,6 +23,18 @@ func TestP5CEntryVerificationAmendment001(t *testing.T) {
 	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {
 		t.Fatal(err)
 	}
+	h.A2SQueryOK = true
+	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {
+		t.Fatal(err)
+	}
+	var automaticallyVerified bool
+	if err := s.Pool.QueryRow(ctx, `SELECT steam_entry_verified FROM node_entry_capabilities WHERE node_id=$1`, nodeID).Scan(&automaticallyVerified); err != nil || automaticallyVerified {
+		t.Fatalf("A2S success automatically verified Steam: %t: %v", automaticallyVerified, err)
+	}
+	h.A2SQueryOK = false
+	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {
+		t.Fatal(err)
+	}
 	adminID, err := s.CreateAdmin(ctx, "p5c-amendment-admin", "a long test password")
 	if err != nil {
 		t.Fatal(err)
