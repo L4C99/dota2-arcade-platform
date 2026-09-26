@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -168,6 +170,16 @@ func TestP3EExplicitMappingJoinInfoAndRevision(t *testing.T) {
 	adminView, err := s.AdminOverview(ctx)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(adminView.Nodes) != 1 || adminView.Nodes[0].A2SEnabled == nil || !*adminView.Nodes[0].A2SEnabled {
+		t.Fatal("Node-level A2S deployment fact absent from Admin Node")
+	}
+	entryJSON, err := json.Marshal(adminView.Entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(entryJSON), "a2s") || strings.Contains(string(entryJSON), "publicPorts") {
+		t.Fatalf("Admin Entry still mixes A2S or port coverage: %s", entryJSON)
 	}
 	if len(adminView.Allocations) != 1 || adminView.Allocations[0].InstanceID == nil || *adminView.Allocations[0].InstanceID != "i_mapped" ||
 		adminView.Allocations[0].A2SStatus == nil || *adminView.Allocations[0].A2SStatus != "failed" ||

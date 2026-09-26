@@ -2,10 +2,7 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"time"
-
-	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 )
 
 type AdminSettings struct {
@@ -91,6 +88,7 @@ type AdminNode struct {
 	LastHeartbeat        *time.Time `json:"lastHeartbeat"`
 	ReconcileRequested   int64      `json:"reconcileRequested"`
 	ReconcileCompleted   int64      `json:"reconcileCompleted"`
+	A2SEnabled           *bool      `json:"a2sEnabled,omitempty"`
 }
 
 type AdminBinding struct {
@@ -106,8 +104,6 @@ type AdminBinding struct {
 type AdminEntry struct {
 	NodeID               string     `json:"nodeId"`
 	EntryConfigRevision  string     `json:"entryConfigRevision"`
-	PublicPorts          []int      `json:"publicPorts"`
-	A2SEnabled           bool       `json:"a2sEnabled"`
 	SteamVerified        bool       `json:"steamVerified"`
 	SteamEnabled         bool       `json:"steamEnabled"`
 	SteamChinaVerified   bool       `json:"steamChinaVerified"`
@@ -340,14 +336,15 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		COALESCE(r.hard_max_instances,0),COALESCE(r.controller_version,''),COALESCE(r.d2core_version,''),COALESCE(r.d2core_commit,''),COALESCE(r.compatibility_status,''),
 		(SELECT count(*) FROM allocations a WHERE a.node_id=n.id AND a.state NOT IN ('reclaimed','released_no_effect')),
 		COALESCE((SELECT COALESCE(j.error_code,'') FROM node_jobs j WHERE j.node_id=n.id AND j.error_code IS NOT NULL ORDER BY j.updated_at DESC LIMIT 1),''),
-		COALESCE(q.requested_generation,0),COALESCE(q.completed_generation,0)
-		FROM nodes n LEFT JOIN node_reports r ON r.node_id=n.id LEFT JOIN node_reconcile_requests q ON q.node_id=n.id ORDER BY n.display_name,n.id`)
+		COALESCE(q.requested_generation,0),COALESCE(q.completed_generation,0),c.a2s_enabled
+		FROM nodes n LEFT JOIN node_reports r ON r.node_id=n.id LEFT JOIN node_reconcile_requests q ON q.node_id=n.id
+		LEFT JOIN node_entry_capabilities c ON c.node_id=n.id ORDER BY n.display_name,n.id`)
 	if err != nil {
 		return AdminOverview{}, err
 	}
 	for rows.Next() {
 		var x AdminNode
-		if err := rows.Scan(&x.ID, &x.DisplayName, &x.OS, &x.Enabled, &x.AcceptingNewRequests, &x.Draining, &x.Priority, &x.Desired, &x.LastHeartbeat, &x.Hard, &x.ControllerVersion, &x.D2CoreVersion, &x.D2CoreCommit, &x.Compatibility, &x.Occupied, &x.RecentErrorCode, &x.ReconcileRequested, &x.ReconcileCompleted); err != nil {
+		if err := rows.Scan(&x.ID, &x.DisplayName, &x.OS, &x.Enabled, &x.AcceptingNewRequests, &x.Draining, &x.Priority, &x.Desired, &x.LastHeartbeat, &x.Hard, &x.ControllerVersion, &x.D2CoreVersion, &x.D2CoreCommit, &x.Compatibility, &x.Occupied, &x.RecentErrorCode, &x.ReconcileRequested, &x.ReconcileCompleted, &x.A2SEnabled); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
@@ -377,26 +374,19 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT c.node_id,c.a2s_enabled,c.steam_entry_verified,c.steam_entry_enabled,c.steam_verified_at,
-		c.steamchina_entry_verified,c.steamchina_entry_enabled,c.steamchina_verified_at,c.entry_config_revision,r.network_facts
-		FROM node_entry_capabilities c JOIN node_reports r ON r.node_id=c.node_id ORDER BY c.node_id`)
+	rows, err = s.Pool.Query(ctx, `SELECT c.node_id,c.steam_entry_verified,c.steam_entry_enabled,c.steam_verified_at,
+		c.steamchina_entry_verified,c.steamchina_entry_enabled,c.steamchina_verified_at,c.entry_config_revision
+		FROM node_entry_capabilities c ORDER BY c.node_id`)
 	if err != nil {
 		return AdminOverview{}, err
 	}
 	for rows.Next() {
 		var x AdminEntry
-		var networkRaw []byte
-		if err := rows.Scan(&x.NodeID, &x.A2SEnabled, &x.SteamVerified, &x.SteamEnabled, &x.SteamVerifiedAt, &x.SteamChinaVerified, &x.SteamChinaEnabled, &x.SteamChinaVerifiedAt,
-			&x.EntryConfigRevision, &networkRaw); err != nil {
+		if err := rows.Scan(&x.NodeID, &x.SteamVerified, &x.SteamEnabled, &x.SteamVerifiedAt, &x.SteamChinaVerified, &x.SteamChinaEnabled, &x.SteamChinaVerifiedAt,
+			&x.EntryConfigRevision); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
-		var network nodev1.NetworkFacts
-		if err := json.Unmarshal(networkRaw, &network); err != nil {
-			rows.Close()
-			return AdminOverview{}, err
-		}
-		x.PublicPorts = nodev1.PublicPorts(network)
 		o.Entries = append(o.Entries, x)
 	}
 	if err := rows.Err(); err != nil {
