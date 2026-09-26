@@ -68,8 +68,8 @@ func TestP4DAdminControlsAuditAndControllerFacts(t *testing.T) {
 	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Enabled: boolPtr(true)}); !errors.Is(err, ErrInvalidAdminAction) {
 		t.Fatalf("unverified entry: %v", err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); !errors.Is(err, ErrInvalidAdminAction) {
-		t.Fatalf("explicit human verification: %v", err)
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); !errors.Is(err, ErrJobConflict) {
+		t.Fatalf("human verification without protocol configuration: %v", err)
 	}
 	var audits int
 	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE actor_kind='admin'`).Scan(&audits); err != nil || audits != len(actions) {
