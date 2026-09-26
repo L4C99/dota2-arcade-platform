@@ -28,6 +28,16 @@ Dota/App570 updates are manual and separately authorized. Drain node, let instan
 
 ## ContentVersion and VPK rolling release
 
+The Admin UI has three separate controls that are easy to confuse:
+
+| Admin area | Use it for | What it actually changes |
+| --- | --- | --- |
+| Content → register map/version/template/preset | Introduce a new Workshop game, immutable VPK version, startup template revision, or player-selectable mode | Platform catalog records only; no file is uploaded or switched. A VPK-only update does not require a new game or template revision. |
+| Node → template mapping | Make an existing template revision usable on a specific Node | The Platform's revision-to-Controller binding key. The key and formal template file must already exist in that Node's Controller configuration; the Web page does not create them. A VPK-only update does not change this mapping. |
+| Content → publish target version | After Node preparation, matching Controller readback, human entry/content validation and full reclaim | `ArcadeGame.current_content_version_id` for future Allocations only. It does not change Node files or existing Allocations. |
+
+The practical order is register only the needed records, prepare the Node with Content Tool, verify and record the matching content on the Node, then publish the new target and reopen the relevant Node × game admission. The Admin UI cannot perform Content Tool operations or create a local validation instance.
+
 Content Tool is offline: `content-tool status <WorkshopID>`, `prepare <WorkshopID> <version> <source-vpk>`, `switch <WorkshopID> <version>`, `rollback <WorkshopID>`. Pass absolute ASCII `CONTENT_ROOT` and `DOTA_ROOT` (or flags). `prepare` copies an immutable VPK into `<ContentRoot>/<WorkshopID>/releases/<version>/pak01_dir.vpk`, stores SHA256/size metadata outside the release, and does not touch the Dota link. `switch` updates the whole addon directory link/Junction and `metadata/current.json`; Controller readback must confirm it. An interrupted operation leaves a transition record that the next explicit `switch`/`rollback` recovers. A leftover lock requires an operator to confirm the old process is gone before manually removing only that lock. Keep old release directories for rollback; never overwrite an old version in place.
 
 For a one-time migration of a pre-Content-Tool addon link, first Drain and prove no unreclaimed Allocation or d2core instance. Copy the currently linked VPK into isolated staging, verify its known SHA256, and `prepare` that copy under its existing ContentVersion ID. If the old Junction already targets the prepared release, verify that exact target before adopting the prepared version metadata as `metadata/current.json`; `status` must confirm link and metadata agree. If the old symlink targets an unversioned directory, preserve the symlink outside the addon tree on the same filesystem and use `switch` to the SHA-identical prepared release; retain the old target and backup symlink. Point the Controller binding at Content Tool's `metadata/current.json`, restart it and require confirmed digest readback. These are migration-only steps; later releases use `prepare`/`switch`/`rollback` without manual metadata adoption. Do not pass a live source VPK directly to `prepare` or overwrite the old release.
