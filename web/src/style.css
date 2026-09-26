@@ -230,6 +230,7 @@ main{padding-top:24px;min-height:calc(100vh - 145px)}
 .protocol-troubleshooting{margin-top:0}
 .protocol-troubleshooting p{margin:13px 0 8px}
 .protocol-fallback-links{display:grid;gap:5px}
+.protocol-fallback-link{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap}
 .protocol-fallback-links code{overflow-wrap:anywhere;user-select:all;color:#587268;font-size:12px}
 .copy-button{flex:none;padding:9px 11px;border:1px solid #a9c2ad;border-radius:9px;background:#fffefa;color:#173d34;font-size:12px;font-weight:700}
 .copy-button:hover{background:#eaf4e9}
