@@ -67,7 +67,7 @@ The practical order is register only the needed records, prepare the Node with C
    ```
 
    `prepare` 将隔离副本复制为不可变 release；核对输出 SHA256 与后台登记值一致。`switch` 才切换整个 addon 目录链接和 `metadata/current.json`；`status` 应显示新版本及一致的链接/元数据。不要在旧实例运行时切换、原地覆盖 VPK 或修改旧 release。
-4. **核对节点事实**：Admin「调度与容量」→「组件版本、核对与历史任务」→「请求完整核对」。等待 Controller 上报本卡片的版本、状态「已确认」、SHA256 与登记值一致。后台只能读取这项事实，不能代节点填写。若未确认，停在这里排查 Content Tool status、Controller 的本地路径配置和心跳。
+4. **核对节点事实**：Admin「调度与容量」→「组件版本与核对」→「请求完整核对」。等待 Controller 上报本卡片的版本、状态「已确认」、SHA256 与登记值一致。后台只能读取这项事实，不能代节点填写。若未确认，停在这里排查 Content Tool status、Controller 的本地路径配置和心跳。
 5. **临时测试窗口**：Admin「调度与容量」→「进入节点维护」，确认*整台节点*占用为 0，并核对 d2core `list` 和待处理任务；Node Drain 不会自动停止已有实例。仅在 Drain 中，以同一普通账户、固定 d2core v0.1.1、正式玩法模板进行维护实例测试。以下命令只展示固定 CLI 的调用形状，不可照抄占位路径；使用与正在运行的 manager 相同的 data-dir，给此次新测试生成**唯一** idempotency key，不要启动第二个 manager：
 
    ```text
