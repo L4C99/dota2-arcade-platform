@@ -62,7 +62,6 @@ func TestP5AMultiCatalogPublicationAndWaitingVersion(t *testing.T) {
 	if _, err := s.RecordHeartbeat(ctx, node2, h); err != nil {
 		t.Fatal(err)
 	}
-	act(AdminAction{Action: "binding.update", TargetID: node2, GameID: game2, Accepting: boolPtr(true)})
 	if err := s.SetDesiredCapacity(ctx, node2, 1); err != nil {
 		t.Fatal(err)
 	}
@@ -76,6 +75,11 @@ func TestP5AMultiCatalogPublicationAndWaitingVersion(t *testing.T) {
 	}
 	act(AdminAction{Action: "node.update", TargetID: node2, Draining: boolPtr(false)})
 	act(AdminAction{Action: "content.publish", TargetID: game2, ContentVersionID: "second-v1", Confirmed: true})
+	var accepting bool
+	if err := s.Pool.QueryRow(ctx, `SELECT accepting_new_allocations FROM node_content_bindings WHERE node_id=$1 AND arcade_game_id=$2`, node2, game2).Scan(&accepting); err != nil || accepting {
+		t.Fatalf("publication changed binding admission: %v %v", accepting, err)
+	}
+	act(AdminAction{Action: "binding.update", TargetID: node2, GameID: game2, Accepting: boolPtr(true)})
 	act(AdminAction{Action: "game.update", TargetID: game2, Enabled: boolPtr(true), Accepting: boolPtr(true)})
 	var groupPreset string
 	if err := s.Pool.QueryRow(ctx, `SELECT id FROM game_presets WHERE arcade_game_id=$1 AND display_name='Group'`, game2).Scan(&groupPreset); err != nil {

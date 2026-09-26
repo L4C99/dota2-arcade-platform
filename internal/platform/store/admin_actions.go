@@ -199,7 +199,6 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			JOIN nodes n ON n.id=v.node_id JOIN node_reports r ON r.node_id=n.id
 			WHERE v.arcade_game_id=$1 AND v.content_version_id=$2 AND b.reported_state='confirmed'
 			AND b.reported_content_version_id=v.content_version_id AND b.reported_content_sha256=c.content_sha256
-			AND b.accepting_new_allocations
 			AND n.enabled AND n.accepting_new_requests AND NOT n.draining AND r.compatibility_status='compatible'
 			AND n.last_heartbeat > now()-interval '2 minutes' LIMIT 1 FOR SHARE OF b,n`, a.TargetID, a.ContentVersionID).Scan(&readyNode)
 		if errors.Is(err, pgx.ErrNoRows) {
