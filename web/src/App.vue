@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ApiError, api } from './api'
 import type { Allocation, Catalog, NextGameIntent, NodeChoice, Party, PartyInvite, ServerRequest } from './api'
 import { maintenanceFor, statusFor } from './state'
+import { elapsedFor } from './elapsed'
 import { inviteTokenFromHash, partyInviteLink, tokenFromInviteInput } from './partyInvite'
 
 const savedRequestKey = 'arcade.lastRequestId'
@@ -30,12 +31,15 @@ const nodes = ref<NodeChoice[]>([])
 const nodeSelectionMode = ref<'auto' | 'manual'>('auto')
 const manualNodeId = ref('')
 let timer: number | undefined
+let elapsedTimer: number | undefined
 let polling = false
+const nowMs = ref(Date.now())
 
 const game = computed(() => catalog.value?.games.find((item) => item.id === (currentRequest.value?.arcadeGameId || gameId.value)))
 const preset = computed(() => catalog.value?.presets.find((item) => item.id === (currentRequest.value?.gamePresetId || presetId.value)))
 const selectedPresets = computed(() => catalog.value?.presets.filter((item) => item.arcadeGameId === gameId.value) || [])
 const state = computed(() => statusFor(currentRequest.value, allocation.value, nodes.value, nextGameIntent.value))
+const elapsed = computed(() => elapsedFor(currentRequest.value, allocation.value, state.value.phase, nowMs.value))
 const selectedNode = computed(() => nodes.value.find((item) => item.id === (currentRequest.value?.manualNodeId || manualNodeId.value)))
 const assignedNodeName = computed(() => allocation.value?.nodeDisplayName || (currentRequest.value?.nodeSelectionMode === 'manual' ? selectedNode.value?.displayName : '') || '等待分配')
 const selectionName = computed(() => currentRequest.value?.nodeSelectionMode === 'manual'
@@ -316,8 +320,9 @@ onMounted(async () => {
   } catch (cause) { error.value = describeError(cause) }
   finally { loading.value = false }
   timer = window.setInterval(refresh, 2500)
+  elapsedTimer = window.setInterval(() => { nowMs.value = Date.now() }, 1000)
 })
-onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventListener('hashchange', syncInviteHash) })
+onUnmounted(() => { if (timer) window.clearInterval(timer); if (elapsedTimer) window.clearInterval(elapsedTimer); window.removeEventListener('hashchange', syncInviteHash) })
 </script>
 
 <template>
@@ -364,7 +369,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
           <button type="button" class="party-text-button" :disabled="busy" @click="resetInvite">重置邀请链接</button>
         </section>
       </div>
-      <aside class="panel party-card party-server-card"><div class="party-card-heading"><span class="eyebrow">当前服务器</span><span class="party-pill">{{ state.title }}</span></div><h2>{{ serverCardTitle }}</h2><p class="party-lead">{{ serverCardDescription }}</p><div v-if="currentRequest" class="party-facts"><div><span>地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div><div><span>玩法</span><strong>{{ preset?.displayName || '加载中' }}</strong></div><div><span>节点</span><strong>{{ assignedNodeName }}</strong></div></div><button type="button" class="secondary-button" @click="partyView = false">{{ allocation?.joinInfo ? '查看连接方式' : '前往服务器页面' }}</button></aside>
+      <aside class="panel party-card party-server-card"><div class="party-card-heading"><span class="eyebrow">当前服务器</span><span class="party-pill">{{ state.title }}</span></div><h2>{{ serverCardTitle }}</h2><p class="party-lead">{{ serverCardDescription }}</p><p v-if="elapsed" class="elapsed-line">{{ elapsed.summary }}</p><div v-if="currentRequest" class="party-facts"><div><span>地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div><div><span>玩法</span><strong>{{ preset?.displayName || '加载中' }}</strong></div><div><span>节点</span><strong>{{ assignedNodeName }}</strong></div></div><button type="button" class="secondary-button" @click="partyView = false">{{ allocation?.joinInfo ? '查看连接方式' : '前往服务器页面' }}</button></aside>
       <p v-if="partyNotice" class="party-notice" role="status">{{ partyNotice }}</p>
     </div>
     <div v-else-if="!currentRequest" class="request-layout">
@@ -428,6 +433,8 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         <div class="status-top"><span class="eyebrow">当前申请</span><span class="status-pill"><span class="status-dot"/>{{ state.title }}</span></div>
         <h2>{{ state.title }}</h2>
         <p class="status-description">{{ state.description }}</p>
+        <p v-if="elapsed" class="elapsed-line">{{ elapsed.summary }}</p>
+        <p v-if="elapsed?.detail" class="elapsed-detail">{{ elapsed.detail }}</p>
         <div class="facts" aria-label="申请内容">
           <div><span>游廊地图</span><strong>{{ game?.displayName || '加载中' }}</strong></div>
           <div><span>游戏模式</span><strong>{{ preset?.displayName || '加载中' }}</strong></div>

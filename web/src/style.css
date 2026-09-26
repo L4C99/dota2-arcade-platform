@@ -194,6 +194,9 @@ main{padding-top:24px;min-height:calc(100vh - 145px)}
 .status-panel h2,.join-panel h2,.side-panel h2{font:700 clamp(27px,3vw,35px)/1.3 Inter,"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;letter-spacing:-.04em;margin:24px 0 9px}
 .join-panel h2,.side-panel h2{margin-top:13px}
 .status-description{font-size:14px;line-height:1.7;margin-bottom:22px}
+.elapsed-line{width:fit-content;max-width:100%;margin:-7px 0 19px;padding:8px 12px;border:1px solid #d5e6d6;border-radius:10px;background:#f0f7ef;color:#285943;font-size:13px;font-weight:700;line-height:1.5}
+.elapsed-detail{margin:-10px 0 20px;color:#708379;font-size:12px;line-height:1.5}
+.party-server-card .elapsed-line{margin:13px 0 16px}
 .facts{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;border-top:1px solid #dce2d8;border-bottom:0;padding:0}
 .facts div{flex-direction:row;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #dce2d8;font-size:13px}
 .facts span{font-size:13px}
