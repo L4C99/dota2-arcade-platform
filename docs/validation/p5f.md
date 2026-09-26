@@ -1,4 +1,15 @@
-# P5F small human trial (pending)
+# P5F validation — PASS under V1.0 Amendment 002
+
+## Final P5F disposition (2026-09-27)
+
+The project owner formally moved the two-real-human same-instance trial from the original P5F gate to A.7 in [V1.0 Amendment 002](../specs/v1-amendment-002-human-trial-gate.md). The owner accepted the current player and admin UI as P5-final. Under the amended **development** standard, P5F is **PASS** on the following existing evidence; no new instance was created merely to repeat it:
+
+- One real owner completed the formal Player Web Flow for Workshop `2307479570/custom`: Web request `230f2d1a-7bc8-4f7d-8026-7c9d6e15d3a6` → Allocation → d2core create → Ready/valid JoinInfo → owner used the page-provided connect command, entered and played → page stop → `ended/reclaimed`. The recorded request-to-JoinInfo interval was 24.0 seconds. The later single-person Player Web flow after Amendment 001 also reached real entry, play, stop and full reclaim. These are one-human trials, not multiplayer trials.
+- Two independent anonymous sessions completed create Party, invite retrieval/reset, stale-token rejection, join, both seeing the same two-member Party, member leave, leader disband and logout through the development player API; the owner separately confirmed normal behavior in two browser windows. [P2D](p2d.md) and PostgreSQL integration tests cover leader/member permissions and forged identity/foreign-Party rejection. Two sessions and two windows are **not** two real people or two Dota clients.
+
+**REAL MULTI-HUMAN SAME-INSTANCE TRIAL: NOT VERIFIED — DEFERRED TO A.7. BLOCKS FINAL V1 RELEASE.** Two or more real people must still join the same Party and real Dota instance through the formal Player Flow, play, end or start the next game, and reach full reclaim during small production rollout. No Bot, mock, duplicate browser session or single-person multi-client result is accepted as that evidence.
+
+## Historical record under the original P5F gate
 
 No P5F multiplayer result is claimed. The required trial needs at least two real people to join the same real Dota instance through the player flow, observe normal lifecycle and full reclaim, and record natural request/assignment/create/Ready/JoinInfo timestamps. The owner has now confirmed one real person entering a maintenance instance and normal gameplay; this was outside the player flow and does not substitute for the two-person P5F trial. Bots, browser sessions and unit tests do not substitute for this trial.
 
