@@ -24,3 +24,15 @@ The project owner reported no issue in manual functional flows, including the pl
 ## NOT VERIFIED
 
 - Authenticated browser interaction against the newly deployed administrator UI was not rechecked in this follow-up. The local fixture checked all administrator sections and the HTTPS resource check confirmed the deployed bundle. Final player and administrator UI owner acceptance remains pending. P4 overall and owner acceptance remain pending until the owner accepts the revised UI and the separate closure commit passes CI.
+
+## Second owner feedback: capacity and party history
+
+The owner reported that the online badge and capacity text in the overview were too close, that the node capacity wording needed refinement, and that a long list of dissolved Parties made the page unwieldy. The owner also asked about automatic administrator refresh and multi-map scope.
+
+- The overview gives connectivity and capacity separate visual groups. Capacity uses a large occupied/desired value and a second line labeling both figures.
+- Node details show occupied, desired capacity, and Controller-reported hard limit as separate figures with a short explanation. This changes presentation only; the hard limit remains a node fact.
+- The Party panel shows active Parties first. Additional active Parties and dissolved history use collapsible sections with a bounded 290 px internal scroll area. The existing administrator overview query returns at most 100 recent Parties; the UI states this limit.
+- The current full overview refresh replaces draft settings. Automatic polling of that endpoint could overwrite unsaved edits and repeatedly transfer requests, allocations, Jobs, Parties, and Audit data. Keep manual refresh for this checkpoint. A future performance discussion can define a small status-only poll, visible-tab scheduling, and preservation of form drafts before enabling automatic refresh.
+- P4 displays the Node × ArcadeGame control, but the frozen `docs/specs/v1.md` assigns multiple ArcadeGame/GamePreset/ContentVersion setup to P5A. No extra map or content was created for this UI follow-up.
+
+Automated verification: Web lint, typecheck, five Vitest cases, and production build passed. Local browser fixture checked desktop presentation, 390 px and 320 px layouts without horizontal overflow, and a 12-record dissolved Party section whose 919 px contents scroll within a 289 px viewport. The backend/API/schema did not change. Final owner acceptance remains pending.
