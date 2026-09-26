@@ -1,6 +1,6 @@
 :root{font-family:Inter,"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;color:#173d34;background:#f5f2e9;font-synthesis:none}
 *{box-sizing:border-box}
-body{margin:0;min-width:320px}
+body{margin:0;min-width:0}
 button,input{font:inherit}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed;opacity:.5}
@@ -206,6 +206,9 @@ main{padding-top:24px;min-height:calc(100vh - 145px)}
 .progress li.done{color:#4f795f}
 .progress li.done span{background:#d8e9db;color:#173d34}
 .status-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;margin-top:25px}
+.next-game-button{display:inline-flex;align-items:center;justify-content:center;gap:20px;min-height:43px;padding:10px 16px;background:#e8f1e8;border-color:#a8c4af;color:#17463a}
+.next-game-button span{font-size:17px;font-weight:500;line-height:1}
+.next-game-button:hover:not(:disabled){background:#dcebdd}
 .secondary-button{background:#f7faf6;font-size:13px}
 .secondary-button.danger{border-color:#e5d2be;background:#fcf8f2;color:#9a633a}
 .secondary-button.danger:hover:not(:disabled){background:#f7eadc}

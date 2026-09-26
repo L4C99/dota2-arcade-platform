@@ -435,7 +435,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         <div class="status-actions">
           <button v-if="currentRequest.state === 'waiting' && !allocation && isLeader" type="button" class="secondary-button" :disabled="busy" @click="cancelWaiting">取消等待申请</button>
           <button v-if="currentRequest.state === 'running' && isLeader" type="button" class="secondary-button danger" :disabled="busy" @click="stop">{{ busy ? '正在提交…' : '结束服务器' }}</button>
-          <button v-if="currentRequest.state === 'running' && isLeader" type="button" class="primary-button" :disabled="busy" @click="nextGame">下一局 <span aria-hidden="true">↗</span></button>
+          <button v-if="currentRequest.state === 'running' && isLeader" type="button" class="secondary-button next-game-button" :disabled="busy" @click="nextGame">下一局 <span aria-hidden="true">→</span></button>
           <button v-if="currentRequest.state === 'quarantined' && isLeader" type="button" class="secondary-button danger" :disabled="busy" @click="abandonQuarantined">{{ allocation?.state === 'reclaimed' && nextGameIntent?.state === 'paused' ? '继续下一局' : '放弃此异常服务器并继续' }}</button>
           <p v-if="currentRequest.state === 'quarantined' && !isLeader" class="action-hint">只有队长可以放弃异常服务器；旧资源仍需管理员处理。</p>
           <button v-if="state.phase === 'ended'" type="button" class="secondary-button" @click="newRequest">重新申请</button>
