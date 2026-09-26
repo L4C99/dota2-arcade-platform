@@ -8,4 +8,4 @@
 
 ## NOT VERIFIED
 
-- Real development-node symlink/Junction operation with an actual VPK, drained temporary d2core validation instance, single-node publication and Linux/Windows two-node rolling release. These require the owner's confirmed source VPK and target version; no development node content has been changed. P5B is not marked PASS.
+- Local isolated actual-VPK prepare/switch proof is recorded in [content input](p5-content-input.md). Real development-node symlink/Junction operation, drained temporary d2core validation instance, single-node publication and Linux/Windows two-node rolling release remain pending. No development node content has yet been changed. P5B is not marked PASS.

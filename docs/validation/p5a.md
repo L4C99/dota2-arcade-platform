@@ -1,6 +1,6 @@
 # P5A multi-content checkpoint (in progress)
 
-P5 start baseline: `ef767be1b7a95a50d4ccbde9117baaa970fce11f` on `origin/main`, clean before work. The owner authorized P5 automation first and will provide the actual second content later.
+P5 start baseline: `ef767be1b7a95a50d4ccbde9117baaa970fce11f` on `origin/main`, clean before work. The owner subsequently supplied and authorized [two real development VPK inputs](p5-content-input.md), three new-game templates and deployment to both development nodes.
 
 ## Implemented
 
@@ -12,8 +12,8 @@ P5 start baseline: `ef767be1b7a95a50d4ccbde9117baaa970fce11f` on `origin/main`, 
 ## Verification
 
 - Local `go test ./...` passes; PostgreSQL Store/HTTP tests skip locally without `PLATFORM_TEST_DATABASE_URL`. GitHub Actions [run 36231578148](https://github.com/L4C99/dota2-arcade-platform/actions/runs/36231578148) passed all four jobs, including the disposable PostgreSQL integration suite and migration-13 upgrade test. The first CI run found and led to correction of an older P4 test's hard-coded final migration number.
-- Local read-only development inventory found one verified real Workshop (`3564393242`, `p1-test-v1`) on Linux and Windows. No confirmed second VPK or game was found.
+- Before modification, read-only development inventory found only Workshop `3564393242` (`p1-test-v1`) on both nodes, migration 13, zero active Allocations and zero open NodeJobs. Owner-supplied `2307479570` and distinct legacy `3564393242` VPKs were copied into isolated local storage and verified byte-for-byte by SHA256.
 
 ## NOT VERIFIED
 
-- Actual second game/version registration, content preparation, real request and player entry await owner-provided content details and files. P5A is not marked PASS.
+- Actual second game/version registration, development-node preparation, real request and player entry remain pending. P5A is not marked PASS.
