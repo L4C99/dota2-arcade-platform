@@ -19,7 +19,6 @@ describe('player elapsed time', () => {
     expect(elapsedFor(request, null, 'waiting', Date.parse('2026-09-26T10:00:12.300Z'))?.summary).toBe('正在等待服务器 · 已等待 12 秒')
     expect(elapsedFor(request, allocation, 'creating', Date.parse('2026-09-26T10:00:20.000Z'))).toEqual({
       summary: '正在启动服务器 · 已用时 20 秒',
-      detail: '其中启动阶段 5 秒',
     })
     expect(elapsedFor(request, { ...allocation, createStartedAt: undefined }, 'creating', Date.parse('2026-09-26T10:00:20.000Z'))?.summary).toBe('正在准备服务器 · 已用时 20 秒')
   })
@@ -31,5 +30,6 @@ describe('player elapsed time', () => {
     })
     expect(elapsedFor(request, { ...allocation, joinInfo: undefined }, 'ready', Date.now())).toBeNull()
     expect(elapsedFor({ ...request, requestedAt: 'bad-time' }, allocation, 'ready', Date.now())).toBeNull()
+    expect(elapsedFor(request, allocation, 'stopping', Date.now())).toBeNull()
   })
 })
