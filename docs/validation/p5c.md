@@ -13,3 +13,11 @@
 
 - Real client entry for Steam and steamchina across every configured public port, browser cold-start and asymmetric NAT behavior. No entry has been marked verified on development nodes. P5C is not marked PASS.
 - The current mapping sets are Linux 28000–28009 and Windows 28100–28109. The earlier real-client `connect` checks on Linux 28000 and Windows 28100 do not establish URI behavior on either complete set. Windows still has no independently verified public URI route.
+
+## First owner Steam URI attempt on Linux port 28000
+
+After the owner authorized a Steam-first URI trial, the idle Linux development node was drained and a single direct fixed-d2core instance of the verified new-game `custom` template was created explicitly on port 28000. The instance reached `active/running/ready`, including Steam login success. The owner attempted `steam://connect/58.216.8.72:28000` and reported that Steam failed to start Dota; exact client error and ordinary `connect` result were not yet supplied. This is a failed URI attempt, not a successful port verification.
+
+Read-only diagnosis found that the Controller network config declares `a2sEnabled=true`, but UDP A2S_INFO queries to both loopback and the public IP on port 28000 timed out while the instance was Ready. The current Dota `gameinfo.gi` had no `GMS` or `Advertise` stanza; fixed d2core's A2S documentation calls for `GameInfo/GMS/Advertise 1` and notes that a new instance plus a separate query are required after changing it. The A2S gap may contribute to the URI failure, but the owner's client symptom is not yet specific enough to prove causation. No Dota installation file, firewall or network configuration was changed during this diagnosis.
+
+At the owner's request, the exact temporary instance was stopped and confirmed `lifecycle=reclaimed`, `process=stopped`, `cleanup=complete`; d2core's active list was empty. The Controller's explicit reconcile completed generation 11/11, and the Linux node was resumed. Both URI verification/enabled flags remain false. Further port trials are paused pending owner authorization for the proposed reversible development Dota A2S configuration change and a fresh real-client check.
