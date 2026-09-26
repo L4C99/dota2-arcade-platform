@@ -92,15 +92,22 @@
 .admin-content-task p{font-size:13px;max-width:780px;margin:0 0 12px}
 .admin-content-task .admin-form-row{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:0}
 .admin-form-row>.secondary-button,.admin-form-row>.primary-button{align-self:end;min-height:44px}
-.admin-content-validation{display:grid;gap:8px;border-top:1px solid #e5ebe2;padding:16px 0}
-.admin-content-validation strong{color:#174137}
-.admin-content-validation small{color:#718980;overflow-wrap:anywhere}
-.admin-content-validation button{justify-self:start}
+.admin-map-binding{padding:20px 0}
+.admin-map-target,.admin-map-validation{font-size:12px;margin:11px 0 0;overflow-wrap:anywhere}
+.admin-map-target code,.admin-map-workflow code{overflow-wrap:anywhere}
+.admin-map-validation{color:#426958!important}
+.admin-map-validation-pending{color:#97663e!important}
+.admin-map-ready{font-size:12px;padding:9px 12px;border-radius:9px;background:#f2f8f0;margin:13px 0 0!important}
+.admin-map-record{border-top:1px solid #e5ebe2;margin-top:16px;padding-top:14px}
+.admin-map-record p{font-size:12px;margin:0 0 11px}
+.admin-map-workflow{margin-top:9px}
+.admin-map-workflow ol{margin:0 0 14px;padding-left:22px;color:#59736a;font-size:13px;line-height:1.7}
+.admin-map-workflow li{padding-left:4px;margin:0 0 11px}
+.admin-map-workflow li strong{color:#174137}
 .admin-technical{border-top:1px solid #e5ebe2;margin-top:22px;padding-top:17px;color:#5e786d;font-size:12px}
 .admin-technical summary{cursor:pointer;font-weight:700;color:#315b50}
 .admin-technical p{font-size:12px;overflow-wrap:anywhere}
 .admin-technical .secondary-button{margin-top:4px}
-.admin-binding-detail .secondary-button{margin-top:14px}
 .admin-entry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:17px}
 .admin-entry-option{display:flex;flex-direction:column;justify-content:space-between;min-width:0;padding:19px;border:1px solid #e0e9df;border-radius:14px;background:#fffefb}
 .admin-entry-option h3{font-size:17px}
@@ -144,4 +151,4 @@
 @media(max-width:900px){.admin-content-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.admin-shell{padding:24px 16px 70px}.admin-header-tools{gap:8px}.admin-header-tools .identity{display:none}.admin-heading{align-items:start;flex-direction:column;margin-bottom:18px}.admin-heading h1{font-size:29px}.admin-tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))}.admin-tabs button{grid-column:span 2;min-width:0;padding:10px 4px;white-space:normal}.admin-tabs button:nth-child(n+4){grid-column:span 3}.admin-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-card{padding:20px}.admin-section-heading h2{font-size:25px}.admin-row,.admin-compact-row{align-items:start;flex-direction:column;gap:7px}.admin-row-side{width:100%;justify-content:space-between}.admin-choice-grid{grid-template-columns:1fr}.admin-entry-grid{grid-template-columns:1fr}.admin-entity-head,.admin-card-heading{gap:9px}.admin-form-row{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-attempt .admin-entity-head{flex-direction:column}.admin-workspace-list{max-height:350px}}
 @media(max-width:350px){.admin-metric{padding:16px}.admin-fact-grid,.admin-detail-facts{grid-template-columns:1fr}.admin-header-tools a{font-size:11px}.admin-entity-head{flex-direction:column}}
-@media(max-width:520px){.admin-content-flow,.admin-content-task .admin-form-row,.admin-form-row{grid-template-columns:1fr}.admin-content-validation button{width:100%}}
+@media(max-width:520px){.admin-content-flow,.admin-content-task .admin-form-row,.admin-form-row{grid-template-columns:1fr}.admin-map-record button{width:100%}}
