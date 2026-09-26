@@ -98,6 +98,11 @@
 .admin-entry-option h3{font-size:17px}
 .admin-entry-option p{font-size:12px;margin:2px 0 0}
 .admin-entry-option .admin-actions{margin-top:17px}
+.admin-entry-record{border-top:1px solid #e5ebe2;margin-top:17px;padding-top:12px}
+.admin-entry-record summary{cursor:pointer;color:#5e786d;font-size:12px;font-weight:700}
+.admin-entry-record p{font-size:12px;line-height:1.55;color:#718980;margin:9px 0}
+.admin-entry-record button{margin-top:4px}
+.admin-entry-diagnostics{margin-top:22px}
 .admin-subtabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}
 .admin-subtabs button{border:1px solid #d9e4d9;background:#fffdf9;color:#537267;border-radius:999px;padding:9px 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .admin-subtabs button[aria-pressed=true]{background:#e8f1e8;color:#17463a;border-color:#bad3bd}

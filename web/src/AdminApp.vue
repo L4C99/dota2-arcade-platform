@@ -172,7 +172,7 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
   if (field === 'verified') {
     base.verified = value
     base.confirmed = value
-    void act(base, value ? `我确认已经在当前入口配置修订下，使用真实${kind === 'steam' ? 'Steam' : '蒸汽平台'}客户端通过一键 URI 成功进入真实 Ready 服务器。此操作会记录我的管理员身份。` : '撤销此入口的真人验证并关闭入口？')
+    void act(base, value ? `我确认已经在当前入口配置修订下，使用真实${kind === 'steam' ? 'Steam' : '蒸汽平台'}客户端通过一键 URI 成功进入真实 Ready 服务器。此操作会记录我的管理员身份。` : '仅当验证记录有误或同一入口配置下实测失效时撤销。撤销后也会关闭玩家入口。确定继续？')
   } else { base.enabled = value; void act(base, value ? '确认开启此入口给玩家？请先核对真人验证状态。' : '') }
 }
 </script>
@@ -258,8 +258,18 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
           </div>
           <section class="panel admin-card"><span class="eyebrow">启动模板</span><h2>节点模板映射</h2><p>这里只登记逻辑绑定键；请先确认 Controller 本地配置和正式模板文件已准备好。</p><div v-for="binding in overview.templateBindings.filter(item => item.nodeId === selectedNode?.id)" :key="binding.templateRevisionId" class="admin-compact-row"><div><strong>{{ binding.templateRevisionId }}</strong><small>绑定键 {{ binding.bindingKey }}</small></div></div><form class="admin-form-row" @submit.prevent="act({action:'template_binding.upsert',targetId:selectedNode?.id,templateRevisionId:templateBindingDraft.revisionId,bindingKey:templateBindingDraft.bindingKey})"><label>模板修订<select v-model="templateBindingDraft.revisionId" required><option value="" disabled>请选择</option><option v-for="revision in overview.templateRevisions" :key="revision.id" :value="revision.id">{{ gameName(revision.arcadeGameId) }} · {{ revision.id }}</option></select></label><label>Controller 绑定键<input v-model.trim="templateBindingDraft.bindingKey" required maxlength="128" /></label><button type="submit" class="secondary-button" :disabled="busy">保存映射</button></form></section>
           <section v-for="entry in entriesFor(selectedNode.id)" :key="entry.nodeId" class="panel admin-card">
-            <span class="eyebrow">玩家入口</span><h2>一键进入游戏</h2><p>A2S 诊断：{{ a2sStatus(entry.a2sEnabled, entry.a2sQueryOk) }}。空闲节点没有实时查询结果；A2S 诊断不代替真人一键进服确认。</p><p>当前入口配置修订 {{ entry.entryConfigRevision.slice(0, 12) }}</p>
-            <div class="admin-entry-grid"><div v-for="kind in (['steam','steamchina'] as const)" :key="kind" class="admin-entry-option"><div><h3>{{ kind === 'steam' ? 'Steam' : '蒸汽平台' }}</h3><p>真人验证 {{ kind === 'steam' ? (entry.steamVerified ? '已确认' : '未确认') : (entry.steamChinaVerified ? '已确认' : '未确认') }} · 玩家入口 {{ kind === 'steam' ? (entry.steamEnabled ? '开启' : '关闭') : (entry.steamChinaEnabled ? '开启' : '关闭') }}</p><small>验证时间 {{ stamp(kind === 'steam' ? entry.steamVerifiedAt : entry.steamChinaVerifiedAt) }}</small></div><div class="admin-actions"><button type="button" class="secondary-button" :disabled="busy" @click="entryAction(selectedNode,kind,'verified',kind === 'steam' ? !entry.steamVerified : !entry.steamChinaVerified)">{{ kind === 'steam' ? (entry.steamVerified ? '撤销真人验证' : '确认真人验证') : (entry.steamChinaVerified ? '撤销真人验证' : '确认真人验证') }}</button><button type="button" class="secondary-button" :disabled="busy || !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" @click="entryAction(selectedNode,kind,'enabled',kind === 'steam' ? !entry.steamEnabled : !entry.steamChinaEnabled)">{{ kind === 'steam' ? (entry.steamEnabled ? '关闭入口' : '开启入口') : (entry.steamChinaEnabled ? '关闭入口' : '开启入口') }}</button></div></div></div>
+            <span class="eyebrow">玩家入口</span><h2>一键进入游戏</h2><p>先确认真人进服，再决定是否向玩家开放。关闭入口会保留验证记录。</p>
+            <div class="admin-entry-grid">
+              <div v-for="kind in (['steam','steamchina'] as const)" :key="kind" class="admin-entry-option">
+                <div><h3>{{ kind === 'steam' ? 'Steam' : '蒸汽平台' }}</h3><p>真人验证 {{ kind === 'steam' ? (entry.steamVerified ? '已确认' : '未确认') : (entry.steamChinaVerified ? '已确认' : '未确认') }} · 玩家入口 {{ kind === 'steam' ? (entry.steamEnabled ? '开启' : '关闭') : (entry.steamChinaEnabled ? '开启' : '关闭') }}</p></div>
+                <div class="admin-actions">
+                  <button v-if="!(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" type="button" class="secondary-button" :disabled="busy" @click="entryAction(selectedNode,kind,'verified',true)">确认真人验证</button>
+                  <button type="button" class="secondary-button" :disabled="busy || !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" @click="entryAction(selectedNode,kind,'enabled',kind === 'steam' ? !entry.steamEnabled : !entry.steamChinaEnabled)">{{ kind === 'steam' ? (entry.steamEnabled ? '关闭入口' : '开启入口') : (entry.steamChinaEnabled ? '关闭入口' : '开启入口') }}</button>
+                </div>
+                <details v-if="kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified" class="admin-entry-record"><summary>验证记录与撤销</summary><p>验证时间 {{ stamp(kind === 'steam' ? entry.steamVerifiedAt : entry.steamChinaVerifiedAt) }}。仅在记录有误或同配置实测失效时撤销。</p><button type="button" class="secondary-button" :disabled="busy" @click="entryAction(selectedNode,kind,'verified',false)">撤销真人验证</button></details>
+              </div>
+            </div>
+            <details class="admin-technical admin-entry-diagnostics"><summary>网络诊断与配置修订</summary><p>A2S：{{ a2sStatus(entry.a2sEnabled, entry.a2sQueryOk) }}。只查询当前 Ready 实例；空闲时没有实时查询事实。诊断结果不控制玩家入口。</p><p>入口配置修订 {{ entry.entryConfigRevision.slice(0, 12) }}</p></details>
           </section>
         </div>
         <p v-else class="admin-empty">还没有游戏节点。</p>

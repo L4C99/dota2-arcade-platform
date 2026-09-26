@@ -303,7 +303,7 @@ async function copyProtocol(uri: string, scheme: string): Promise<void> {
     await navigator.clipboard.writeText(uri)
     copiedProtocol.value = scheme
     window.setTimeout(() => { copiedProtocol.value = '' }, 2500)
-  } catch { error.value = '复制入口链接失败。请手动复制下方链接。' }
+  } catch { error.value = '复制入口链接失败。请展开“一键进入遇到问题？”并手动复制链接。' }
 }
 
 async function copyConsoleOption(): Promise<void> {
@@ -490,13 +490,13 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
 
       <aside v-if="state.phase === 'ready' && allocation?.joinInfo" class="panel join-panel">
         <span class="eyebrow">服务器已就绪</span><h2>进入游戏</h2>
-        <p>{{ allocation.joinInfo.steamUri || allocation.joinInfo.steamChinaUri ? '可以尝试已开放的一键入口，也可以在 Dota 2 控制台输入下方命令。' : '在 Dota 2 控制台输入下方命令，即可连接当前服务器。' }}</p>
+        <p>{{ allocation.joinInfo.steamUri || allocation.joinInfo.steamChinaUri ? '选择下方已开放的一键入口，或使用手动连接命令。' : '在 Dota 2 控制台执行下方命令，即可连接当前服务器。' }}</p>
         <div v-if="allocation.joinInfo.steamUri || allocation.joinInfo.steamChinaUri" class="protocol-entry">
-          <div v-if="allocation.joinInfo.steamUri" class="protocol-entry-row"><a class="protocol-entry-button" :href="allocation.joinInfo.steamUri">通过 Steam 进入</a><button type="button" class="inline-button" @click="copyProtocol(allocation.joinInfo.steamUri, 'steam')">{{ copiedProtocol === 'steam' ? '已复制链接' : '复制链接' }}</button><code>{{ allocation.joinInfo.steamUri }}</code></div>
-          <div v-if="allocation.joinInfo.steamChinaUri" class="protocol-entry-row"><a class="protocol-entry-button" :href="allocation.joinInfo.steamChinaUri">通过蒸汽平台进入</a><button type="button" class="inline-button" @click="copyProtocol(allocation.joinInfo.steamChinaUri, 'steamchina')">{{ copiedProtocol === 'steamchina' ? '已复制链接' : '复制链接' }}</button><code>{{ allocation.joinInfo.steamChinaUri }}</code></div>
+          <div v-if="allocation.joinInfo.steamUri" class="protocol-entry-row"><a class="protocol-entry-button" :href="allocation.joinInfo.steamUri">Steam 一键进入</a><button type="button" class="protocol-copy-button" @click="copyProtocol(allocation.joinInfo.steamUri, 'steam')">{{ copiedProtocol === 'steam' ? '已复制链接' : '复制链接' }}</button></div>
+          <div v-if="allocation.joinInfo.steamChinaUri" class="protocol-entry-row"><a class="protocol-entry-button" :href="allocation.joinInfo.steamChinaUri">蒸汽平台一键进入</a><button type="button" class="protocol-copy-button" @click="copyProtocol(allocation.joinInfo.steamChinaUri, 'steamchina')">{{ copiedProtocol === 'steamchina' ? '已复制链接' : '复制链接' }}</button></div>
         </div>
-        <p class="protocol-help">一键入口没有反应？先启动对应客户端再试；Windows 可复制上方链接，按 <kbd>Win+R</kbd> 粘贴执行。仍无法进入时，使用下方手动连接命令。</p>
-        <div class="connect-box"><div><span>手动连接</span><code>{{ allocation.joinInfo.connectCommand }}</code></div><button type="button" class="copy-button" @click="copyConnect">{{ copied ? '已复制' : '复制命令' }}</button></div>
+        <div class="connect-box" :class="{ 'connect-box-primary': !allocation.joinInfo.steamUri && !allocation.joinInfo.steamChinaUri }"><div><span>手动连接 · Dota 2 控制台</span><code>{{ allocation.joinInfo.connectCommand }}</code></div><button type="button" class="copy-button" @click="copyConnect">{{ copied ? '已复制' : '复制命令' }}</button></div>
+        <details v-if="allocation.joinInfo.steamUri || allocation.joinInfo.steamChinaUri" class="help protocol-troubleshooting"><summary>一键进入遇到问题？<span aria-hidden="true">⌄</span></summary><p>先启动对应客户端再试。浏览器没有反应时，可复制一键链接，在 Windows 按 <kbd>Win+R</kbd> 粘贴执行；仍无法进入时，使用上方手动连接命令。</p><div class="protocol-fallback-links"><code v-if="allocation.joinInfo.steamUri">{{ allocation.joinInfo.steamUri }}</code><code v-if="allocation.joinInfo.steamChinaUri">{{ allocation.joinInfo.steamChinaUri }}</code></div></details>
         <details class="help"><summary>如何启用并打开 Dota 2 控制台 <span aria-hidden="true">⌄</span></summary>
           <ol>
             <li>在 Steam 游戏库中打开 Dota 2「属性 → 启动选项」，填入 <span class="help-copy-pair"><code>-console</code><button type="button" class="inline-button" @click="copyConsoleOption">{{ copiedConsole ? '已复制' : '复制启动项' }}</button></span>，然后重启 Dota 2。</li>
