@@ -1,4 +1,10 @@
-# P5C entry checkpoint (in progress)
+# P5C entry checkpoint and Amendment 001
+
+## Amendment 001 supersession (2026-09-27)
+
+P5C began under the frozen V1 full-port rule and implemented exact port-list evidence, a required note and complete coverage checks. During real operation the project owner found this model unmaintainable and formally replaced it with [V1.0 Amendment 001](../specs/v1-amendment-001-entry-verification.md). The historical observations below remain accurate for the rule and deployed code at that time; their old **partial evidence only** conclusion is superseded. Forward migration 17 removes the old coverage constraint and columns without editing migration 15. The new Admin API records an explicit, audited real-client confirmation for each scheme on the current Node entry revision, independent of A2S. No per-port evidence or note is required.
+
+The Linux development node's Steam URI succeeded with a real client on 28000, 28001 and 28002; port 28003 had a successful A2S diagnostic without a human URI trial. Every temporary instance was fully reclaimed. After checking that the entry revision has not changed since the successful Steam trials, this evidence qualifies Linux Steam for administrator verification and separate enablement. Steamchina and Windows public URI remain unverified; A2S success alone does not verify either. Current deployment state and post-amendment CI results are recorded below after implementation validation.
 
 ## Implemented
 

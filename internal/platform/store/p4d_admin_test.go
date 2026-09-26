@@ -69,7 +69,7 @@ func TestP4DAdminControlsAuditAndControllerFacts(t *testing.T) {
 		t.Fatalf("unverified entry: %v", err)
 	}
 	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); !errors.Is(err, ErrInvalidAdminAction) {
-		t.Fatalf("verification without full-port human evidence: %v", err)
+		t.Fatalf("explicit human verification: %v", err)
 	}
 	var audits int
 	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE actor_kind='admin'`).Scan(&audits); err != nil || audits != len(actions) {
@@ -182,7 +182,11 @@ func TestP4DEntryVerificationRequiresCurrentControllerFacts(t *testing.T) {
 	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true)}); !errors.Is(err, ErrInvalidAdminAction) {
 		t.Fatalf("unconfirmed human verification: %v", err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true, VerifiedPorts: []int{28000}, VerificationNote: "real client joined on the complete fixture port set"}); err != nil {
+	h.Network.ProtocolIP = "203.0.113.10"
+	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Enabled: boolPtr(true)}); err != nil {

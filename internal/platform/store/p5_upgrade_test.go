@@ -100,7 +100,7 @@ func TestP5UpgradeFromMigration13PreservesCatalog(t *testing.T) {
 		t.Fatalf("idempotent upgrade: %v", err)
 	}
 	var version int
-	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 16 {
+	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 17 {
 		t.Fatalf("migration version %d: %v", version, err)
 	}
 	var current, workshop string

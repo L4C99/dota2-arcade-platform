@@ -160,8 +160,8 @@ func asciiAlnum(b byte) bool {
 	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
 }
 
-// EntryConfigRevision covers the complete potential port set and entry
-// configuration. Mapping order in a local JSON file does not affect it.
+// EntryConfigRevision fingerprints the network configuration under which an
+// administrator verifies URI entry. Mapping order does not affect it.
 func EntryConfigRevision(n NetworkFacts) string {
 	mappings := append([]PortMapping(nil), n.Mappings...)
 	sort.Slice(mappings, func(i, j int) bool { return mappings[i].Local < mappings[j].Local })
@@ -178,8 +178,8 @@ func EntryConfigRevision(n NetworkFacts) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// PublicPorts is the complete set of possible game-port entry targets for the
-// current node configuration. It is used to require full human URI coverage.
+// PublicPorts returns the configured game-port targets. This is configuration
+// data, not a human verification coverage requirement.
 func PublicPorts(n NetworkFacts) []int {
 	ports := make([]int, 0)
 	if n.MappingMode == "identity" {

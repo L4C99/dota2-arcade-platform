@@ -202,14 +202,10 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 		steam_entry_enabled=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_entry_enabled ELSE false END,
 		steam_verified_at=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verified_at ELSE NULL END,
 		steam_verified_by=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verified_by ELSE NULL END,
-		steam_verified_ports=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verified_ports ELSE '{}'::integer[] END,
-		steam_verification_note=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steam_verification_note ELSE '' END,
 		steamchina_entry_verified=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_entry_verified ELSE false END,
 		steamchina_entry_enabled=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_entry_enabled ELSE false END,
 		steamchina_verified_at=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verified_at ELSE NULL END,
 		steamchina_verified_by=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verified_by ELSE NULL END,
-		steamchina_verified_ports=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verified_ports ELSE '{}'::integer[] END,
-		steamchina_verification_note=CASE WHEN node_entry_capabilities.entry_config_revision=EXCLUDED.entry_config_revision THEN node_entry_capabilities.steamchina_verification_note ELSE '' END,
 		reported_at=EXCLUDED.reported_at`, nodeID, revision, h.Network.A2SEnabled, h.Network.A2SEnabled && h.A2SQueryOK, reportedAt)
 	if err != nil {
 		return nodev1.HeartbeatResult{}, err

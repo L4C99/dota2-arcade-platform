@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { a2sStatus } from './adminEntry'
 
 interface Settings { acceptingNewRequests: boolean; maintenanceMessage: string; siteAnnouncement: string }
 interface Game { id: string; displayName: string; workshopId: string; currentContentVersionId: string; maintenanceMessage: string; enabled: boolean; acceptingNewRequests: boolean }
@@ -10,7 +11,7 @@ interface TemplateBinding { nodeId: string; templateRevisionId: string; bindingK
 interface ContentValidation { nodeId: string; arcadeGameId: string; contentVersionId: string; verifiedAt: string; verifiedBy: string }
 interface Node { id: string; displayName: string; os: string; connectivity: string; controllerVersion: string; d2coreVersion: string; d2coreCommit: string; compatibility: string; recentErrorCode: string; enabled: boolean; acceptingNewRequests: boolean; draining: boolean; priority: number; hard: number; desired: number; occupied: number; lastHeartbeat?: string; reconcileRequested: number; reconcileCompleted: number }
 interface Binding { nodeId: string; arcadeGameId: string; reportedContentVersionId: string; reportedContentSha256: string; reportedState: string; reportedAt?: string; acceptingNewAllocations: boolean }
-interface Entry { nodeId: string; entryConfigRevision: string; publicPorts: number[]; steamVerifiedPorts: number[]; steamChinaVerifiedPorts: number[]; steamVerificationNote: string; steamChinaVerificationNote: string; a2sEnabled: boolean; a2sQueryOk: boolean; steamVerified: boolean; steamEnabled: boolean; steamChinaVerified: boolean; steamChinaEnabled: boolean; steamVerifiedAt?: string; steamChinaVerifiedAt?: string }
+interface Entry { nodeId: string; entryConfigRevision: string; publicPorts: number[]; a2sEnabled: boolean; a2sQueryOk: boolean; steamVerified: boolean; steamEnabled: boolean; steamChinaVerified: boolean; steamChinaEnabled: boolean; steamVerifiedAt?: string; steamChinaVerifiedAt?: string }
 interface ServerRequest { id: string; arcadeGameId: string; gamePresetId: string; state: string; ownerPartyId?: string; nodeSelectionMode: string; manualNodeId?: string; requestedAt: string }
 interface Party { id: string; leaderDisplayName: string; memberCount: number; dissolvedAt?: string }
 interface Allocation { id: string; serverRequestId: string; nodeId: string; contentVersionId: string; templateRevisionId: string; state: string; errorCode: string; attemptSequence: number; assignedAt: string }
@@ -18,7 +19,7 @@ interface Job { id: string; nodeId: string; allocationId: string; kind: string; 
 interface Audit { id: string; actorUsername: string; actorKind: string; action: string; targetType: string; targetId: string; result: string; stateChange: Record<string, unknown>; createdAt: string }
 interface Counts { waiting: number; creating: number; running: number; stopping: number; quarantined: number; failedUnreclaimed: number }
 interface Overview { settings: Settings; counts: Counts; games: Game[]; presets: Preset[]; contentVersions: ContentVersion[]; templateRevisions: TemplateRevision[]; templateBindings: TemplateBinding[]; contentValidations: ContentValidation[]; nodes: Node[]; bindings: Binding[]; entries: Entry[]; requests: ServerRequest[]; parties: Party[]; allocations: Allocation[]; jobs: Job[]; audit: Audit[] }
-interface Action { action: string; targetId?: string; gameId?: string; accepting?: boolean; enabled?: boolean; draining?: boolean; priority?: number; desired?: number; message?: string; entry?: string; verified?: boolean; confirmed?: boolean; verifiedPorts?: number[]; verificationNote?: string; workshopId?: string; displayName?: string; contentVersionId?: string; contentSha256?: string; templateRevisionId?: string; bindingKey?: string; description?: string; maxPlayers?: number }
+interface Action { action: string; targetId?: string; gameId?: string; accepting?: boolean; enabled?: boolean; draining?: boolean; priority?: number; desired?: number; message?: string; entry?: string; verified?: boolean; confirmed?: boolean; workshopId?: string; displayName?: string; contentVersionId?: string; contentSha256?: string; templateRevisionId?: string; bindingKey?: string; description?: string; maxPlayers?: number }
 
 const username = ref('')
 const password = ref('')
@@ -166,20 +167,12 @@ function editMessage(kind: 'game.update' | 'preset.update', id: string, current:
   if (message !== null) void act({ action: kind, targetId: id, message })
 }
 
-function entryAction(node: Node, entry: Entry, kind: 'steam' | 'steamchina', field: 'verified' | 'enabled', value: boolean): void {
+function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified' | 'enabled', value: boolean): void {
   const base: Action = { action: 'entry.update', targetId: node.id, entry: kind }
   if (field === 'verified') {
     base.verified = value
     base.confirmed = value
-    if (value) {
-      const ports = window.prompt(`请填写已用真实客户端逐一成功进入的全部公网端口，逗号分隔。当前配置要求：${entry.publicPorts.join(', ')}`, '')
-      if (ports === null) return
-      base.verifiedPorts = ports.split(',').map(item => Number(item.trim()))
-      const note = window.prompt('请记录真人验证结果与测试窗口（不要填写凭据或私人玩家信息）', '')
-      if (note === null) return
-      base.verificationNote = note.trim()
-    }
-    void act(base, value ? '确认你已经在当前节点、当前网络配置、所有可能分配的公网端口映射上，用真实客户端验证此入口可以进入游戏？此操作会记录你的管理员身份。' : '撤销此入口的真人验证并关闭入口？')
+    void act(base, value ? `我确认已经在当前入口配置修订下，使用真实${kind === 'steam' ? 'Steam' : '蒸汽平台'}客户端通过一键 URI 成功进入真实 Ready 服务器。此操作会记录我的管理员身份。` : '撤销此入口的真人验证并关闭入口？')
   } else { base.enabled = value; void act(base, value ? '确认开启此入口给玩家？请先核对真人验证状态。' : '') }
 }
 </script>
@@ -265,8 +258,8 @@ function entryAction(node: Node, entry: Entry, kind: 'steam' | 'steamchina', fie
           </div>
           <section class="panel admin-card"><span class="eyebrow">启动模板</span><h2>节点模板映射</h2><p>这里只登记逻辑绑定键；请先确认 Controller 本地配置和正式模板文件已准备好。</p><div v-for="binding in overview.templateBindings.filter(item => item.nodeId === selectedNode?.id)" :key="binding.templateRevisionId" class="admin-compact-row"><div><strong>{{ binding.templateRevisionId }}</strong><small>绑定键 {{ binding.bindingKey }}</small></div></div><form class="admin-form-row" @submit.prevent="act({action:'template_binding.upsert',targetId:selectedNode?.id,templateRevisionId:templateBindingDraft.revisionId,bindingKey:templateBindingDraft.bindingKey})"><label>模板修订<select v-model="templateBindingDraft.revisionId" required><option value="" disabled>请选择</option><option v-for="revision in overview.templateRevisions" :key="revision.id" :value="revision.id">{{ gameName(revision.arcadeGameId) }} · {{ revision.id }}</option></select></label><label>Controller 绑定键<input v-model.trim="templateBindingDraft.bindingKey" required maxlength="128" /></label><button type="submit" class="secondary-button" :disabled="busy">保存映射</button></form></section>
           <section v-for="entry in entriesFor(selectedNode.id)" :key="entry.nodeId" class="panel admin-card">
-            <span class="eyebrow">玩家入口</span><h2>一键进入游戏</h2><p>A2S 诊断：{{ entry.a2sEnabled ? (entry.a2sQueryOk ? '查询成功' : '查询失败') : '未启用' }}。诊断结果不代替真人一键进入验证；真人验证须覆盖当前配置和全部可分配的公网端口。</p><p>当前入口配置修订 {{ entry.entryConfigRevision.slice(0, 12) }} · 需逐一测试的公网端口：{{ entry.publicPorts.join('、') || '未配置' }}</p>
-            <div class="admin-entry-grid"><div v-for="kind in (['steam','steamchina'] as const)" :key="kind" class="admin-entry-option"><div><h3>{{ kind === 'steam' ? 'Steam' : '蒸汽平台' }}</h3><p>真人验证 {{ kind === 'steam' ? (entry.steamVerified ? '已确认' : '未确认') : (entry.steamChinaVerified ? '已确认' : '未确认') }} · 玩家入口 {{ kind === 'steam' ? (entry.steamEnabled ? '开启' : '关闭') : (entry.steamChinaEnabled ? '开启' : '关闭') }}</p><small>已验证端口 {{ (kind === 'steam' ? entry.steamVerifiedPorts : entry.steamChinaVerifiedPorts).join('、') || '无' }} · 验证时间 {{ stamp(kind === 'steam' ? entry.steamVerifiedAt : entry.steamChinaVerifiedAt) }}</small></div><div class="admin-actions"><button type="button" class="secondary-button" :disabled="busy" @click="entryAction(selectedNode,entry,kind,'verified',kind === 'steam' ? !entry.steamVerified : !entry.steamChinaVerified)">{{ kind === 'steam' ? (entry.steamVerified ? '撤销验证' : '确认真人验证') : (entry.steamChinaVerified ? '撤销验证' : '确认真人验证') }}</button><button type="button" class="secondary-button" :disabled="busy || !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" @click="entryAction(selectedNode,entry,kind,'enabled',kind === 'steam' ? !entry.steamEnabled : !entry.steamChinaEnabled)">{{ kind === 'steam' ? (entry.steamEnabled ? '关闭入口' : '开启入口') : (entry.steamChinaEnabled ? '关闭入口' : '开启入口') }}</button></div></div></div>
+            <span class="eyebrow">玩家入口</span><h2>一键进入游戏</h2><p>A2S 诊断：{{ a2sStatus(entry.a2sEnabled, entry.a2sQueryOk) }}。空闲节点没有实时查询结果；A2S 诊断不代替真人一键进服确认。</p><p>当前入口配置修订 {{ entry.entryConfigRevision.slice(0, 12) }}</p>
+            <div class="admin-entry-grid"><div v-for="kind in (['steam','steamchina'] as const)" :key="kind" class="admin-entry-option"><div><h3>{{ kind === 'steam' ? 'Steam' : '蒸汽平台' }}</h3><p>真人验证 {{ kind === 'steam' ? (entry.steamVerified ? '已确认' : '未确认') : (entry.steamChinaVerified ? '已确认' : '未确认') }} · 玩家入口 {{ kind === 'steam' ? (entry.steamEnabled ? '开启' : '关闭') : (entry.steamChinaEnabled ? '开启' : '关闭') }}</p><small>验证时间 {{ stamp(kind === 'steam' ? entry.steamVerifiedAt : entry.steamChinaVerifiedAt) }}</small></div><div class="admin-actions"><button type="button" class="secondary-button" :disabled="busy" @click="entryAction(selectedNode,kind,'verified',kind === 'steam' ? !entry.steamVerified : !entry.steamChinaVerified)">{{ kind === 'steam' ? (entry.steamVerified ? '撤销真人验证' : '确认真人验证') : (entry.steamChinaVerified ? '撤销真人验证' : '确认真人验证') }}</button><button type="button" class="secondary-button" :disabled="busy || !(kind === 'steam' ? entry.steamVerified : entry.steamChinaVerified)" @click="entryAction(selectedNode,kind,'enabled',kind === 'steam' ? !entry.steamEnabled : !entry.steamChinaEnabled)">{{ kind === 'steam' ? (entry.steamEnabled ? '关闭入口' : '开启入口') : (entry.steamChinaEnabled ? '关闭入口' : '开启入口') }}</button></div></div></div>
           </section>
         </div>
         <p v-else class="admin-empty">还没有游戏节点。</p>

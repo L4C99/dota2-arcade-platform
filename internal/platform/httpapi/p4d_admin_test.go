@@ -91,6 +91,9 @@ func TestP4DAdminHTTPAuthorizationSessionAndCSRF(t *testing.T) {
 	if got := call("GET", "/api/v1/admin/overview", "", "", cookie).Code; got != http.StatusOK {
 		t.Fatalf("admin overview: %d", got)
 	}
+	if got := call("POST", "/api/v1/admin/actions", `{"action":"entry.update","verifiedPorts":[28000]}`, "https://example.org", cookie).Code; got != http.StatusBadRequest {
+		t.Fatalf("obsolete verifiedPorts API field accepted: %d", got)
+	}
 	action := `{"action":"global.update","accepting":false}`
 	if got := call("POST", "/api/v1/admin/actions", action, "https://other.example", cookie).Code; got != http.StatusForbidden {
 		t.Fatalf("cross origin action: %d", got)

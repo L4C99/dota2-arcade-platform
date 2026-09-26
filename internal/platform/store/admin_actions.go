@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
@@ -38,8 +37,6 @@ type AdminAction struct {
 	BindingKey         string  `json:"bindingKey,omitempty"`
 	Description        string  `json:"description,omitempty"`
 	MaxPlayers         int     `json:"maxPlayers,omitempty"`
-	VerifiedPorts      []int   `json:"verifiedPorts,omitempty"`
-	VerificationNote   string  `json:"verificationNote,omitempty"`
 }
 
 func auditAdmin(ctx context.Context, tx pgx.Tx, adminID, action, targetType, targetID string, change map[string]any) error {
@@ -80,7 +77,7 @@ func auditOperator(ctx context.Context, tx pgx.Tx, kind, action, targetType, tar
 func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAction) error {
 	if len(a.TargetID) > 200 || len(a.GameID) > 200 || a.Message != nil && len(*a.Message) > 1000 ||
 		len(a.DisplayName) > 128 || len(a.ContentVersionID) > 128 || len(a.TemplateRevisionID) > 128 ||
-		len(a.BindingKey) > 128 || len(a.Description) > 1000 || len(a.VerificationNote) > 500 || len(a.VerifiedPorts) > 4096 {
+		len(a.BindingKey) > 128 || len(a.Description) > 1000 {
 		return ErrInvalidAdminAction
 	}
 	tx, err := s.Pool.Begin(ctx)
@@ -344,15 +341,16 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if a.Verified != nil && *a.Verified && !a.Confirmed {
 			return ErrInvalidAdminAction
 		}
-		verifiedCol, enabledCol, atCol, byCol, portsCol, noteCol := "steam_entry_verified", "steam_entry_enabled", "steam_verified_at", "steam_verified_by", "steam_verified_ports", "steam_verification_note"
+		if a.Verified != nil && a.Enabled != nil {
+			return ErrInvalidAdminAction
+		}
+		verifiedCol, enabledCol, atCol, byCol := "steam_entry_verified", "steam_entry_enabled", "steam_verified_at", "steam_verified_by"
 		if a.Entry == "steamchina" {
-			verifiedCol, enabledCol, atCol, byCol, portsCol, noteCol = "steamchina_entry_verified", "steamchina_entry_enabled", "steamchina_verified_at", "steamchina_verified_by", "steamchina_verified_ports", "steamchina_verification_note"
+			verifiedCol, enabledCol, atCol, byCol = "steamchina_entry_verified", "steamchina_entry_enabled", "steamchina_verified_at", "steamchina_verified_by"
 		}
 		var oldVerified, oldEnabled bool
 		var revision string
-		var ports []int
-		var note string
-		if err := tx.QueryRow(ctx, `SELECT `+verifiedCol+`,`+enabledCol+`,entry_config_revision,`+portsCol+`,`+noteCol+` FROM node_entry_capabilities WHERE node_id=$1 FOR UPDATE`, a.TargetID).Scan(&oldVerified, &oldEnabled, &revision, &ports, &note); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT `+verifiedCol+`,`+enabledCol+`,entry_config_revision FROM node_entry_capabilities WHERE node_id=$1 FOR UPDATE`, a.TargetID).Scan(&oldVerified, &oldEnabled, &revision); err != nil {
 			return err
 		}
 		verified, enabled := oldVerified, oldEnabled
@@ -360,8 +358,6 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			verified = *a.Verified
 			if !verified {
 				enabled = false
-				ports = []int{}
-				note = ""
 			}
 		}
 		if a.Enabled != nil {
@@ -370,12 +366,9 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if enabled && !verified {
 			return ErrInvalidAdminAction
 		}
-		// Verification is an explicit human claim for the current Controller-reported revision.
-		// A2S is a separate diagnostic fact and cannot substitute for real-client evidence.
+		// Verification is the administrator's explicit real-client claim for the
+		// current Controller-reported revision, never an A2S or port-pool claim.
 		if a.Verified != nil && *a.Verified {
-			if strings.TrimSpace(a.VerificationNote) == "" {
-				return ErrInvalidAdminAction
-			}
 			var networkRaw []byte
 			if err := tx.QueryRow(ctx, `SELECT network_facts FROM node_reports WHERE node_id=$1`, a.TargetID).Scan(&networkRaw); err != nil {
 				return err
@@ -384,25 +377,18 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			if err := json.Unmarshal(networkRaw, &network); err != nil {
 				return err
 			}
-			expected := nodev1.PublicPorts(network)
-			provided := append([]int(nil), a.VerifiedPorts...)
-			slices.Sort(provided)
-			if len(expected) == 0 || !slices.Equal(expected, provided) {
-				return fmt.Errorf("%w: verification must cover every configured public port", ErrJobConflict)
+			if revision == "" || revision != nodev1.EntryConfigRevision(network) || network.ProtocolIP == "" || len(nodev1.PublicPorts(network)) == 0 {
+				return fmt.Errorf("%w: current protocol entry configuration is unavailable", ErrJobConflict)
 			}
-			ports = provided
-			note = strings.TrimSpace(a.VerificationNote)
-		} else if a.Verified == nil && (len(a.VerifiedPorts) != 0 || a.VerificationNote != "") {
-			return ErrInvalidAdminAction
 		}
 		query := fmt.Sprintf(`UPDATE node_entry_capabilities SET %s=$2,%s=$3,
-			%s=CASE WHEN $7 THEN CASE WHEN $2 THEN now() ELSE NULL END ELSE %s END,
-			%s=CASE WHEN $7 THEN CASE WHEN $2 THEN $4::uuid ELSE NULL END ELSE %s END,
-			%s=$5,%s=$6 WHERE node_id=$1`, verifiedCol, enabledCol, atCol, atCol, byCol, byCol, portsCol, noteCol)
-		if _, err := tx.Exec(ctx, query, a.TargetID, verified, enabled, adminID, ports, note, a.Verified != nil); err != nil {
+			%s=CASE WHEN $5 THEN CASE WHEN $2 THEN now() ELSE NULL END ELSE %s END,
+			%s=CASE WHEN $5 THEN CASE WHEN $2 THEN $4::uuid ELSE NULL END ELSE %s END
+			WHERE node_id=$1`, verifiedCol, enabledCol, atCol, atCol, byCol, byCol)
+		if _, err := tx.Exec(ctx, query, a.TargetID, verified, enabled, adminID, a.Verified != nil); err != nil {
 			return err
 		}
-		change = map[string]any{"verifiedBefore": oldVerified, "verifiedAfter": verified, "enabledBefore": oldEnabled, "enabledAfter": enabled, "revision": revision, "verifiedPorts": ports, "verificationNote": note}
+		change = map[string]any{"verifiedBefore": oldVerified, "verifiedAfter": verified, "enabledBefore": oldEnabled, "enabledAfter": enabled, "revision": revision}
 	case "request.cancel":
 		targetType = "server_request"
 		var state string

@@ -89,8 +89,7 @@ func TestP1CEntryRevisionInvalidatesVerification(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.Pool.Exec(ctx, `UPDATE node_entry_capabilities SET steam_entry_verified=true,
-		steam_entry_enabled=true,steam_verified_ports='{28000}',steamchina_entry_verified=true,steamchina_entry_enabled=true,
-		steamchina_verified_ports='{28000}' WHERE node_id=$1`, nodeID); err != nil {
+		steam_entry_enabled=true,steamchina_entry_verified=true,steamchina_entry_enabled=true WHERE node_id=$1`, nodeID); err != nil {
 		t.Fatal(err)
 	}
 	h.Network.ProtocolIP = "203.0.113.2"
@@ -165,6 +164,24 @@ func TestP3EExplicitMappingJoinInfoAndRevision(t *testing.T) {
 		allocation.JoinInfo.ConnectCommand != "connect vendor-nat.example.cn:46781" ||
 		allocation.JoinInfo.PublicPort != 46781 || allocation.JoinInfo.SteamURI != "" || allocation.JoinInfo.SteamChinaURI != "" {
 		t.Fatalf("explicit mapping view: %+v: %v", allocation, err)
+	}
+	adminID, err := s.CreateAdmin(ctx, "p5c-join-info-admin", "a long test password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Enabled: boolPtr(true)}); err != nil {
+		t.Fatal(err)
+	}
+	// A2S is false for this idle fixture. It cannot suppress a previously
+	// confirmed Steam URI for a Ready Allocation with current JoinInfo.
+	allocation, err = s.UserRequestAllocation(ctx, userID, request.ID)
+	if err != nil || allocation.JoinInfo == nil ||
+		allocation.JoinInfo.ConnectCommand != "connect vendor-nat.example.cn:46781" ||
+		allocation.JoinInfo.SteamURI != "steam://connect/203.0.113.8:46781" || allocation.JoinInfo.SteamChinaURI != "" {
+		t.Fatalf("A2S false suppressed valid Steam entry or connect: %+v: %v", allocation, err)
 	}
 	h.Network.Mappings[1].Public = 46782
 	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {

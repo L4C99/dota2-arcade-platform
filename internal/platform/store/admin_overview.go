@@ -104,21 +104,17 @@ type AdminBinding struct {
 }
 
 type AdminEntry struct {
-	NodeID                     string     `json:"nodeId"`
-	EntryConfigRevision        string     `json:"entryConfigRevision"`
-	PublicPorts                []int      `json:"publicPorts"`
-	SteamVerifiedPorts         []int      `json:"steamVerifiedPorts"`
-	SteamChinaVerifiedPorts    []int      `json:"steamChinaVerifiedPorts"`
-	SteamVerificationNote      string     `json:"steamVerificationNote"`
-	SteamChinaVerificationNote string     `json:"steamChinaVerificationNote"`
-	A2SEnabled                 bool       `json:"a2sEnabled"`
-	A2SQueryOK                 bool       `json:"a2sQueryOk"`
-	SteamVerified              bool       `json:"steamVerified"`
-	SteamEnabled               bool       `json:"steamEnabled"`
-	SteamChinaVerified         bool       `json:"steamChinaVerified"`
-	SteamChinaEnabled          bool       `json:"steamChinaEnabled"`
-	SteamVerifiedAt            *time.Time `json:"steamVerifiedAt"`
-	SteamChinaVerifiedAt       *time.Time `json:"steamChinaVerifiedAt"`
+	NodeID               string     `json:"nodeId"`
+	EntryConfigRevision  string     `json:"entryConfigRevision"`
+	PublicPorts          []int      `json:"publicPorts"`
+	A2SEnabled           bool       `json:"a2sEnabled"`
+	A2SQueryOK           bool       `json:"a2sQueryOk"`
+	SteamVerified        bool       `json:"steamVerified"`
+	SteamEnabled         bool       `json:"steamEnabled"`
+	SteamChinaVerified   bool       `json:"steamChinaVerified"`
+	SteamChinaEnabled    bool       `json:"steamChinaEnabled"`
+	SteamVerifiedAt      *time.Time `json:"steamVerifiedAt"`
+	SteamChinaVerifiedAt *time.Time `json:"steamChinaVerifiedAt"`
 }
 
 type AdminRequest struct {
@@ -379,8 +375,7 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 	}
 	rows.Close()
 	rows, err = s.Pool.Query(ctx, `SELECT c.node_id,c.a2s_enabled,c.a2s_query_ok,c.steam_entry_verified,c.steam_entry_enabled,c.steam_verified_at,
-		c.steamchina_entry_verified,c.steamchina_entry_enabled,c.steamchina_verified_at,c.entry_config_revision,
-		c.steam_verified_ports,c.steamchina_verified_ports,c.steam_verification_note,c.steamchina_verification_note,r.network_facts
+		c.steamchina_entry_verified,c.steamchina_entry_enabled,c.steamchina_verified_at,c.entry_config_revision,r.network_facts
 		FROM node_entry_capabilities c JOIN node_reports r ON r.node_id=c.node_id ORDER BY c.node_id`)
 	if err != nil {
 		return AdminOverview{}, err
@@ -389,7 +384,7 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		var x AdminEntry
 		var networkRaw []byte
 		if err := rows.Scan(&x.NodeID, &x.A2SEnabled, &x.A2SQueryOK, &x.SteamVerified, &x.SteamEnabled, &x.SteamVerifiedAt, &x.SteamChinaVerified, &x.SteamChinaEnabled, &x.SteamChinaVerifiedAt,
-			&x.EntryConfigRevision, &x.SteamVerifiedPorts, &x.SteamChinaVerifiedPorts, &x.SteamVerificationNote, &x.SteamChinaVerificationNote, &networkRaw); err != nil {
+			&x.EntryConfigRevision, &networkRaw); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
