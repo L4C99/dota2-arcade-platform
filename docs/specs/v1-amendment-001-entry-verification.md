@@ -8,15 +8,15 @@
 
 ## 正式规则
 
-- `a2s_enabled` 表示节点部署声明启用 A2S。`a2s_query_ok` 只描述 Controller 对当前所有可查询 Ready 实例的实时查询结果；没有 Ready 实例时无实时查询事实，布尔值 `false` 不等于故障。A2S 不是端口池认证，也不是玩家入口、`connect`、容量或调度的运行时门槛。
+- `a2s_enabled` 是节点部署事实，并参与入口配置修订。A2S_INFO 查询是每个真实 Ready 实例各自的管理员诊断，记录 Node、实例、实际本地端口、`ok/failed` 和检查时间；尚未查询与查询失败必须区分。没有 Ready 实例时无实时查询事实。旧 `a2s_query_ok` 聚合布尔值仅为兼容保留的派生字段，不是节点或入口健康状态。A2S 不进入玩家 API、JoinInfo 或页面，也不是端口池认证、玩家入口、`connect`、容量或调度的门槛。
 - Steam 与蒸汽平台各自独立保存 `verified`、`enabled`、验证时间、管理员和网络修订。`verified=true` 必须由已认证管理员二次确认真实客户端通过对应 URI 进入真实 Ready 实例；平台记录声明，不要求端口列表、覆盖率或必填备注。A2S 成功不能自动验证；A2S 失败不能自动撤销验证或关闭按钮。
-- `verified=false` 时不允许 `enabled=true`。撤销验证同时关闭入口并清除验证时间/人员。网络入口事实改变引起 `entry_config_revision` 改变时，两种入口的验证与开放均失效。普通代码、Web、Controller、d2core 重启，VPK/ContentVersion 变更和实例生命周期变化，若入口网络事实未变，本身不触发重验。
+- `verified=false` 时不允许 `enabled=true`。同一 `entry_config_revision` 内，真人二次确认使 `verified` 单向从 false 变成 true；V1 不提供普通管理员撤销验证操作。运行中入口异常时关闭 `enabled`，保留历史验收记录。只有入口网络事实真正改变使 revision 变化时，两种入口的验证、开放和当前验证元数据一起失效。普通代码、Web、Controller、d2core 重启，VPK/ContentVersion 变更和实例生命周期变化，若入口网络事实未变，本身不触发重验。
 - 玩家 URI 仅在实例 Ready、有效 JoinInfo、`protocol_ip`、Allocation 保存的 entry revision 与 Node 当前 revision 一致，且对应 scheme 已验证并开放时提供。无当前端口历史覆盖要求，也无实时 A2S 成功要求。`connect <host>:<actual-public-port>` 永远保留为正式兜底。
-- 管理员界面分别提供“确认真人验证 / 撤销真人验证”和“开启入口 / 关闭入口”，确认真人验证必须二次确认。空闲节点的 A2S 文案不得断言查询失败。
+- 管理员界面分别提供“确认真人验证”和“开启入口 / 关闭入口”，确认真人验证必须二次确认。入口卡片不显示 A2S 查询结果；节点页只展示 A2S 是否配置启用，实例/Allocation 详情展示每个 Ready 实例的查询结果和时间。空闲节点不得断言 A2S 查询失败。
 
 ## 文档和兼容性
 
-受影响的原规格章节为 §16、§17、P5C、§45；配套更新管理员 API、运维说明和 P5C 验证记录。旧 migration 15 的文件与校验历史保持不变。实施采用新的前向 migration 17：移除旧端口覆盖约束与 `steam[_china]_verified_ports`、强制备注列；保留既有 verified/enabled、时间、管理员、revision 与 Audit。`entry.update` 不再接受 `verifiedPorts` 或 `verificationNote`；新的确认只需 Node、scheme、`verified=true`、`confirmed=true`。这属于 P5 尚未正式发布阶段的 API 收敛，旧完整端口请求需更新，不能再作为验证条件。
+受影响的原规格章节为 §16、§17、P5C、§45；配套更新 Node 协议、管理员 API、运维说明和 P5C 验证记录。旧 migration 15/17 的文件与校验历史保持不变。前向 migration 17 已移除旧端口覆盖约束与列；本次实例诊断存储使用新的前向 migration。`entry.update` 不接受 `verifiedPorts`、`verificationNote` 或普通管理员 `verified=false`；新的确认只需 Node、scheme、`verified=true`、`confirmed=true`。`enabled` 可独立开启或关闭。旧完整端口请求需更新，不能作为验证条件。
 
 ## 既有证据
 
