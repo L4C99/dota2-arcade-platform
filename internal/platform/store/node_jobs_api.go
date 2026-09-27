@@ -226,6 +226,12 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 		Scan(&requestID, &selectionMode, &currentAllocationState); err != nil {
 		return err
 	}
+	// Resource terminal states are monotonic. Keep the late job report as
+	// history, but never mutate this attempt or its request again: a fresh
+	// attempt or next-game request may already own the business slot.
+	if currentAllocationState == "reclaimed" || currentAllocationState == "released_no_effect" {
+		return nil
+	}
 	// Quarantine is a business and capacity safety boundary. A late create
 	// success or accepted report may close its NodeJob, but it cannot put the
 	// old Allocation back in ordinary running/creating state. Only a proved
