@@ -182,11 +182,9 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 		if kind != "create" || instanceID != "" || operationID != "" || report.ErrorCode == "" {
 			return nodev1.Job{}, fmt.Errorf("%w: no-effect rejection lacks proof", ErrJobConflict)
 		}
-		// A later validation rejection cannot erase an earlier transport loss.
-		// Reconciliation must explicitly assert that the original operation
-		// produced no instance; the Controller currently leaves ambiguous
-		// unknown calls open instead of making that assertion.
-		if oldState == "unknown" && (report.ErrorCode != "RECONCILED_NO_EFFECT" || report.ErrorStage != "reconcile") {
+		// Fixed core v0.1.1 cannot fence a previously sent unknown create.
+		// Even a later post-key-lookup rejection is not a no-effect proof.
+		if oldState == "unknown" || report.ErrorCode == "RECONCILED_NO_EFFECT" {
 			return nodev1.Job{}, fmt.Errorf("%w: ambiguous create cannot be released by rejection", ErrJobConflict)
 		}
 	}

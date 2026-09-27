@@ -70,3 +70,5 @@ Controller 使用显式绝对路径 JSON 配置，其中包含 Platform URL、No
 Controller 用固定 v0.1.1 Go client 对同用户 d2core manager 发出 `list/create/stop/operation/status`。`list` 成功才将 protocolVersion 报为 1。每次领取新任务前读取未终结任务；集成 create job 只携带逻辑模板绑定键和请求 port。Controller 从本机绑定解析 ASCII 绝对模板路径，调用 `prepare` 持久化 key、路径、port 和指纹，校验服务端返回的冻结值，再将原值提交 d2core。key 与不可变 NodeJob ID 确定性绑定。
 
 `accepted` 后保存两个 core ID；仅在 operation 终结且 status 显示 create 为 active/running/ready，或 stop 为 reclaimed/stopped/complete 时报告 `succeeded`。丢失 create 响应保留 `unknown`，不换 key、不盲目再次 create。明确的无副作用 validate/protocol 拒绝可报告 `rejected_no_effect`；已有 core ID 或无法判断副作用时报告 `unknown`。重启和长断联的完整对账属于 P0E 验收。
+
+A.4 Supplemental FIX-05：固定 core 下 unknown create 不接受 `rejected_no_effect`，包括 `RECONCILED_NO_EFFECT` 标签。管理员可对在线长期 unknown 执行审计 `allocation.quarantine`，但不能对纯 pending 未领取预留使用此恢复路径。Owner escape、容量保留和节点退役 runbook 见 operations.md；隔离不释放容量。

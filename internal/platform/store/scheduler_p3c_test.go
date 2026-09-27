@@ -124,14 +124,33 @@ func TestP3CUnknownBlocksUntilNoEffectThenNewAttempt(t *testing.T) {
 	if err != nil || capacity.Occupied != 1 {
 		t.Fatalf("unknown released A capacity: %+v %v", capacity, err)
 	}
-	// The recovered Controller must first reconcile core list/operation/status.
-	// This explicit no-effect report stands in for that positively proven fact.
-	if _, err := s.RecordHeartbeat(ctx, a, p1TestHeartbeat("test-v1")); err != nil {
+	if _, err := s.ReportJob(ctx, a, job.ID, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "RECONCILED_NO_EFFECT", ErrorStage: "reconcile"}); err == nil {
+		t.Fatal("fixed core cannot prove unknown no-effect")
+	}
+	_ = b
+}
+
+func TestP3CFreshNoEffectCreatesNewAttempt(t *testing.T) {
+	s := playerTestStore(t)
+	ctx := context.Background()
+	gameID, presetID := seedPlayerCatalog(t, s)
+	a := p3CapacityNode(t, s, "A", 1)
+	b := p3CapacityNode(t, s, "B", 1)
+	if err := s.SetNodePriority(ctx, a, 10); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ReportJob(ctx, a, job.ID, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "RECONCILED_NO_EFFECT", ErrorStage: "reconcile"}); err != nil {
+	r := p3Request(t, s, gameID, presetID, "auto", "")
+	if changed, err := s.TryAllocateOne(ctx); err != nil || !changed {
+		t.Fatalf("allocate %v %v", changed, err)
+	}
+	job, err := s.ClaimNextJob(ctx, a)
+	if err != nil || job == nil {
+		t.Fatalf("claim %v", err)
+	}
+	if _, err := s.ReportJob(ctx, a, job.ID, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "NO_PORT_AVAILABLE", ErrorStage: "validate"}); err != nil {
 		t.Fatal(err)
 	}
+	capacity, err := s.Capacity(ctx, a)
 	if _, err := s.Pool.Exec(ctx, `INSERT INTO content_versions(id,arcade_game_id,content_sha256) VALUES('test-v2',$1,$2)`, gameID, strings.Repeat("b", 64)); err != nil {
 		t.Fatal(err)
 	}

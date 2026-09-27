@@ -86,3 +86,13 @@ Node API v1 增加可选 `independentStop=true` claim 筛选，见 `docs/node-pr
 - 原 Candidate 保留。修复提交仅本地保存，未 push；origin/main 仍为原 Candidate，因此 origin/main != HEAD。
 - 本报告作为独立文档提交保存；最终检查点 SHA 与 git status 见会话完成报告，避免文档自引用 commit SHA。
 - 下一步是解决 FIX-05 的连续性证明契约，然后继续原 A.4 顺序；不是 RC1、部署、Tag 或 Release。
+
+## Supplemental adjudication 方案 A — 当前执行更新
+
+Owner 于本次续作正式接受 `supplemental-adjudication-adj011-fix05.md` 方案 A，替代原自动 no-effect 要求；以上 STOP 检查点仅作历史记录。
+
+FIX-05：**PASS — operational mitigation / safety boundary accepted**。ADJ-011 的原可用性事实保留：unknown 无自动 no-effect proof。Residual limitation accepted for V1。
+
+已关闭 unknown→rejected_no_effect（含合成 RECONCILED_NO_EFFECT）入口，首次明确无副作用拒绝仍允许。固定 core 延迟请求反例转为 `tests/coreproof` 独立正式测试 module 并加入 Windows/Linux CI；不修改 core。Runner 保守回归覆盖反复空 inventory、端口拒绝、重建 Runner、history expiry 和原 IDs 恢复；PG 回归覆盖在线 Admin 隔离、Owner 重复 abandon、独立新 Request、迟到 accepted/succeeded/failed 和 full reclaim、Drain 后禁调度，旧账本保留。现有 HTTP 二次确认与普通成员/无关用户拒绝回归同跑通过。Node API 不再接受 unknown 的人为 no-effect 证明标签。
+
+Runbook 与 Owner Acceptance 见 `docs/operations.md` 的 V1 Known Limitation。没有增加 manager incarnation、endpoint/token、marker 或磁盘连续性假设。没有 migration。FIX-06～17 现在继续执行，不再因旧证明阻塞而等待。

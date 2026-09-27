@@ -99,3 +99,18 @@ If a content switch fails, keep binding `accepting=false` and Node Drain as need
 `a2s_enabled` is the Node's deployment fact. The Controller checks each actual Ready instance separately; Admin Allocation details show its local port, `ok/failed` and last check. No Ready instance means no query fact, not a failure. Legacy aggregate `a2s_query_ok` is deprecated/derived and must not be used for entry/node health, player URI, connect, capacity or scheduling. Under [V1.0 Amendment 001](specs/v1-amendment-001-entry-verification.md), for each Node and independently for Steam and steamchina, a trusted administrator confirms that a real client used the scheme URI to enter one real Ready instance under the current `entry_config_revision`. Admin requires explicit second confirmation, then records `verified_at`, `verified_by` and Audit. Within the same revision `verified` remains true; if an entry misbehaves, turn `enabled=false`, retain the attestation, and restore `enabled=true` after repair. Changing protocol IP, local/public mappings or other URI/A2S deployment configuration changes the revision and clears both schemes' verification and enabled flags. Routine Platform/Controller restarts, Web updates, content changes and instance lifecycle do not require reverification when entry network facts remain unchanged. No port-pool A2S or per-port human coverage is required. The always available fallback after Ready and valid JoinInfo is `connect <host>:<actual-public-port>`.
 
 For the A.7 small production multiplayer trial required before final V1 Release, use at least two real people: create or join a Party through the Web, choose Game/Preset and node mode, request, wait for Ready/JoinInfo, join the same real Dota server, play, then normal stop or next game and confirm full reclaim and Party persistence. Record `requested_at`, `assigned_at`, `create_started_at`, `ready_at` and `join_info_available_at` for natural trials. Browser sessions or bots do not count as real people. Do not force faults during their game. P5F development closure instead uses the real single-owner Player Web flow and two independent anonymous Party sessions under [Amendment 002](specs/v1-amendment-002-human-trial-gate.md).
+
+## V1 Known Limitation：永久未知 create（FIX-05，Owner accepted）
+
+固定 d2core v0.1.1 无法为已发出、响应未知且无可信 IDs 的 create 提供安全 no-effect 证明。Platform fail-closed；容量可能无限期保留，旧请求也可能迟到产生真实实例。list 空集、重试拒绝、相同路径/marker、manager restart 或等待均不能释放容量。
+
+运营步骤：
+
+1. 管理员在请求详情核对原 Allocation/NodeJob，执行 `allocation.quarantine`，确认“容量和端口仍占用”。在线长期 unknown 同样允许；纯 pending 从未 claim 不使用此动作。
+2. Owner/Party leader 在玩家页面二次确认“放弃此异常服务器并继续”。旧 Request 变 abandoned，旧 Allocation 仍 quarantined/occupied，旧 Job、frozen key、版本和节点历史保留。普通成员/无关用户无此权限。重复放弃幂等。
+3. Owner 可创建独立的新 ServerRequest，可能需要备用节点。旧请求迟到启动时可能与新实例并存；隔离/放弃不宣称旧 Dota 已停止。
+4. 若原 key 后来恢复可信 IDs，通过既有身份核验、stop 和 full reclaim 收敛。只有 reclaimed + stopped + cleanup complete 才释放旧占用。
+5. 无法收敛时，在 Admin 节点设置 Drain 并把 desired capacity 设为 0，写入审计；必要时使用已有受控运维禁用节点。节点退出调度，但 occupied 账本和旧 Node/Allocation/Job 永久保留，不删除、不改成 reclaimed/released_no_effect。
+6. 禁止以重新注册同一物理节点、换 Node ID 的方式恢复账面容量。登记替代节点前核对物理资产台账，不能把旧机器伪装成新机器。重新投入旧机器只能在旧资源经受支持路径完整回收后，或经 Owner 另行授权、审计的整机退役/重建流程。行政退役不等于资源回收，不生成 RECONCILED_NO_EFFECT。本 A.4 不授权实际退役重建主机操作。
+
+Owner Acceptance（2026-09-27）：项目所有者接受以上 V1 安全优先的可用性残余限制，允许旧容量永久保留，由经授权 Agent/管理员执行审计隔离、玩家脱困和必要节点退役/重建。Owner 不要求升级 d2core。未来自动回收此类 unknown 需另起版本设计并审查 recovery proof primitive；不是数据已证明回收，也不是允许误释放。

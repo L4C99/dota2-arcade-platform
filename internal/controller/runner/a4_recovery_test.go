@@ -8,6 +8,25 @@ import (
 	"time"
 )
 
+func TestA4RepeatedEmptyInventoryAndRetryRejectionsKeepUnknown(t *testing.T) {
+	p := &fakePlatform{job: testJob()}
+	p.Prepare(context.Background(), p.job.ID, nodev1.PrepareCreateRequest{Template: testTemplate(t), Port: 28000})
+	p.job.State = "unknown"
+	frozen := *p.job.FrozenCreate
+	for _, code := range []string{"NO_PORT_AVAILABLE", "PORT_IN_USE", "NO_PORT_AVAILABLE", "INVALID_REQUEST"} {
+		// New Runner/Core objects also model restart. Neither an empty inventory
+		// nor unchanged local paths/markers are consumed as continuity proof.
+		c := &fakeCore{err: &core.CoreError{Code: code, Stage: "validate"}}
+		r := Runner{Platform: p, Core: c}
+		if err := r.Step(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if p.job.State != "unknown" || len(c.keys) != 1 || c.keys[0] != frozen {
+			t.Fatalf("unsafe recovery: %+v", p)
+		}
+	}
+}
+
 type a4StopPlatform struct {
 	fakePlatform
 	stop                 nodev1.Job
