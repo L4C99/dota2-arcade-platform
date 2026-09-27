@@ -22,6 +22,7 @@ P5 Controller 只对本地 `active/running/ready` 实例逐一发送 A2S_INFO UD
 
 - `GET /jobs/open`：列出本节点所有未终结任务及已冻结执行参数。Controller 启动或重连时先读取并对账。
 - `POST /jobs/claim`：在兼容且近期有心跳的节点上，事务性领取最早的 pending job。无任务返回 204。
+- `POST /jobs/claim?independentStop=true`（A.4 FIX-02）：旧任务尚未收敛时的受限领取路径。只领取已关联 Allocation、与原终态 create 的实例身份一致的 stop；同 Allocation 或实例有其他 claimed/accepted/unknown 任务时不领取。不会领取 create 或 integration-only stop。Controller 仍先完成本轮 list 与对账，任何传输错误中止本轮；普通 claim 的保护不变。
 - `GET /jobs/{id}`：查询本节点任务；其他节点的任务返回 404。
 - `POST /jobs/{id}/prepare`：create job 在首次 d2core 调用前提交已解析的本机模板绝对路径和请求 port。服务端从不可变 `node_job_id` 派生 d2core idempotencyKey，并将完整请求参数及 SHA-256 指纹持久化。相同 prepare 可重试；任何变化均拒绝。数据库触发器禁止修改或删除冻结记录。
 - `POST /jobs/{id}/report`：幂等报告 `accepted`、`unknown`、`succeeded`、`rejected_no_effect` 或 `failed_with_effect`，并保存 instanceId/operationId 和结构化 core 错误。已知 ID 不允许换成另一个 ID；终态不能回退。
@@ -53,6 +54,8 @@ P4B 将 `PlatformSettings.quarantine_after_node_unreachable` 的冻结默认值�
 每轮 Controller 先读取 d2core `list` 和未终结 NodeJob，按原冻结请求、operation/status 收敛；然后用 `GET /allocations/active` 读取本 Node 已知实例身份，逐个查询 d2core `status`，通过 `POST /allocations/{id}/fact` 回报所见状态。存在未终结 NodeJob 的 Allocation 先由该 Job 的原路径处理。每份实例事实必须匹配旧 create Job 的 immutable instance ID。传输错误保留未知；只有结构化身份错误进入隔离。只有 `lifecycle=reclaimed`、`process=stopped`、`cleanup=complete` 同时成立才更新 Allocation 为 `reclaimed` 并释放容量。活跃实例端口与冻结 JoinInfo 不同会隔离，绝不悄悄改写旧端口。重复事实幂等，不生成第二个 create 或新的 Allocation attempt。
 
 这些端点仅接受原 Node 的 Secret。Web 管理员可以请求对账，但不能上报 Controller 的实例、内容或网络事实；管理员总览只显示对账代数和非敏感状态摘要。
+
+A.4 FIX-01/03/04：已 reclaimed/released_no_effect 的 Allocation 不再因迟到 Job 报告改变资源或业务状态。create operation 曾成功但当前实例 failed/stopped 时，Controller 报告 failed_with_effect，由 Platform 保留容量并派发 stop；process=unknown 则隔离，active/running 的非 Ready 暂态继续等待。终态 create 后的 active-allocation 对账也会将可信 failed 实例送入 stop 链。新的 stop Job 不采用历史 terminal failed stop；如果 Core.Stop 在旧 worker teardown 窗口仍返回旧 operation，则该新 Job 保持 unknown 且不绑定旧 operation，下一轮重试。本 Job 已接受的 operation 身份不变，已有 running stop 仍可被恢复采用。完整回收三元条件不变。
 
 ## P3D 普通 Node Drain
 
