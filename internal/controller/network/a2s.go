@@ -65,16 +65,25 @@ func QueryA2SInfo(ctx context.Context, port int) error {
 	return errors.New("A2S info response absent")
 }
 
-// ProbeReadyInstances records an independent diagnostic for every Ready server.
-// An empty slice means there is no live query fact, not a query failure.
+// ProbeReadyInstances spends at most two seconds on optional diagnostics.
+// Unqueried instances have no fact; budget exhaustion is not a UDP failure.
 func ProbeReadyInstances(ctx context.Context, instances []core.Instance) []nodev1.A2SDiagnostic {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 	diagnostics := make([]nodev1.A2SDiagnostic, 0)
 	for _, instance := range instances {
 		if instance.Lifecycle != "active" || instance.Process != "running" || instance.Room != "ready" {
 			continue
 		}
+		deadline, _ := ctx.Deadline()
+		if ctx.Err() != nil || time.Until(deadline) < 750*time.Millisecond {
+			break
+		}
 		status := "ok"
 		if QueryA2SInfo(ctx, instance.Port) != nil {
+			if ctx.Err() != nil {
+				break
+			}
 			status = "failed"
 		}
 		diagnostics = append(diagnostics, nodev1.A2SDiagnostic{InstanceID: instance.InstanceID, LocalPort: instance.Port,

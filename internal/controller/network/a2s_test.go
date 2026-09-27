@@ -95,3 +95,30 @@ func TestReadyInstancesHaveIndependentA2SFacts(t *testing.T) {
 type errUnexpectedPacket struct{}
 
 func (errUnexpectedPacket) Error() string { return "unexpected A2S packet" }
+
+func TestA4ProbeBudgetSkipsUnqueriedInstances(t *testing.T) {
+	server, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	instances := make([]core.Instance, 100)
+	for i := range instances {
+		instances[i] = core.Instance{InstanceID: "silent", Lifecycle: "active", Process: "running", Room: "ready", Port: server.LocalAddr().(*net.UDPAddr).Port}
+	}
+	started := time.Now()
+	facts := ProbeReadyInstances(context.Background(), instances)
+	if time.Since(started) > 2500*time.Millisecond || len(facts) != 2 {
+		t.Fatalf("unbounded probes or manufactured failures: %d %v", len(facts), time.Since(started))
+	}
+	for _, fact := range facts {
+		if fact.Status != "failed" {
+			t.Fatal(fact)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if facts := ProbeReadyInstances(ctx, instances); len(facts) != 0 {
+		t.Fatal("cancelled budget manufactured failures")
+	}
+}

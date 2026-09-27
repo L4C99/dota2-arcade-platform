@@ -90,13 +90,15 @@ func run(args []string) error {
 			lastStatus = status
 		}
 		if err == nil && status == "compatible" {
-			if err := worker.Step(cycle); err != nil {
+			jobCycle, cancelJobs := context.WithTimeout(ctx, 20*time.Second)
+			if err := worker.Step(jobCycle); err != nil {
 				log.Printf("node job cycle failed: %v", err)
 			} else if result.ReconcileRequestedGeneration > result.ReconcileCompletedGeneration {
-				if err := client.CompleteReconcile(cycle, result.ReconcileRequestedGeneration); err != nil {
+				if err := client.CompleteReconcile(jobCycle, result.ReconcileRequestedGeneration); err != nil {
 					log.Printf("node reconcile acknowledgement failed: %v", err)
 				}
 			}
+			cancelJobs()
 		}
 		cancel()
 		select {

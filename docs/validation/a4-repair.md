@@ -108,3 +108,6 @@ PASS: injected PostgreSQL UPDATE failures for player/admin session revocation re
 
 ## FIX-12 — player recovery and truthful connection status
 PASS: offline/stale heartbeat preserves valid running JoinInfo with warning; unavailable history offers explicit reselection and clears only the historical request pointer. Current request takes priority. Creating timer is labelled request-total time. Mounted Vue regressions plus full Web suite (24 tests) and typecheck passed.
+
+## FIX-13 — bounded optional diagnostics
+PASS: two-second A2S total budget, no fabricated failure for unqueried/cancelled probes, independent Job context. Network tests cover 100 silent Ready instances plus successful/challenge and actual failed UDP probes; node-controller compiles.
