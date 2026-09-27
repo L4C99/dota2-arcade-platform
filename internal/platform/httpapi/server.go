@@ -199,7 +199,10 @@ func (a *api) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if cookie, err := r.Cookie(a.userCookieName()); err == nil {
-		_ = a.store.RevokeUserToken(r.Context(), cookie.Value)
+		if err := a.store.RevokeUserToken(r.Context(), cookie.Value); err != nil && !errors.Is(err, store.ErrInvalidCredentials) {
+			http.Error(w, "logout unavailable", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	a.clearCookie(w, a.userCookieName())
 	w.WriteHeader(http.StatusNoContent)
@@ -239,7 +242,11 @@ func (a *api) adminLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "login temporarily limited", http.StatusTooManyRequests)
 		return
 	}
-	id, token, err := a.store.LoginAdmin(r.Context(), request.Username, request.Password)
+	previousToken := ""
+	if previous, err := r.Cookie(a.adminCookieName()); err == nil {
+		previousToken = previous.Value
+	}
+	id, token, err := a.store.LoginAdminRotating(r.Context(), request.Username, request.Password, previousToken)
 	if errors.Is(err, store.ErrInvalidCredentials) {
 		a.gate.Failed(key)
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
@@ -250,9 +257,6 @@ func (a *api) adminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.gate.Succeeded(key)
-	if previous, err := r.Cookie(a.adminCookieName()); err == nil {
-		_ = a.store.RevokeAdminToken(r.Context(), previous.Value)
-	}
 	a.setCookie(w, a.adminCookieName(), token, 12*time.Hour)
 	writeJSON(w, http.StatusOK, map[string]string{"adminUserId": id})
 }
@@ -276,7 +280,10 @@ func (a *api) adminLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if cookie, err := r.Cookie(a.adminCookieName()); err == nil {
-		_ = a.store.RevokeAdminToken(r.Context(), cookie.Value)
+		if err := a.store.RevokeAdminToken(r.Context(), cookie.Value); err != nil && !errors.Is(err, store.ErrInvalidCredentials) {
+			http.Error(w, "logout unavailable", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	a.clearCookie(w, a.adminCookieName())
 	w.WriteHeader(http.StatusNoContent)

@@ -108,6 +108,42 @@ func TestP4DAdminHTTPAuthorizationSessionAndCSRF(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT actor_admin_user_id FROM audit_events WHERE action='global.update'`).Scan(&actor); err != nil || actor != adminID {
 		t.Fatalf("audit actor=%s: %v", actor, err)
 	}
+	// A.4: revocation failure must preserve the cookie/session and roll back
+	// the replacement session, rather than reporting a false logout/rotation.
+	_, userToken, err := s.CreateUserSession(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `CREATE FUNCTION reject_revoke() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected revoke failure'; END $$;
+		CREATE TRIGGER reject_admin_revoke BEFORE UPDATE ON admin_sessions FOR EACH ROW EXECUTE FUNCTION reject_revoke();
+		CREATE TRIGGER reject_user_revoke BEFORE UPDATE ON user_sessions FOR EACH ROW EXECUTE FUNCTION reject_revoke();`); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []struct {
+		path   string
+		cookie *http.Cookie
+	}{
+		{"/api/v1/admin/logout", cookie}, {"/api/v1/session/logout", &http.Cookie{Name: "__Host-arcade_session", Value: userToken}},
+	} {
+		response := call("POST", target.path, "", "https://example.org", target.cookie)
+		if response.Code != http.StatusServiceUnavailable || len(response.Result().Cookies()) != 0 {
+			t.Fatalf("failed logout: %d %v", response.Code, response.Result().Cookies())
+		}
+	}
+	failedRotation := call("POST", "/api/v1/admin/login", `{"username":"p4d-http","password":"a long test password"}`, "https://example.org", cookie)
+	var sessions int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM admin_sessions`).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if failedRotation.Code != http.StatusServiceUnavailable || len(failedRotation.Result().Cookies()) != 0 || sessions != 1 {
+		t.Fatalf("rotation failed nonatomically: %d sessions=%d", failedRotation.Code, sessions)
+	}
+	if call("GET", "/api/v1/admin/me", "", "", cookie).Code != http.StatusOK {
+		t.Fatal("failed revoke invalidated old session")
+	}
+	if _, err := pool.Exec(ctx, `DROP TRIGGER reject_admin_revoke ON admin_sessions; DROP TRIGGER reject_user_revoke ON user_sessions; DROP FUNCTION reject_revoke()`); err != nil {
+		t.Fatal(err)
+	}
 	rotation := call("POST", "/api/v1/admin/login", `{"username":"p4d-http","password":"a long test password"}`, "https://example.org", cookie)
 	if rotation.Code != http.StatusOK || len(rotation.Result().Cookies()) != 1 {
 		t.Fatalf("session rotation: %d", rotation.Code)

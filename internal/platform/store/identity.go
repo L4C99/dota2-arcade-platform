@@ -125,6 +125,10 @@ func (s *Store) ResetAdminPassword(ctx context.Context, username, password strin
 }
 
 func (s *Store) LoginAdmin(ctx context.Context, username, password string) (adminID, token string, err error) {
+	return s.LoginAdminRotating(ctx, username, password, "")
+}
+
+func (s *Store) LoginAdminRotating(ctx context.Context, username, password, previous string) (adminID, token string, err error) {
 	var hash string
 	var enabled bool
 	var version int64
@@ -148,7 +152,12 @@ func (s *Store) LoginAdmin(ctx context.Context, username, password string) (admi
 	if err != nil {
 		return "", "", err
 	}
-	result, err := s.Pool.Exec(ctx, `INSERT INTO admin_sessions(id,admin_user_id,token_hash,credential_version,expires_at)
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer tx.Rollback(ctx)
+	result, err := tx.Exec(ctx, `INSERT INTO admin_sessions(id,admin_user_id,token_hash,credential_version,expires_at)
         SELECT $1,id,$2,credential_version,now()+$3::interval FROM admin_users
         WHERE id=$4 AND enabled AND credential_version=$5`, sessionID, tokenHash[:],
 		fmt.Sprintf("%d seconds", int64(adminSessionLifetime.Seconds())), adminID, version)
@@ -157,6 +166,14 @@ func (s *Store) LoginAdmin(ctx context.Context, username, password string) (admi
 	}
 	if result.RowsAffected() != 1 {
 		return "", "", ErrInvalidCredentials
+	}
+	if oldHash, ok := auth.TokenHash(previous); ok {
+		if _, err := tx.Exec(ctx, `UPDATE admin_sessions SET revoked_at=now() WHERE token_hash=$1 AND revoked_at IS NULL`, oldHash[:]); err != nil {
+			return "", "", err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", "", err
 	}
 	return adminID, token, nil
 }

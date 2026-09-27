@@ -102,3 +102,6 @@ PASS: verification and opening compare the displayed revision under the entry ro
 
 ## FIX-10 — proxy identity and bounded login penalties
 PASS: dedicated loopback proxy identity contract, canonical addresses, no trust in public forwarding headers. Saturation denies new keys without resetting/evicting active penalties. Regression covers forged headers and 20,000-key flood plus idle expiry. Targeted HTTP tests passed.
+
+## FIX-11 — truthful logout and atomic session rotation
+PASS: injected PostgreSQL UPDATE failures for player/admin session revocation return 503 without clearing cookies. Failed admin rotation rolls back the inserted session and preserves the old session; retry succeeds after fault removal. HTTP regression and Web typecheck passed.

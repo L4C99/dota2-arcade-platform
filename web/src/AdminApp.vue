@@ -140,7 +140,7 @@ async function login(): Promise<void> {
 }
 
 async function logout(): Promise<void> {
-  try { await api('/logout', 'POST') } catch { /* local state still clears */ }
+  try { await api('/logout', 'POST') } catch (cause) { error.value = `退出失败，请重试：${String(cause)}`; return }
   authenticated.value = false; overview.value = null; password.value = ''
 }
 
