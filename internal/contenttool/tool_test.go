@@ -226,3 +226,36 @@ func TestOperationLockPreventsConcurrentMutation(t *testing.T) {
 		t.Fatalf("link changed under operation lock: %v", err)
 	}
 }
+
+func TestA4ContentRootOutsideAddonTree(t *testing.T) {
+	c, source, _ := fixture(t)
+	addons := filepath.Join(c.DotaRoot, "game", "dota_addons")
+	for _, root := range []string{addons, filepath.Join(addons, "content")} {
+		if err := os.MkdirAll(root, 0750); err != nil {
+			t.Fatal(err)
+		}
+		unsafe := Config{ContentRoot: root, DotaRoot: c.DotaRoot}
+		if _, err := unsafe.Prepare("123", "v1", source); err == nil {
+			t.Fatal("nested content root accepted")
+		}
+		if _, err := os.Stat(filepath.Join(root, "123")); !os.IsNotExist(err) {
+			t.Fatal("rejection wrote release data")
+		}
+	}
+	sibling := filepath.Join(c.DotaRoot, "game", "dota_addons-backup")
+	if err := os.Mkdir(sibling, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Config{ContentRoot: sibling, DotaRoot: c.DotaRoot}).check(); err != nil {
+		t.Fatal("prefix sibling rejected", err)
+	}
+	alias := filepath.Join(filepath.Dir(c.ContentRoot), "alias")
+	if err := createDirectoryLink(alias, addons); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Config{ContentRoot: alias, DotaRoot: c.DotaRoot}).check(); err == nil {
+		a, _ := filepath.EvalSymlinks(alias)
+		b, _ := filepath.EvalSymlinks(addons)
+		t.Fatalf("alias accepted: %q %q", a, b)
+	}
+}

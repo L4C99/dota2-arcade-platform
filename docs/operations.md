@@ -118,3 +118,5 @@ Owner Acceptance（2026-09-27）：项目所有者接受以上 V1 安全优先�
 A.4 migration 19 只新增 next_game_intents.failure_reason，保留 1–18 checksum 与所有合法历史。升级前照常备份；回滚应用时保留 additive column，不执行破坏性 down migration。旧程序不理解失败原因，不应恢复自动消费这些 paused intents；发生回滚应暂停新申请并由管理员核对。
 
 A.4 login proxy contract: production Server binds loopback and only Caddy may forward public traffic. Caddy must overwrite X-Platform-Client-IP with {remote_host}; client X-Forwarded-For is ignored. Do not expose the upstream port or allow untrusted local proxy processes. Development ignores the proxy header. Missing/invalid dedicated headers fall back to the peer address. The login limiter retains active penalties under key floods, refuses new keys when its 10,000 slots are occupied, and reclaims only entries idle over one hour.
+
+Content Tool rejects ContentRoot at or below the resolved Dota game/dota_addons directory before preparing releases. Windows resolves Junction aliases through a directory handle; path-component containment is case-insensitive on Windows. Keep immutable releases in a separate content directory.

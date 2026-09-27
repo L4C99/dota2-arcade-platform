@@ -114,3 +114,6 @@ PASS: two-second A2S total budget, no fabricated failure for unqueried/cancelled
 
 ## FIX-14 — shared content identifier boundaries
 Implemented shared Workshop/version validators, registration rejection before writes, and Web constraints. Boundary tests and PostgreSQL rejection/no-audit regression passed; Content Tool/config/content publication targeted tests passed. Existing development catalog anomaly audit remains part of the final development-node preflight.
+
+## FIX-15 — resolved content-root isolation
+PASS: pre-write containment guard resolves existing parents and Windows Junctions, handles case and path-component boundaries, accepts prefix siblings. Full Content Tool tests passed on Windows including rejection without release writes and Junction alias regression; Linux symlink coverage is queued in full matrix.

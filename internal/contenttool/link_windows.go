@@ -6,10 +6,38 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/windows"
 )
+
+func resolveDirectory(path string) (string, error) {
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return "", err
+	}
+	h, err := windows.CreateFile(p, 0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return "", err
+	}
+	defer windows.CloseHandle(h)
+	buf := make([]uint16, 32768)
+	n, err := windows.GetFinalPathNameByHandle(h, &buf[0], uint32(len(buf)), 0)
+	if err != nil {
+		return "", err
+	}
+	if n >= uint32(len(buf)) {
+		return "", fmt.Errorf("resolved path too long")
+	}
+	resolved := windows.UTF16ToString(buf[:n])
+	if strings.HasPrefix(resolved, `\\?\UNC\`) {
+		resolved = `\\` + strings.TrimPrefix(resolved, `\\?\UNC\`)
+	} else {
+		resolved = strings.TrimPrefix(resolved, `\\?\`)
+	}
+	return filepath.Clean(resolved), nil
+}
 
 // PowerShell receives paths through environment variables, never interpolated
 // into script text. New-Item creates a directory Junction without symlink privilege.

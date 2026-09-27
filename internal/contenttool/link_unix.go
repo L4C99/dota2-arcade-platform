@@ -2,7 +2,12 @@
 
 package contenttool
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+)
+
+func resolveDirectory(path string) (string, error) { return filepath.EvalSymlinks(path) }
 
 func createDirectoryLink(link, target string) error { return os.Symlink(target, link) }
 func replaceFile(from, to string) error             { return os.Rename(from, to) }

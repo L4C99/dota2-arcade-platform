@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -60,7 +61,40 @@ func (c Config) check() error {
 	if filepath.Clean(c.ContentRoot) == filepath.Clean(c.DotaRoot) {
 		return errors.New("content and Dota roots must differ")
 	}
+	content, err := resolveDirectory(c.ContentRoot)
+	if err != nil {
+		return err
+	}
+	addons, err := resolveExistingParents(filepath.Join(c.DotaRoot, "game", "dota_addons"))
+	if err != nil {
+		return err
+	}
+	if runtime.GOOS == "windows" {
+		content, addons = strings.ToLower(content), strings.ToLower(addons)
+	}
+	rel, err := filepath.Rel(addons, content)
+	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+		return errors.New("content root must be outside the actual dota_addons subtree")
+	}
 	return nil
+}
+
+// Resolve existing aliases even when the final addon directory is not created.
+func resolveExistingParents(path string) (string, error) {
+	if _, err := os.Lstat(path); err == nil {
+		return resolveDirectory(path)
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	parent := filepath.Dir(path)
+	if parent == path {
+		return "", errors.New("cannot resolve root")
+	}
+	resolved, err := resolveExistingParents(parent)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(resolved, filepath.Base(path)), nil
 }
 
 func validID(workshop, version string) error {
