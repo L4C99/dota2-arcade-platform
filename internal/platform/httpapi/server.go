@@ -233,10 +233,7 @@ func (a *api) adminLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		remoteIP = r.RemoteAddr
-	}
+	remoteIP := loginClientIP(r, a.config.Development)
 	key := remoteIP + ":" + strings.ToLower(strings.TrimSpace(request.Username))
 	if !a.gate.Allowed(key) {
 		http.Error(w, "login temporarily limited", http.StatusTooManyRequests)
@@ -296,17 +293,59 @@ type loginAttempt struct {
 }
 
 func newLoginGate() *loginGate { return &loginGate{attempts: make(map[string]loginAttempt)} }
+
+// Production listens on loopback behind Caddy, which overwrites this header.
+// Public forwarding headers and non-loopback peers are never trusted.
+func loginClientIP(r *http.Request, development bool) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	if !development && ip != nil && ip.IsLoopback() {
+		if values := r.Header.Values("X-Platform-Client-IP"); len(values) == 1 {
+			if forwarded := net.ParseIP(values[0]); forwarded != nil {
+				return forwarded.String()
+			}
+		}
+	}
+	if ip != nil {
+		return ip.String()
+	}
+	return "invalid-peer"
+}
+
+func (g *loginGate) prune(now time.Time) {
+	for key, attempt := range g.attempts {
+		if now.Sub(attempt.last) > time.Hour {
+			delete(g.attempts, key)
+		}
+	}
+}
 func (g *loginGate) Allowed(key string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return !time.Now().Before(g.attempts[key].next)
+	now := time.Now()
+	if attempt, ok := g.attempts[key]; ok {
+		return !now.Before(attempt.next)
+	}
+	if len(g.attempts) >= 10000 {
+		g.prune(now)
+	}
+	if len(g.attempts) >= 10000 {
+		return false
+	}
+	// Reserve a slot before password verification so concurrent novel keys
+	// cannot overrun the bound or evict another client's active penalty.
+	g.attempts[key] = loginAttempt{last: now}
+	return true
 }
 func (g *loginGate) Failed(key string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := time.Now()
-	if len(g.attempts) > 10000 {
-		g.attempts = make(map[string]loginAttempt)
+	if _, exists := g.attempts[key]; !exists && len(g.attempts) >= 10000 {
+		return
 	}
 	a := g.attempts[key]
 	if now.Sub(a.last) > time.Hour {

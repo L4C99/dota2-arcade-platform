@@ -116,3 +116,5 @@ For the A.7 small production multiplayer trial required before final V1 Release,
 Owner Acceptance（2026-09-27）：项目所有者接受以上 V1 安全优先的可用性残余限制，允许旧容量永久保留，由经授权 Agent/管理员执行审计隔离、玩家脱困和必要节点退役/重建。Owner 不要求升级 d2core。未来自动回收此类 unknown 需另起版本设计并审查 recovery proof primitive；不是数据已证明回收，也不是允许误释放。
 
 A.4 migration 19 只新增 next_game_intents.failure_reason，保留 1–18 checksum 与所有合法历史。升级前照常备份；回滚应用时保留 additive column，不执行破坏性 down migration。旧程序不理解失败原因，不应恢复自动消费这些 paused intents；发生回滚应暂停新申请并由管理员核对。
+
+A.4 login proxy contract: production Server binds loopback and only Caddy may forward public traffic. Caddy must overwrite X-Platform-Client-IP with {remote_host}; client X-Forwarded-For is ignored. Do not expose the upstream port or allow untrusted local proxy processes. Development ignores the proxy header. Missing/invalid dedicated headers fall back to the peer address. The login limiter retains active penalties under key floods, refuses new keys when its 10,000 slots are occupied, and reclaims only entries idle over one hour.

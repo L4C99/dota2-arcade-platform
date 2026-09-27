@@ -96,4 +96,9 @@ FIX-05：**PASS — operational mitigation / safety boundary accepted**。ADJ-01
 已关闭 unknown→rejected_no_effect（含合成 RECONCILED_NO_EFFECT）入口，首次明确无副作用拒绝仍允许。固定 core 延迟请求反例转为 `tests/coreproof` 独立正式测试 module 并加入 Windows/Linux CI；不修改 core。Runner 保守回归覆盖反复空 inventory、端口拒绝、重建 Runner、history expiry 和原 IDs 恢复；PG 回归覆盖在线 Admin 隔离、Owner 重复 abandon、独立新 Request、迟到 accepted/succeeded/failed 和 full reclaim、Drain 后禁调度，旧账本保留。现有 HTTP 二次确认与普通成员/无关用户拒绝回归同跑通过。Node API 不再接受 unknown 的人为 no-effect 证明标签。
 
 Runbook 与 Owner Acceptance 见 `docs/operations.md` 的 V1 Known Limitation。没有增加 manager incarnation、endpoint/token、marker 或磁盘连续性假设。没有 migration。FIX-06～17 现在继续执行，不再因旧证明阻塞而等待。
-`n## FIX-09 — revision-bound entry actions`nPASS: verification and opening compare the displayed revision under the entry row lock. Stale/missing revisions do not mutate or audit success. Existing monotonic verification and independent schemes remain. Targeted PostgreSQL entry/admin/JoinInfo tests and Web typecheck passed.
+
+## FIX-09 — revision-bound entry actions
+PASS: verification and opening compare the displayed revision under the entry row lock. Stale/missing revisions do not mutate or audit success. Existing monotonic verification and independent schemes remain. Targeted PostgreSQL entry/admin/JoinInfo tests and Web typecheck passed.
+
+## FIX-10 — proxy identity and bounded login penalties
+PASS: dedicated loopback proxy identity contract, canonical addresses, no trust in public forwarding headers. Saturation denies new keys without resetting/evicting active penalties. Regression covers forged headers and 20,000-key flood plus idle expiry. Targeted HTTP tests passed.
