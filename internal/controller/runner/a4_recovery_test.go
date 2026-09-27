@@ -68,3 +68,49 @@ func TestA4SuccessfulCreateObservesCurrentInstance(t *testing.T) {
 		})
 	}
 }
+
+func TestA4StopRetriesAfterOldWorkerTeardown(t *testing.T) {
+	p := &fakePlatform{job: nodev1.Job{ID: "new-stop", Kind: "stop", State: "claimed", InstanceID: "i"}}
+	c := &fakeCore{result: core.Accepted{InstanceID: "i", OperationID: "old"}, op: core.Operation{OperationID: "old", InstanceID: "i", Kind: "stop", Status: "failed"}, instance: core.Instance{InstanceID: "i", CurrentOperationID: "old", Lifecycle: "failed", Process: "stopped", Cleanup: "failed"}}
+	r := Runner{Platform: p, Core: c}
+	for i := 0; i < 2; i++ {
+		if err := r.stop(context.Background(), p.job); err != nil {
+			t.Fatal(err)
+		}
+		if p.job.State != "unknown" || p.job.OperationID != "" {
+			t.Fatalf("adopted old worker: %+v", p.job)
+		}
+	}
+	c.instance.CurrentOperationID = ""
+	c.instance.Cleanup = "complete"
+	c.instance.Lifecycle = "reclaimed"
+	c.result.OperationID = "new"
+	c.op.OperationID = "new"
+	c.op.Status = "succeeded"
+	if err := r.stop(context.Background(), p.job); err != nil {
+		t.Fatal(err)
+	}
+	if p.job.State != "succeeded" || p.job.OperationID != "new" || c.stops != 3 {
+		t.Fatalf("retry failed: %+v %+v", p, c)
+	}
+}
+
+func TestA4RunningStopAdoptedAndOwnFailureTerminal(t *testing.T) {
+	p := &fakePlatform{job: nodev1.Job{ID: "stop", Kind: "stop", State: "unknown", InstanceID: "i"}}
+	c := &fakeCore{op: core.Operation{OperationID: "running", InstanceID: "i", Kind: "stop", Status: "running"}, instance: core.Instance{InstanceID: "i", CurrentOperationID: "running", Lifecycle: "active", Process: "running"}}
+	r := Runner{Platform: p, Core: c}
+	if err := r.stop(context.Background(), p.job); err != nil {
+		t.Fatal(err)
+	}
+	if c.stops != 0 || p.job.OperationID != "running" {
+		t.Fatal("duplicated running stop")
+	}
+	c.op.Status = "failed"
+	c.instance.Cleanup = "failed"
+	if err := r.stop(context.Background(), p.job); err != nil {
+		t.Fatal(err)
+	}
+	if c.stops != 0 || p.job.State != "failed_with_effect" || p.job.OperationID != "running" {
+		t.Fatal("own operation identity changed")
+	}
+}

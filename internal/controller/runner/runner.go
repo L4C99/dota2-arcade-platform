@@ -220,6 +220,7 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 		return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
 			OperationID: job.OperationID, ErrorCode: "IDENTITY_UNVERIFIED", ErrorStage: "recover"})
 	}
+	oldTerminalOperation := ""
 	if instance.CurrentOperationID != "" {
 		op, err := r.Core.Operation(ctx, instance.CurrentOperationID)
 		if err != nil {
@@ -229,12 +230,15 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
 				OperationID: job.OperationID, ErrorCode: "IDENTITY_UNVERIFIED", ErrorStage: "recover"})
 		}
-		if op.Kind == "stop" {
+		if op.Kind == "stop" && (op.Status == "running" || reclaimed(instance)) {
 			job.OperationID = op.OperationID
 			if err := r.report(ctx, job, nodev1.ReportRequest{State: "accepted", InstanceID: job.InstanceID, OperationID: job.OperationID}); err != nil {
 				return err
 			}
 			return r.observe(ctx, job)
+		}
+		if op.Kind == "stop" && (op.Status == "failed" || op.Status == "cancelled" || op.Status == "succeeded") {
+			oldTerminalOperation = op.OperationID
 		}
 	}
 	accepted, err := r.Core.Stop(ctx, job.InstanceID)
@@ -256,6 +260,12 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 	}
 	if accepted.InstanceID != job.InstanceID {
 		return fmt.Errorf("core stop returned different instance ID")
+	}
+	// v0.1.1 can still return the finished worker's operation until teardown
+	// removes the worker. Do not freeze that old failure into this new job.
+	// Retain this job without an operation ID and retry on the next cycle.
+	if oldTerminalOperation != "" && accepted.OperationID == oldTerminalOperation {
+		return r.report(ctx, job, nodev1.ReportRequest{State: "unknown", InstanceID: job.InstanceID})
 	}
 	job.OperationID = accepted.OperationID
 	if err := r.report(ctx, job, nodev1.ReportRequest{State: "accepted", InstanceID: job.InstanceID, OperationID: job.OperationID}); err != nil {
