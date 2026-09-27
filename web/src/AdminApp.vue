@@ -20,7 +20,7 @@ interface Job { id: string; nodeId: string; allocationId: string; kind: string; 
 interface Audit { id: string; actorUsername: string; actorKind: string; action: string; targetType: string; targetId: string; result: string; stateChange: Record<string, unknown>; createdAt: string }
 interface Counts { waiting: number; creating: number; running: number; stopping: number; quarantined: number; failedUnreclaimed: number }
 interface Overview { settings: Settings; counts: Counts; games: Game[]; presets: Preset[]; contentVersions: ContentVersion[]; templateRevisions: TemplateRevision[]; templateBindings: TemplateBinding[]; contentValidations: ContentValidation[]; nodes: Node[]; bindings: Binding[]; entries: Entry[]; requests: ServerRequest[]; parties: Party[]; allocations: Allocation[]; jobs: Job[]; audit: Audit[] }
-interface Action { action: string; targetId?: string; gameId?: string; accepting?: boolean; enabled?: boolean; draining?: boolean; priority?: number; desired?: number; message?: string; entry?: string; verified?: boolean; confirmed?: boolean; workshopId?: string; displayName?: string; contentVersionId?: string; contentSha256?: string; templateRevisionId?: string; bindingKey?: string; description?: string; maxPlayers?: number }
+interface Action { action: string; targetId?: string; gameId?: string; accepting?: boolean; enabled?: boolean; draining?: boolean; priority?: number; desired?: number; message?: string; entry?: string; expectedEntryConfigRevision?: string; verified?: boolean; confirmed?: boolean; workshopId?: string; displayName?: string; contentVersionId?: string; contentSha256?: string; templateRevisionId?: string; bindingKey?: string; description?: string; maxPlayers?: number }
 
 const username = ref('')
 const password = ref('')
@@ -177,7 +177,7 @@ function editMessage(kind: 'game.update' | 'preset.update', id: string, current:
 }
 
 function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified' | 'enabled', value: boolean): void {
-  const base: Action = { action: 'entry.update', targetId: node.id, entry: kind }
+  const base: Action = { action: 'entry.update', targetId: node.id, entry: kind, expectedEntryConfigRevision: overview.value?.entries.find(e => e.nodeId === node.id)?.entryConfigRevision }
   if (field === 'verified') {
     base.verified = value
     base.confirmed = value

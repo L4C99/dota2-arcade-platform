@@ -196,10 +196,10 @@ func TestP3EExplicitMappingJoinInfoAndRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); err != nil {
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, ExpectedEntryConfigRevision: currentEntryRevision(t, s, nodeID), Entry: "steam", Verified: boolPtr(true), Confirmed: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Enabled: boolPtr(true)}); err != nil {
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, ExpectedEntryConfigRevision: currentEntryRevision(t, s, nodeID), Entry: "steam", Enabled: boolPtr(true)}); err != nil {
 		t.Fatal(err)
 	}
 	// A2S is false for this idle fixture. It cannot suppress a previously

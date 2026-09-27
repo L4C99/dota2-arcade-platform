@@ -27,3 +27,4 @@ Audit records the administrator identity, action, target, time and relevant prio
 ### A.4 未领取预留终结
 
 `allocation.terminate_pending` 的 targetId 为 Allocation ID。仅允许 reserved + create pending + claimed_at 为空 + 无 execution/instance/operation/report 证据。事务锁住 claim 使用的同一 NodeJob；若 claim 已赢则 409，继续占容。成功后 Job rejected_no_effect（PENDING_TERMINATED）、Allocation released_no_effect、Request unavailable；写 Audit，重复调用幂等，旧 Job 永不可领取。普通玩家 cancel 规则不变。
+`nA.4 FIX-09: `entry.update` verification and enable=true require `expectedEntryConfigRevision` from the displayed entry. A missing/stale revision returns 409 without mutation or success audit. Closing remains possible without an attestation. Refresh and repeat real-client verification against the new configuration.

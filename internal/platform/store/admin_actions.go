@@ -17,26 +17,27 @@ var workshopIDPattern = regexp.MustCompile(`^[0-9]+$`)
 var contentSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type AdminAction struct {
-	Action             string  `json:"action"`
-	TargetID           string  `json:"targetId"`
-	GameID             string  `json:"gameId,omitempty"`
-	Accepting          *bool   `json:"accepting,omitempty"`
-	Enabled            *bool   `json:"enabled,omitempty"`
-	Draining           *bool   `json:"draining,omitempty"`
-	Priority           *int    `json:"priority,omitempty"`
-	Desired            *int    `json:"desired,omitempty"`
-	Message            *string `json:"message,omitempty"`
-	Entry              string  `json:"entry,omitempty"`
-	Verified           *bool   `json:"verified,omitempty"`
-	Confirmed          bool    `json:"confirmed,omitempty"`
-	WorkshopID         string  `json:"workshopId,omitempty"`
-	DisplayName        string  `json:"displayName,omitempty"`
-	ContentVersionID   string  `json:"contentVersionId,omitempty"`
-	ContentSHA256      string  `json:"contentSha256,omitempty"`
-	TemplateRevisionID string  `json:"templateRevisionId,omitempty"`
-	BindingKey         string  `json:"bindingKey,omitempty"`
-	Description        string  `json:"description,omitempty"`
-	MaxPlayers         int     `json:"maxPlayers,omitempty"`
+	Action                      string  `json:"action"`
+	TargetID                    string  `json:"targetId"`
+	GameID                      string  `json:"gameId,omitempty"`
+	Accepting                   *bool   `json:"accepting,omitempty"`
+	Enabled                     *bool   `json:"enabled,omitempty"`
+	Draining                    *bool   `json:"draining,omitempty"`
+	Priority                    *int    `json:"priority,omitempty"`
+	Desired                     *int    `json:"desired,omitempty"`
+	Message                     *string `json:"message,omitempty"`
+	Entry                       string  `json:"entry,omitempty"`
+	ExpectedEntryConfigRevision string  `json:"expectedEntryConfigRevision,omitempty"`
+	Verified                    *bool   `json:"verified,omitempty"`
+	Confirmed                   bool    `json:"confirmed,omitempty"`
+	WorkshopID                  string  `json:"workshopId,omitempty"`
+	DisplayName                 string  `json:"displayName,omitempty"`
+	ContentVersionID            string  `json:"contentVersionId,omitempty"`
+	ContentSHA256               string  `json:"contentSha256,omitempty"`
+	TemplateRevisionID          string  `json:"templateRevisionId,omitempty"`
+	BindingKey                  string  `json:"bindingKey,omitempty"`
+	Description                 string  `json:"description,omitempty"`
+	MaxPlayers                  int     `json:"maxPlayers,omitempty"`
 }
 
 func auditAdmin(ctx context.Context, tx pgx.Tx, adminID, action, targetType, targetID string, change map[string]any) error {
@@ -355,6 +356,9 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		var revision string
 		if err := tx.QueryRow(ctx, `SELECT `+verifiedCol+`,`+enabledCol+`,entry_config_revision FROM node_entry_capabilities WHERE node_id=$1 FOR UPDATE`, a.TargetID).Scan(&oldVerified, &oldEnabled, &revision); err != nil {
 			return err
+		}
+		if (a.Verified != nil || a.Enabled != nil && *a.Enabled) && (a.ExpectedEntryConfigRevision == "" || a.ExpectedEntryConfigRevision != revision) {
+			return fmt.Errorf("%w: entry configuration changed; refresh before confirming", ErrJobConflict)
 		}
 		verified, enabled := oldVerified, oldEnabled
 		if a.Verified != nil {

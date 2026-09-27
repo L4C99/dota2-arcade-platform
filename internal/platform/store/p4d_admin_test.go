@@ -65,10 +65,10 @@ func TestP4DAdminControlsAuditAndControllerFacts(t *testing.T) {
 	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "node.update", TargetID: nodeID, Desired: intPtr(2)}); !errors.Is(err, ErrInvalidDesiredCapacity) {
 		t.Fatalf("oversize capacity: %v", err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Enabled: boolPtr(true)}); !errors.Is(err, ErrInvalidAdminAction) {
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, ExpectedEntryConfigRevision: currentEntryRevision(t, s, nodeID), Entry: "steam", Enabled: boolPtr(true)}); !errors.Is(err, ErrInvalidAdminAction) {
 		t.Fatalf("unverified entry: %v", err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); !errors.Is(err, ErrJobConflict) {
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, ExpectedEntryConfigRevision: currentEntryRevision(t, s, nodeID), Entry: "steam", Verified: boolPtr(true), Confirmed: true}); !errors.Is(err, ErrJobConflict) {
 		t.Fatalf("human verification without protocol configuration: %v", err)
 	}
 	var audits int
@@ -179,17 +179,17 @@ func TestP4DEntryVerificationRequiresCurrentControllerFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true)}); !errors.Is(err, ErrInvalidAdminAction) {
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, ExpectedEntryConfigRevision: currentEntryRevision(t, s, nodeID), Entry: "steam", Verified: boolPtr(true)}); !errors.Is(err, ErrInvalidAdminAction) {
 		t.Fatalf("unconfirmed human verification: %v", err)
 	}
 	h.Network.ProtocolIP = "203.0.113.10"
 	if _, err := s.RecordHeartbeat(ctx, nodeID, h); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true}); err != nil {
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, ExpectedEntryConfigRevision: currentEntryRevision(t, s, nodeID), Entry: "steam", Verified: boolPtr(true), Confirmed: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Enabled: boolPtr(true)}); err != nil {
+	if err := s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, ExpectedEntryConfigRevision: currentEntryRevision(t, s, nodeID), Entry: "steam", Enabled: boolPtr(true)}); err != nil {
 		t.Fatal(err)
 	}
 	var verified, enabled bool

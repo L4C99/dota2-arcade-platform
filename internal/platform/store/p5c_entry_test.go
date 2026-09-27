@@ -44,6 +44,7 @@ func TestP5CEntryVerificationAmendment001(t *testing.T) {
 	}
 	apply := func(a AdminAction) error {
 		a.Action, a.TargetID = "entry.update", nodeID
+		a.ExpectedEntryConfigRevision = currentEntryRevision(t, s, nodeID)
 		return s.ApplyAdminAction(ctx, adminID, a)
 	}
 	if err := apply(AdminAction{Entry: "steam", Enabled: boolPtr(true)}); !errors.Is(err, ErrInvalidAdminAction) {
@@ -141,7 +142,7 @@ func TestP5CEntryVerificationRequiresProtocolConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, Entry: "steam", Verified: boolPtr(true), Confirmed: true})
+	err = s.ApplyAdminAction(ctx, adminID, AdminAction{Action: "entry.update", TargetID: nodeID, ExpectedEntryConfigRevision: currentEntryRevision(t, s, nodeID), Entry: "steam", Verified: boolPtr(true), Confirmed: true})
 	if !errors.Is(err, ErrJobConflict) {
 		t.Fatalf("verification accepted without protocol IP: %v", err)
 	}
