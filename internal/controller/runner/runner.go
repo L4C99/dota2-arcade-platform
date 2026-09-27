@@ -61,6 +61,18 @@ func (r *Runner) Step(ctx context.Context) error {
 	// Leave another claim until all existing work has converged.
 	for _, job := range jobs {
 		if job.State != "pending" {
+			if platform, ok := r.Platform.(interface {
+				ClaimIndependentStop(context.Context) (*nodev1.Job, error)
+			}); ok {
+				stop, err := platform.ClaimIndependentStop(ctx)
+				if err != nil || stop == nil {
+					return err
+				}
+				if stop.Kind != "stop" || stop.InstanceID == "" {
+					return errors.New("invalid independent stop")
+				}
+				return r.stop(ctx, *stop)
+			}
 			return nil
 		}
 	}

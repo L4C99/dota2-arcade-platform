@@ -109,6 +109,15 @@ func (c *Client) Claim(ctx context.Context) (*nodev1.Job, error) {
 	return &job, nil
 }
 
+func (c *Client) ClaimIndependentStop(ctx context.Context) (*nodev1.Job, error) {
+	var job nodev1.Job
+	status, err := c.do(ctx, http.MethodPost, "/jobs/claim?independentStop=true", nil, &job)
+	if err != nil || status == http.StatusNoContent {
+		return nil, err
+	}
+	return &job, nil
+}
+
 func (c *Client) GetJob(ctx context.Context, jobID string) (nodev1.Job, error) {
 	var job nodev1.Job
 	_, err := c.do(ctx, http.MethodGet, "/jobs/"+jobID, nil, &job)

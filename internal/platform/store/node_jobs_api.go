@@ -12,6 +12,15 @@ import (
 )
 
 func (s *Store) ClaimNextJob(ctx context.Context, nodeID string) (*nodev1.Job, error) {
+	return s.claimNextJob(ctx, nodeID, false)
+}
+
+// ClaimIndependentStop never claims ordinary work while old work is unresolved.
+func (s *Store) ClaimIndependentStop(ctx context.Context, nodeID string) (*nodev1.Job, error) {
+	return s.claimNextJob(ctx, nodeID, true)
+}
+
+func (s *Store) claimNextJob(ctx context.Context, nodeID string, independentStop bool) (*nodev1.Job, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -22,7 +31,16 @@ func (s *Store) ClaimNextJob(ctx context.Context, nodeID string) (*nodev1.Job, e
         JOIN nodes n ON n.id=j.node_id JOIN node_reports r ON r.node_id=n.id
         WHERE j.node_id=$1 AND j.state='pending' AND n.enabled AND r.compatibility_status='compatible'
         AND n.last_heartbeat > $2
-        ORDER BY j.created_at,j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1`, nodeID, time.Now().UTC().Add(-nodeOnlineWindow)).Scan(&jobID)
+        AND (NOT $3 OR (j.kind='stop' AND j.instance_id IS NOT NULL
+          AND EXISTS(SELECT 1 FROM node_jobs c JOIN allocations a ON a.id=c.allocation_id
+            WHERE c.allocation_id=j.allocation_id AND c.kind='create' AND c.node_id=j.node_id
+            AND c.instance_id=j.instance_id AND c.state IN ('succeeded','failed_with_effect')
+            AND COALESCE(c.error_code,'')<>'IDENTITY_UNVERIFIED'
+            AND a.state NOT IN ('reclaimed','released_no_effect'))
+          AND NOT EXISTS(SELECT 1 FROM node_jobs other WHERE other.node_id=j.node_id AND other.id<>j.id
+            AND other.state IN ('claimed','accepted','unknown')
+            AND (other.allocation_id=j.allocation_id OR other.instance_id=j.instance_id))))
+        ORDER BY j.created_at,j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1`, nodeID, time.Now().UTC().Add(-nodeOnlineWindow), independentStop).Scan(&jobID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

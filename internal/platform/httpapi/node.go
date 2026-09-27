@@ -153,7 +153,11 @@ func (a *api) nodeClaimJob(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	job, err := a.store.ClaimNextJob(r.Context(), nodeID)
+	claim := a.store.ClaimNextJob
+	if r.URL.Query().Get("independentStop") == "true" {
+		claim = a.store.ClaimIndependentStop
+	}
+	job, err := claim(r.Context(), nodeID)
 	if err != nil {
 		http.Error(w, "claim unavailable", http.StatusServiceUnavailable)
 		return
