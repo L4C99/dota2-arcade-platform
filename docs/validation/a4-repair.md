@@ -117,3 +117,6 @@ Implemented shared Workshop/version validators, registration rejection before wr
 
 ## FIX-15 — resolved content-root isolation
 PASS: pre-write containment guard resolves existing parents and Windows Junctions, handles case and path-component boundaries, accepts prefix siblings. Full Content Tool tests passed on Windows including rejection without release writes and Junction alias regression; Linux symlink coverage is queued in full matrix.
+
+## FIX-16 — deployment prerequisites
+PASS locally: Windows ValidateOnly rejects missing content-tool.exe and accepts a complete fixture without registering tasks. Linux wrapper explicitly checks jq; README lists installation prerequisite. Linux execution is queued in full matrix. No host configuration changed.

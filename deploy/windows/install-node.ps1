@@ -8,7 +8,7 @@ $Root = [System.IO.Path]::GetFullPath($Root)
 if ($Root -match '[^\x20-\x7E]' -or $Root -match '["*?\[\]]') { throw 'Node root must be a safe ASCII absolute path' }
 $configPath = Join-Path $Root 'config\node-controller.json'
 $secretPath = $null
-foreach ($path in @($configPath,(Join-Path $Root 'bin\node-controller.exe'),(Join-Path $Root 'bin\d2core.exe'),(Join-Path $Root 'bin\BUILD.json'),(Join-Path $Root 'bin\start-d2core-manager.ps1'),(Join-Path $Root 'bin\start-node-controller.ps1'))) {
+foreach ($path in @($configPath,(Join-Path $Root 'bin\node-controller.exe'),(Join-Path $Root 'bin\content-tool.exe'),(Join-Path $Root 'bin\d2core.exe'),(Join-Path $Root 'bin\BUILD.json'),(Join-Path $Root 'bin\start-d2core-manager.ps1'),(Join-Path $Root 'bin\start-node-controller.ps1'))) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required deployment file missing: $path" }
 }
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
