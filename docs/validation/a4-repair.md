@@ -1,125 +1,78 @@
-# A.4 定向修复检查点 — BLOCKED
+# A.4 — Adjudicated Targeted Fixes & Regression
 
-日期：2026-09-27。A.4 **未完成**，没有 Post-A.4 Candidate，没有进入 RC1。
+日期：2026-09-27。原 Candidate：`9bf6d7d6b3195ca8af954a702ed69827f22afc4d`。本次方案 A 续作 starting HEAD：`7497c9d6047318f7c066d0f7f7300ed5126409b4`；既有 FIX-01～04、`eea15d5` STOP 检查点及 `7497c9d` 反例记录全部保留，未 reset/rebase/squash/rewrite。
 
-原 Candidate、starting HEAD、执行 `git fetch` 后的 origin/main 均为
-`9bf6d7d6b3195ca8af954a702ed69827f22afc4d`；起始工作树干净。
-唯一 finding 输入是 Owner 提供的 `adjudication-9bf6d7d6.md` §12。
-没有修改原裁定、历史 validation、migration 0001–0018 或固定 d2core。
+执行依据为 Owner 原 A.4 请求、A.3 §12 和 Owner 正式接受的 Supplemental Adjudication 方案 A。未修改原 A.3/补充裁决历史。固定 d2core v0.1.1 / `988720ad85af1f0d97bfe98ec4da4fcbb070beea` 未修改或升级。
 
 ## 修复闭环
 
-下表 PASS 表示该 FIX 已实施且所列本地定向回归通过，不代表完整 A.4、双平台 CI 或真实节点验收通过。
-后续项 BLOCKED 表示在 FIX-05 停止边界之后未启动，并非重新裁决或降级 deferred。
-
 | FIX | ADJ | Commit | Regression | Result |
 |---|---|---|---|---|
-| FIX-01 | 012 | `644dc5721019eb5d5bdf8bc83afdfd9d34636b93` | PG：reclaim 后 late accepted/unknown/failed、重复报告、有/无下一局；released attempt 后新 attempt 与旧报告 | PASS |
-| FIX-02 | 032 | `bb62032ae09a3dc01c967621e9a83b6379c9be58` | Runner：过期 unknown 只领取独立 stop；PG：同实例依赖拒领、无关 stop 回收、原 unknown 不变 | PASS |
-| FIX-03 | 034 | `ca27c094ba853b3cdc9ef110b55e5b186e53e9d5` | Runner：成功 create 后 failed/stopped、loading、unknown identity、reclaimed；PG：重复 failed fact 只派一个 stop 且继续占容 | PASS |
-| FIX-04 | 033 | `9568392829258b06d8c5ea38e67029e75842ec9b` | Runner：旧 failed worker 暂留后重试成功、running stop 复用、本 job failure 不换 operation；完整 Runner 套件 | PASS |
-| FIX-05 | 011 | — | 固定 core 源码核对；既有 unknown 保守回归通过；缺 storage-continuity 生产证明 | BLOCKED |
-| FIX-06 | 001 | — | 未执行，停止边界 | BLOCKED |
-| FIX-07 | 002、003 | — | 未执行，停止边界 | BLOCKED |
-| FIX-08 | 013 | — | 未执行，停止边界 | BLOCKED |
-| FIX-09 | 035 | — | 未执行，停止边界 | BLOCKED |
-| FIX-10 | 004、005 | — | 未执行，停止边界 | BLOCKED |
-| FIX-11 | 006 | — | 未执行，停止边界 | BLOCKED |
-| FIX-12 | 014、036、031 | — | 未执行，停止边界 | BLOCKED |
-| FIX-13 | 007、008 | — | 未执行，停止边界 | BLOCKED |
-| FIX-14 | 009、010 | — | 未执行，停止边界 | BLOCKED |
-| FIX-15 | 026 | — | 未执行，停止边界 | BLOCKED |
-| FIX-16 | 022、025 | — | 未执行，停止边界 | BLOCKED |
-| FIX-17 | 028、029 | — | 未执行，停止边界 | BLOCKED |
+| 01 | 012 | `644dc57` | terminal Allocation 后迟到 accepted/unknown/failed，重复报告及下一局 | PASS |
+| 02 | 032 | `bb62032` | unknown 后仅独立 stop 可领取；同实例/未解决 create 依赖拒领 | PASS |
+| 03 | 034 | `ca27c09` | succeeded create 后可信 failed instance 派 stop；未知身份继续占容 | PASS |
+| 04 | 033 | `9568392` | 旧 failed stop worker 退出后重试；running stop 复用；本 Job operation 不替换 | PASS |
+| 05 | 011 | `8af6da3` | 固定 Store 延迟 A/B 反例、拒绝码/空 list/expiry 不释放、在线隔离、Owner escape、迟到报告和最终 reclaim | PASS — operational mitigation / safety boundary accepted |
+| 06 | 001 | `39f156a` | never-claimed pending 终结、claim 优先、并发唯一胜者；审计与历史保留 | PASS |
+| 07 | 002/003 | `85b3158` | next-game 消费时 Party 人数、全局/地图/玩法维护、disabled preset/manual node；拒绝不回滚旧 reclaim/abandon | PASS |
+| 08 | 013 | `eb814e7` | terminal create 后 JoinInfo 补报可达；identity/Ready/revision/port 校验、首次时间不变 | PASS |
+| 09 | 035 | `0e3cb1c` | expected revision 缺失/陈旧拒绝验证及开放，无成功审计；新 revision 正常验证 | PASS |
+| 10 | 004/005 | `a173062` | 专用可信代理头；伪造头忽略；20,000-key flood 不清空/逐出活跃惩罚，过期键回收 | PASS |
+| 11 | 006 | `6f14d15` | PostgreSQL revoke UPDATE 故障：logout 503、不清 cookie；rotation 插入/撤销同事务回滚；UI 保留身份 | PASS |
+| 12 | 014/036/031 | `9a6e039` | 挂载 Vue：offline 有效 JoinInfo 保留并警告；unavailable 重新选择只清旧指针；current 优先；计时明确为申请总时长 | PASS |
+| 13 | 007/008 | `1ccc885` | 100 silent Ready 实例下两秒总预算；未查询/取消不制造失败；Job 独立 timeout | PASS |
+| 14 | 009/010 | `9577e30` | 共享 Workshop/version grammar；边界/保留名称/路径字符、写前拒绝无审计；开发旧数据异常数 0 | PASS |
+| 15 | 026 | `f3d2b0f` | resolved addon subtree 写前拒绝，Windows Junction/Linux symlink、合法前缀同级目录；无 release 写入 | PASS |
+| 16 | 022/025 | `4b06c1b` | Windows ValidateOnly 缺 content-tool 拒绝、完整 fixture 通过；Linux jq 缺失预检 | PASS |
+| 17 | 028/029 | `1a77518` | 挂载 Vue：dirty 草稿跨 refresh 保留、服务器变更要求同步；503 重试保留登录、401 重新登录 | PASS |
 
-## FIX-05：未建立存储连续性证明
+## FIX-05 的证明边界与 Owner acceptance
 
-**续作更新：**Owner 已提供同一 manager incarnation 的窄连续性契约，原先缺少 continuity 契约的问题已获得方向。实施前的定向验证发现另一项必要条件尚未成立：同一 manager 的后续拒绝不能证明较早超时请求已经执行完毕。见 [同 incarnation 延迟请求反例](a4-fix05-incarnation-counterexample.md)。按续作授权第九节再次 STOP；FIX-05 仍 BLOCKED，不将原契约简单标为 PASS。FIX-01～04 与既有五个提交全部保留，未修改实现或新增 migration。
+ADJ-011 原事实保留：unknown create 没有自动 no-effect proof。HIGH 的 V1 发布阻塞通过 fail-closed、audited quarantine、Owner escape、retained capacity/history、node retirement runbook、正式 regression、明确 Known Limitation 和 Owner acceptance 完成运营闭环。**Residual limitation accepted for V1.** 不称为“自动 no-effect recovery 已修复”。
 
-Owner 要求：同一 frozen key/request、明确 post-key-lookup、可信当前 storage continuity、可信 history window、无既有 core IDs，全部成立后才能生产 `RECONCILED_NO_EFFECT`。
+无可信 IDs 的已发出 unknown create 不因 retry rejection、反复空 list、manager restart、相同路径/marker 或 history expiry 释放。禁止合成 `RECONCILED_NO_EFFECT`。旧 key 后来取得 IDs 时走原 identity → status/operation → stop/full reclaim。纯 pending 未 claim 的 reservation 使用 FIX-06 独立安全终结规则，不放宽 quarantine。
 
-本机 Go module 的 Origin.Hash 核实为固定
-`988720ad85af1f0d97bfe98ec4da4fcbb070beea`，不是 main。
-核对的固定源码：
+`tests/coreproof` 直接使用固定 core Store；确定性 barrier 模拟同 manager 中请求 A 已读入、Respond 前挂起，B 同 key 先返回 NO_PORT_AVAILABLE，随后 A 创建成功。它是正式长期保留的调度反例，**不是完整 IPC 或真实 Dota 测试**。Platform PG 回归独立证明 B 的拒绝不得释放旧 unknown Allocation。Runner/PG/既有 HTTP 回归覆盖 unknown 占容、在线 Admin 隔离、Owner/leader 二次确认与幂等 abandon、非 Owner 禁止、新独立 Request、迟到旧报告及最终三元 reclaim。
 
-- `internal/records/records.go:323`：CreateChecked 先 ValidateKey/Fingerprint，再查 State.Keys，随后加载模板、check、分配端口。某些拒绝确实位于 key lookup 之后，不能扩大到 protocol/path 预检拒绝。
-- `internal/core/storage.go:28`：list.storage 只有 checkedAt、freeBytes、minFreeBytes、historyDays、error；没有 durable storage generation、manager identity 或历史完整性证明。
-- `client/client.go:40` 与 `internal/localipc/ipc.go:208`：每次 Call 重新读取 endpoint 并连接，每连接一个请求/响应；持有同一个 Go Client 对象不能证明两次请求来自同一个 manager/storage。
-- `docs/local-api.md:9` 与 `internal/localipc/ipc.go:52`：endpoint.json 是文档化的传输发现信息，manager 创建随机地址；文档明确它不是信任凭据。它可能成为进一步研究的 manager 连续性 witness，但当前客户端没有将所调用的 endpoint identity 与响应一起返回，当前冻结 execution 也未保存这样的证据。不能将简单路径相等或两次读取相等未经论证地当作存储连续性证明。
+完整运营路径、节点禁止重注册恢复账面容量、备用节点/独立授权重建边界及 Owner 接受文字见 [operations](../operations.md)。本次未退役或重建任何节点。
 
-必须区分两个历史：A 为首次调用从未产生实例，B 为首次调用产生实例但响应丢失、随后原存储丢失/替换。
-没有连续性证据时，两者都可能在当前空库存和重试的 post-lookup 拒绝中呈现相同 API 结果。
-因此同 key/fingerprint + 当前 historyDays + 无已知 IDs 本身不足以排除 B。
+## 协议、文件与迁移
 
-本轮没有实现白名单释放、list 空集释放、手动强制释放，也没有修改 core 或猜测进程身份。
-这是当前 **API-only 证明方案**的阻塞，不宣称所有可能的旁路连续性 witness 都已被证明不可行。
-按 Owner 的技术冲突 STOP 条款，需先明确并论证允许的连续性证据契约，再继续 FIX-05；不能把该项改为 deferred 或宣告 PASS。
+主要实现位于 `internal/platform/store`、`internal/platform/httpapi`、`internal/controller/runner`、`internal/controller/network`、`internal/contenttool`、`internal/contracts/contentid`、`web/src` 和 `deploy`。Node API 增加受限 independent-stop claim 和 Ready JoinInfo fact；Admin API 增加 pending 终结及 expected entry revision，见正式 API 文档。
 
-## 实际检查
+唯一新增 migration：`0019_a4_next_game_eligibility.sql`，给 next_game_intents 增加 nullable failure_reason。0001～0018 未编辑。18→19 升级回归保存既有合法 Request/Allocation/NodeJob JSON 快照、Catalog 与当前入口 attestation，并验证重复升级。开发 DB 在受限路径备份后升级到 19。二进制回滚不等于数据库回滚；不删除不可变版本或资源历史。
 
-- FIX-01 先写回归：旧实现 6 个子用例全部按预期失败，出现 occupied 0→1 或下一局 owner 唯一约束冲突；修复后通过。
-- 新建独立本地 PostgreSQL 16.4 cluster，loopback 独立端口；没有连接历史、开发服务或生产数据库。每个测试使用并清理独立 schema。
-- 各 FIX 提交前所列 targeted regression：PASS。
-- `go test -count=1 ./...`，设置 disposable PG 的 `PLATFORM_TEST_DATABASE_URL`：PASS；含 Store、HTTP integration 与已有 migration upgrade 测试。Store 35.427s，HTTP 3.383s。
-- `go vet ./...`：PASS。
-- Windows 三命令 `go build ./cmd/platform-server ./cmd/node-controller ./cmd/content-tool`：PASS。
-- Linux amd64 同三命令 cross-build：PASS。不是 Linux runtime tests。
-- 已修改 Go 文件经 gofmt。
-- Go build 曾输出只读 module stat-cache 写入警告，但命令退出码为 0；不把此警告隐藏为无诊断执行。
+## 自动验证
 
-## 文件、协议和迁移
+- Windows `go test ./... -count=1`，启用独立 disposable PostgreSQL 16.4：PASS。Store 41.823s，HTTP 3.769s；完整 fresh migration、Store/HTTP integration 和 upgrade tests。新增历史快照升级回归另行 PASS。
+- `go vet ./...`：PASS。Windows amd64 与 Linux amd64 三命令 build：PASS；Linux 本地交叉构建不冒充 Linux runtime 测试。
+- `go -C tests/coreproof test -mod=readonly -count=1 ./...`：PASS。
+- lockfile `npm ci`、lint、typecheck、27 项 Web 测试、production build：PASS。组件测试使用 jsdom 真实挂载 Vue。
+- gofmt、git diff --check：PASS。Windows ValidateOnly fixture 不安装服务/任务。
+- 实现 SHA `1a775188d9e9ed819dba4873e5f3dcb4cc809655` 的 [CI 36306537049](https://github.com/L4C99/dota2-arcade-platform/actions/runs/36306537049)：Ubuntu Go、Windows Go、Web、PostgreSQL 四项均 success，包括两 OS 的固定 core counterexample。
+- 本报告与升级快照回归提交后的最终 SHA 必须再次四项 CI 全绿，再冻结；最终 SHA/run URL 在本次交付回执中记录，避免在提交内自引用 SHA。实现 SHA 结果不替代最终文档提交的 CI。
 
-主要实现：`internal/platform/store/node_jobs_api.go`、`reconcile.go`、
-`internal/platform/httpapi/node.go`、`internal/controller/runner/runner.go`、
-`internal/controller/platformclient/client.go`。
-新增正式测试：`a4_terminal_test.go`、`a4_stop_claim_test.go`、`a4_recovery_test.go`。
-Node API v1 增加可选 `independentStop=true` claim 筛选，见 `docs/node-protocol.md`。
-没有新增 migration；latest 仍为 18。没有 Web、Admin API 或 d2core 协议变更。
+环境诊断如实保留：沙箱最初阻止 esbuild 子进程，获准执行后测试/build 通过；Go telemetry/stat-cache 有拒写警告但命令退出 0。npm ci 报告两项 moderate dependency advisories，未做跨版本强制升级。
 
-## NOT VERIFIED / 停止状态
+## 真实开发专项
 
-- FIX-05～17 未完成；没有完整 A.4 regression 结论。
-- 未执行本轮 Web clean npm ci/lint/typecheck/tests/build；Web 未改动。
-- 没有本检查点的 GitHub Actions 证据，也没有最终修复 SHA CI 全绿结论。
-- 未连接真实 Linux game node、Windows VM 或生产；没有真实 Dota/JoinInfo/URI/stop failure 专项。mock 与 PG 不替代这些检查。
-- 没有新的 18→19 migration，故没有该升级证据；已有 migration tests 通过不代表未来 migration 已验证。
-- 原 Candidate 保留。修复提交仅本地保存，未 push；origin/main 仍为原 Candidate，因此 origin/main != HEAD。
-- 本报告作为独立文档提交保存；最终检查点 SHA 与 git status 见会话完成报告，避免文档自引用 commit SHA。
-- 下一步是解决 FIX-05 的连续性证明契约，然后继续原 A.4 顺序；不是 RC1、部署、Tag 或 Release。
+所有自动回归通过后才访问已记录的开发 Web/DB、Linux game node、Windows VM。初检两节点 occupied=0、open jobs=0、活动 Request=0，core list 各为空。两节点先 Drain；不改 firewall/NAT/router、App570、VPK、入口 revision 或固定 core。Catalog 既有 Workshop/version 非法记录计数均为 0。
 
-## Supplemental adjudication 方案 A — 当前执行更新
+开发 Platform 与两 Controller 使用干净实现 SHA `1a77518` 新文件名构建，传输 SHA256 一致；开发 DB 备份后迁移到19。开发 Web 未换包；前端修改由本地 clean build/组件测试及 CI 验证。没有生产部署。
 
-Owner 于本次续作正式接受 `supplemental-adjudication-adj011-fix05.md` 方案 A，替代原自动 no-effect 要求；以上 STOP 检查点仅作历史记录。
+| 环境 | Request / Allocation | Instance | 结果 |
+|---|---|---|---|
+| Linux 新图 custom | `d79b2a50-3dd1-4f91-821e-eede3d577b44` / `a3a1e65f-7e9c-46bf-b5d2-47523682d6a3` | `i_635f28412292d1b319f6c927a3fdb7b1` | 正式 Player create → Ready/JoinInfo；Owner 当次确认 connect 成功；Controller 重启后原 ID/PID 保持；正常 stop → full reclaim |
+| Windows 旧图 n6 | `4855231a-449b-44ad-846c-3692ff1fe884` / `c2871a89-d494-4674-ae63-45f95e20cade` | `i_29c3a8896d461362e6a5c716d4126219` | create → Ready/内网 JoinInfo；Controller 重启后原 ID/PID 保持；正常 stop → full reclaim |
 
-FIX-05：**PASS — operational mitigation / safety boundary accepted**。ADJ-011 的原可用性事实保留：unknown 无自动 no-effect proof。Residual limitation accepted for V1。
+Windows 新图 binding 本来未开放，最初等待请求 `a2c3ac4c-5054-4359-9ccc-0929dc5959f0` 在无 Allocation 时取消，随后改用已开放旧图；没有放宽 admission 或切换内容。两实例均由固定 core 确认 `lifecycle=reclaimed/process=stopped/cleanup=complete`，create/stop Job 均 succeeded，core list 为空。最终 occupied/open jobs/活动 Request 为 `0/0/0`；reconcile Linux `15/15`、Windows `7/7`。原 Drain=false、desired=1 恢复，地图 binding 原值保留。
 
-已关闭 unknown→rejected_no_effect（含合成 RECONCILED_NO_EFFECT）入口，首次明确无副作用拒绝仍允许。固定 core 延迟请求反例转为 `tests/coreproof` 独立正式测试 module 并加入 Windows/Linux CI；不修改 core。Runner 保守回归覆盖反复空 inventory、端口拒绝、重建 Runner、history expiry 和原 IDs 恢复；PG 回归覆盖在线 Admin 隔离、Owner 重复 abandon、独立新 Request、迟到 accepted/succeeded/failed 和 full reclaim、Drain 后禁调度，旧账本保留。现有 HTTP 二次确认与普通成员/无关用户拒绝回归同跑通过。Node API 不再接受 unknown 的人为 no-effect 证明标签。
+Linux Steam/steamchina 两套原 verified/enabled 均仍为 true；Windows 原四项 false 保持。两节点入口 revision 前后相同。临时测试管理员已 logout、disabled，活跃会话已撤销。Windows Controller 沿用原前台 SSH 运行方式，没有安装无人值守服务。
 
-Runbook 与 Owner Acceptance 见 `docs/operations.md` 的 V1 Known Limitation。没有增加 manager incarnation、endpoint/token、marker 或磁盘连续性假设。没有 migration。FIX-06～17 现在继续执行，不再因旧证明阻塞而等待。
+## 保留限制及阶段边界
 
-## FIX-09 — revision-bound entry actions
-PASS: verification and opening compare the displayed revision under the entry row lock. Stale/missing revisions do not mutate or audit success. Existing monotonic verification and independent schemes remain. Targeted PostgreSQL entry/admin/JoinInfo tests and Web typecheck passed.
-
-## FIX-10 — proxy identity and bounded login penalties
-PASS: dedicated loopback proxy identity contract, canonical addresses, no trust in public forwarding headers. Saturation denies new keys without resetting/evicting active penalties. Regression covers forged headers and 20,000-key flood plus idle expiry. Targeted HTTP tests passed.
-
-## FIX-11 — truthful logout and atomic session rotation
-PASS: injected PostgreSQL UPDATE failures for player/admin session revocation return 503 without clearing cookies. Failed admin rotation rolls back the inserted session and preserves the old session; retry succeeds after fault removal. HTTP regression and Web typecheck passed.
-
-## FIX-12 — player recovery and truthful connection status
-PASS: offline/stale heartbeat preserves valid running JoinInfo with warning; unavailable history offers explicit reselection and clears only the historical request pointer. Current request takes priority. Creating timer is labelled request-total time. Mounted Vue regressions plus full Web suite (24 tests) and typecheck passed.
-
-## FIX-13 — bounded optional diagnostics
-PASS: two-second A2S total budget, no fabricated failure for unqueried/cancelled probes, independent Job context. Network tests cover 100 silent Ready instances plus successful/challenge and actual failed UDP probes; node-controller compiles.
-
-## FIX-14 — shared content identifier boundaries
-Implemented shared Workshop/version validators, registration rejection before writes, and Web constraints. Boundary tests and PostgreSQL rejection/no-audit regression passed; Content Tool/config/content publication targeted tests passed. Existing development catalog anomaly audit remains part of the final development-node preflight.
-
-## FIX-15 — resolved content-root isolation
-PASS: pre-write containment guard resolves existing parents and Windows Junctions, handles case and path-component boundaries, accepts prefix siblings. Full Content Tool tests passed on Windows including rejection without release writes and Junction alias regression; Linux symlink coverage is queued in full matrix.
-
-## FIX-16 — deployment prerequisites
-PASS locally: Windows ValidateOnly rejects missing content-tool.exe and accepts a complete fixture without registering tasks. Linux wrapper explicitly checks jq; README lists installation prerequisite. Linux execution is queued in full matrix. No host configuration changed.
-
-## FIX-17 — retained node drafts and recoverable overview errors
-PASS: refresh preserves dirty node scheduling fields; changed server values block stale save until explicit discard/resync. 503 overview offers retry without dropping authenticated state; 401 returns to login. Mounted component regressions also cover logout failure. Full Web suite: 27 passing tests; typecheck passed.
+- unknown 无自动 no-effect proof，容量可能永久占用：V1 安全优先限制已由 Owner 明确接受，不能写成已回收。未来 recovery proof primitive 需另起版本设计审查。
+- 不破坏真实 d2core 状态来强行制造 stop failure；此边界由隔离 regression 覆盖。
+- Windows 公网/真人连接、两真人 Party 验收、全新 Ubuntu 安装、Windows 无人值守重启、生产 TLS/恢复/部署未验证，仍属既有后续门槛。
+- 本次没有 RC1、Tag、Release、生产操作、core API 或 d2core v0.1.2。
+- 保留原 Candidate 历史。最终交付须工作树 clean、origin/main=HEAD，且该 SHA 四项 CI success，才成为 Post-A.4 Candidate。建议下一阶段是单独授权的 RC1；本 A.4 不开始它。
