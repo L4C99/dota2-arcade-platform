@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import zipfile
 
@@ -99,6 +100,7 @@ def archive(source, target, windows=False):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", default="v1.0.0-rc1")
     parser.add_argument("--output", required=True, help="new directory beneath dist/")

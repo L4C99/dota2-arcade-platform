@@ -70,6 +70,22 @@ jobs:
 
   web:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: postgres
     defaults:
       run:
         working-directory: web
@@ -88,7 +104,14 @@ jobs:
         run: python3 tools/release.py --output dist/rc1-ci
       - name: Linux artifact smoke and archive integrity
         working-directory: .
-        run: python3 tools/release_smoke.py dist/rc1-ci
+        run: |
+          createdb rc1_artifact
+          python3 tools/release_smoke.py dist/rc1-ci
+        env:
+          PLATFORM_SMOKE_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/rc1_artifact?sslmode=disable
+      - name: Dispose artifact smoke database
+        if: always()
+        run: dropdb --if-exists rc1_artifact
       - uses: actions/upload-artifact@v4
         with:
           name: rc1-${{ github.sha }}

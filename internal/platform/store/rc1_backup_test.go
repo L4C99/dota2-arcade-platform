@@ -34,6 +34,17 @@ func rc1Snapshot(t *testing.T, pool *pgxpool.Pool, upgrading bool) string {
 	return result.String()
 }
 
+func TestRC1MigrationLedgerRejectsChangedChecksum(t *testing.T) {
+	s := playerTestStore(t)
+	ctx := context.Background()
+	if _, err := s.Pool.Exec(ctx, `UPDATE schema_migrations SET checksum='changed' WHERE version=1`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ApplyMigrations(ctx); err == nil || !strings.Contains(err.Error(), "checksum changed") {
+		t.Fatalf("changed history accepted: %v", err)
+	}
+}
+
 func TestRC1BackupRestore(t *testing.T) {
 	if runtime.GOOS != "linux" || os.Getenv("RC1_BACKUP_TEST") != "1" {
 		t.Skip("opt-in Linux disposable database backup gate")
@@ -85,10 +96,13 @@ func TestRC1BackupRestore(t *testing.T) {
 	dir := t.TempDir()
 	serviceFile := filepath.Join(dir, "pg_service.conf")
 	c := conf.ConnConfig
-	quote := func(value string) string {
-		return "'" + strings.NewReplacer("\\", "\\\\", "'", "\\'").Replace(value) + "'"
+	for _, value := range []string{c.Host, c.User, c.Password} {
+		if strings.ContainsAny(value, "\r\n") {
+			t.Fatal("fixture service values must be single-line")
+		}
 	}
-	service := fmt.Sprintf("[rc1]\nhost=%s\nport=%d\nuser=%s\npassword=%s\ndbname=%s\nsslmode=disable\n", quote(c.Host), c.Port, quote(c.User), quote(c.Password), source)
+	// libpq service files use INI values, not connection-string quoting.
+	service := fmt.Sprintf("[rc1]\nhost=%s\nport=%d\nuser=%s\npassword=%s\ndbname=%s\nsslmode=disable\n", c.Host, c.Port, c.User, c.Password, source)
 	if err := os.WriteFile(serviceFile, []byte(service), 0600); err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,8 @@ import struct
 import subprocess
 import tarfile
 import tempfile
+import time
+import urllib.request
 import zipfile
 
 
@@ -103,6 +105,33 @@ def main():
         config["hardMaxInstances"] = 99
         configPath.write_text(json.dumps(config))
         call("node-controller", "check", "--config", configPath, success=False)
+    if native == "linux" and os.environ.get("PLATFORM_SMOKE_DATABASE_URL"):
+        env = dict(os.environ, PLATFORM_DATABASE_URL=os.environ["PLATFORM_SMOKE_DATABASE_URL"],
+                   PLATFORM_ENV="development", PLATFORM_MAX_PARTY_SIZE="4",
+                   PLATFORM_LISTEN_ADDR="127.0.0.1:18089", PLATFORM_PUBLIC_ORIGIN="http://127.0.0.1:18089",
+                   PLATFORM_WEB_ROOT=str(root / "staging/control-plane-linux/web"))
+        subprocess.run([binary("platform-server"), "migrate"], env=env, check=True, capture_output=True)
+        process = subprocess.Popen([binary("platform-server"), "serve"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for attempt in range(100):
+                try:
+                    with urllib.request.urlopen("http://127.0.0.1:18089/healthz", timeout=1) as response:
+                        assert response.status == 200
+                    break
+                except OSError:
+                    if process.poll() is not None: raise RuntimeError("Platform exited before health")
+                    time.sleep(0.1)
+            else: raise RuntimeError("Platform health timed out")
+            for route in ("/", "/admin", "/BUILD.json"):
+                with urllib.request.urlopen("http://127.0.0.1:18089" + route, timeout=2) as response:
+                    assert response.status == 200
+                    if route == "/BUILD.json": assert json.load(response)["gitCommit"] == manifest["gitCommit"]
+        finally:
+            process.terminate()
+            try: process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill(); process.wait()
+        print("PASS: packaged Platform migrate/health and paired Web in disposable DB setup")
     print(f"PASS: checksums, architecture, archives, permissions, notices, {native} artifact identity/config/filesystem smoke")
 
 
