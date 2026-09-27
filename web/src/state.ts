@@ -17,6 +17,10 @@ export function statusFor(request: ServerRequest | null, allocation: Allocation 
   if (request.state === 'quarantined' || allocation?.state === 'quarantined')
     return { phase: 'quarantined', title: '服务器清理异常', description: '旧服务器是否已关闭暂时无法确认，原节点容量仍被占用。队长可以放弃此异常服务器并继续申请；管理员会处理旧资源。' }
   const assignedNode = nodes.find((item) => item.id === allocation?.nodeId)
+  if (request.state === 'running' && allocation?.state === 'running' && allocation.joinInfo && allocation.joinInfoAvailableAt && allocation.readyAt)
+    return { phase: 'ready', title: '可以进入', description: assignedNode && assignedNode.connectivity !== 'online'
+      ? '节点心跳暂不可达，服务器可能仍在运行。可尝试已有连接方式；状态恢复后平台会继续核对。'
+      : '复制下方命令，在 Dota 2 控制台连接服务器。' }
   if (allocation && assignedNode && assignedNode.connectivity !== 'online' &&
     ['reserved', 'create_unknown', 'creating', 'running', 'stopping', 'failed_unreclaimed'].includes(allocation.state))
     return { phase: 'unknown', title: '节点暂不可达', description: '当前服务器状态无法确认，旧资源仍占用容量。平台不会在其他节点重复开服；节点恢复后会先对账。' }
@@ -55,6 +59,8 @@ export function statusFor(request: ServerRequest | null, allocation: Allocation 
     return { phase: 'ended', title: '申请已取消', description: '等待申请已安全取消，没有占用服务器。可以重新选择节点申请。' }
   if (request.state === 'ended')
     return { phase: 'ended', title: '已结束', description: '服务器已完整回收，可以重新申请。' }
+  if (request.state === 'unavailable')
+    return { phase: 'ended', title: '无法继续分配', description: '本次申请已结束，可以重新选择地图、玩法和节点后申请。' }
   return { phase: 'error', title: '服务器状态需要处理', description: '当前资源仍可能占用容量。请保留此页面并联系管理员，勿重复申请。' }
 }
 

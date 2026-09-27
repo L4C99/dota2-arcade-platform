@@ -105,3 +105,6 @@ PASS: dedicated loopback proxy identity contract, canonical addresses, no trust 
 
 ## FIX-11 — truthful logout and atomic session rotation
 PASS: injected PostgreSQL UPDATE failures for player/admin session revocation return 503 without clearing cookies. Failed admin rotation rolls back the inserted session and preserves the old session; retry succeeds after fault removal. HTTP regression and Web typecheck passed.
+
+## FIX-12 — player recovery and truthful connection status
+PASS: offline/stale heartbeat preserves valid running JoinInfo with warning; unavailable history offers explicit reselection and clears only the historical request pointer. Current request takes priority. Creating timer is labelled request-total time. Mounted Vue regressions plus full Web suite (24 tests) and typecheck passed.

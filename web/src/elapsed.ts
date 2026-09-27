@@ -28,7 +28,7 @@ export function elapsedFor(request: ServerRequest | null, allocation: Allocation
     const started = allocation?.createStartedAt
     const seconds = liveSeconds(request.requestedAt, nowMs)
     if (seconds === null) return null
-    return { summary: `${started ? '正在启动服务器' : '正在准备服务器'} · 已用时约 ${seconds} 秒` }
+    return { summary: `${started ? '正在启动服务器' : '正在准备服务器'} · 申请至今约 ${seconds} 秒` }
   }
   if (phase !== 'ready' || !allocation?.joinInfo) return null
   const requestedMs = timestamp(request.requestedAt)
