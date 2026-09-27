@@ -20,7 +20,7 @@ jobs:
         shell: bash
         run: test -z "$(gofmt -l cmd internal)"
       - name: Test
-        run: go test ./...
+        run: go test ./... -count=1
       - name: Fixed core delayed-create safety counterexample
         run: go -C tests/coreproof test -mod=readonly -count=1 ./...
       - name: Vet
@@ -30,7 +30,9 @@ jobs:
       - name: Linux deployment script syntax
         if: runner.os == 'Linux'
         shell: bash
-        run: bash -n deploy/systemd/start-d2core-manager.sh deploy/scripts/backup-postgres.sh
+        run: |
+          bash -n deploy/systemd/start-d2core-manager.sh deploy/scripts/backup-postgres.sh deploy/scripts/switch-platform-release.sh
+          python3 tools/deploy_check.py
       - name: Windows deployment script syntax
         if: runner.os == 'Windows'
         shell: pwsh
@@ -63,6 +65,8 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./internal/platform/store ./internal/platform/httpapi -count=1
+        env:
+          RC1_BACKUP_TEST: '1'
 
   web:
     runs-on: ubuntu-24.04
@@ -76,8 +80,33 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Clean Web checks and all supported release packages
+        working-directory: .
+        run: python3 tools/release.py --output dist/rc1-ci
+      - name: Linux artifact smoke and archive integrity
+        working-directory: .
+        run: python3 tools/release_smoke.py dist/rc1-ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rc1-${{ github.sha }}
+          path: |
+            dist/rc1-ci/*-amd64
+            dist/rc1-ci/*.exe
+            dist/rc1-ci/*.zip
+            dist/rc1-ci/*.tar.gz
+            dist/rc1-ci/MANIFEST.json
+            dist/rc1-ci/SHA256SUMS
+
+  windows-artifacts:
+    needs: web
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: rc1-${{ github.sha }}
+          path: dist/rc1-ci
+      - run: python tools/release_smoke.py dist/rc1-ci

@@ -23,6 +23,7 @@ Thumbs.db
 data/
 dist/
 node_modules/
+__pycache__/
 .cache/
 .local/
 .local-appdata/

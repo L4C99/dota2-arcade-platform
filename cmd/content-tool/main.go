@@ -6,10 +6,18 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/L4C99/dota2-arcade-platform/internal/buildinfo"
 	"github.com/L4C99/dota2-arcade-platform/internal/contenttool"
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "version" {
+		if err := buildinfo.Write(os.Stdout, "content-tool"); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	contentRoot := flag.String("content-root", os.Getenv("CONTENT_ROOT"), "absolute content repository root")
 	dotaRoot := flag.String("dota-root", os.Getenv("DOTA_ROOT"), "absolute Dota installation root")
 	flag.Parse()

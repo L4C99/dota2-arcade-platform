@@ -28,9 +28,12 @@ func main() {
 }
 
 func run(args []string) error {
-	if len(args) == 1 && args[0] == "version" {
-		fmt.Printf("platform-server %s (%s)\n", buildinfo.Version, buildinfo.Commit())
+	if len(args) == 1 && (args[0] == "--help" || args[0] == "help") {
+		fmt.Println("usage: platform-server serve|migrate|admin|node|allocation|version")
 		return nil
+	}
+	if len(args) == 1 && args[0] == "version" {
+		return buildinfo.Write(os.Stdout, "platform-server")
 	}
 	if len(args) == 0 {
 		return errors.New("usage: platform-server serve|migrate|admin create <username>|admin reset-password <username>|version")

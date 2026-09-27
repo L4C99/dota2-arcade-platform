@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -83,7 +84,7 @@ func TestA4UpgradeFromMigration18PreservesCatalog(t *testing.T) {
 	gameID, presetID := seedPlayerCatalog(t, s)
 	// Include legitimate pre-upgrade request/allocation/job history, not only
 	// catalog rows. The additive migration must preserve these byte-for-byte.
-	_ = p3CapacityNode(t, s, "upgrade reservation", 1)
+	resourceNode := p3CapacityNode(t, s, "upgrade reservation", 1)
 	userID, _, err := s.CreateUserSession(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -94,12 +95,34 @@ func TestA4UpgradeFromMigration18PreservesCatalog(t *testing.T) {
 	if changed, err := s.TryAllocateOne(ctx); err != nil || !changed {
 		t.Fatalf("reserve before upgrade: %v %v", changed, err)
 	}
-	snapshotSQL := `SELECT jsonb_build_object(
-		'requests',(SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM server_requests r),
-		'allocations',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM allocations a),
-		'jobs',(SELECT jsonb_agg(to_jsonb(j) ORDER BY j.id) FROM node_jobs j))::text`
-	var beforeHistory string
-	if err := pool.QueryRow(ctx, snapshotSQL).Scan(&beforeHistory); err != nil {
+	job, err := s.ClaimNextJob(ctx, resourceNode)
+	if err != nil || job == nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, err := s.PrepareCreate(ctx, resourceNode, job.ID, "/tmp/upgrade-template.json", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReportJob(ctx, resourceNode, job.ID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_upgrade", OperationID: "o_upgrade"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReportJob(ctx, resourceNode, job.ID, nodev1.ReportRequest{State: "succeeded", InstanceID: "i_upgrade", OperationID: "o_upgrade", JoinInfoErrorCode: "PORT_MAPPING_UNAVAILABLE"}); err != nil {
+		t.Fatal(err)
+	}
+	var requestID string
+	if err := pool.QueryRow(ctx, `SELECT id FROM server_requests WHERE owner_user_id=$1`, userID).Scan(&requestID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.NextGameUserRequest(ctx, userID, requestID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ConfigurePartySize(ctx, 4); err != nil {
+		t.Fatal(err)
+	}
+	partyUser, _, err := s.CreateUserSession(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateParty(ctx, partyUser); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateAdmin(ctx, "p5-upgrade-admin", "a long test password"); err != nil {
@@ -114,15 +137,19 @@ func TestA4UpgradeFromMigration18PreservesCatalog(t *testing.T) {
 		VALUES($1,$2,now(),true,true,true,true)`, nodeID, strings.Repeat("a", 64)); err != nil {
 		t.Fatal(err)
 	}
+	beforeHistory := rc1Snapshot(t, pool, true)
 	if err := s.ApplyMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.ApplyMigrations(ctx); err != nil {
 		t.Fatalf("idempotent upgrade: %v", err)
 	}
-	var afterHistory string
-	if err := pool.QueryRow(ctx, snapshotSQL).Scan(&afterHistory); err != nil || afterHistory != beforeHistory {
-		t.Fatalf("history changed during upgrade: %v", err)
+	if afterHistory := rc1Snapshot(t, pool, true); afterHistory != beforeHistory {
+		t.Fatal("history changed during upgrade")
+	}
+	var failureReason *string
+	if err := pool.QueryRow(ctx, `SELECT failure_reason FROM next_game_intents WHERE source_request_id=$1`, requestID).Scan(&failureReason); err != nil || failureReason != nil {
+		t.Fatalf("legacy intent failure reason: %v", err)
 	}
 	var version int
 	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 19 {

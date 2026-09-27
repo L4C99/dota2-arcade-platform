@@ -2,7 +2,7 @@
 
 面向 Dota 2 游廊玩家的自助专服平台。玩家以匿名会话选择游戏和玩法，单人或持久 Party 可申请专属服务器；平台排队并选择节点，在 d2core 报告 Ready 且 JoinInfo 有效后提供连接信息，结束或下一局须等待完整回收。管理员可管理内容发布目标、节点准入、维护和经真人确认的一键入口。
 
-**状态：P0–P5 实现与开发阶段验收已完成。** Candidate Freeze 结论见[候选准备记录](docs/validation/candidate-prep.md)；独立代码审查、RC、生产上线和最终 V1 Release 尚未完成。[P5 收口](docs/validation/p5-summary.md)记录开发验收及未验证项。两位真人同一 Party 进入同一真实实例的试用已按 [Amendment 002](docs/specs/v1-amendment-002-human-trial-gate.md)延至 A.7，仍是最终 Release 的必过门槛。
+**状态：V1 implementation complete；A.4 已完成，当前为 RC1 engineering candidate。** [RC1 记录](docs/validation/rc1.md)说明工程检查、产物与剩余门槛；这不是 production release。A.2/A.3 原审查基线 `9bf6d7d6b3195ca8af954a702ed69827f22afc4d` 永久保留，[A.4 收口](docs/validation/a4-repair.md)记录定向修复。[P5 收口](docs/validation/p5-summary.md)保留开发验收证据。两位真人同一 Party 进入同一真实实例的试用已按 [Amendment 002](docs/specs/v1-amendment-002-human-trial-gate.md)延至 A.7，仍是最终 Release 的必过门槛。
 
 ## 组成与边界
 
@@ -19,7 +19,7 @@ V1 不提供 Steam 登录、公开 Party 发现或匹配、自动下载 VPK、�
 
 ## 开发与构建
 
-需要 Go **1.27.1 或更新**、Node.js 22、npm；PostgreSQL 集成测试需要独立的测试数据库。示例配置在 [configs/examples](configs/examples/)，真实 Secret、数据库连接信息、节点路径、VPK 和备份保存在仓库外。Go migration 位于 `internal/platform/store/migrations/`，当前最新版本为 **18**，由 `platform-server migrate` 显式应用；迁移是前向的，恢复流程见[运维说明](docs/operations.md)。
+需要 Go **1.27.1 或更新**、Node.js 22、npm；PostgreSQL 集成测试需要独立的测试数据库。示例配置在 [configs/examples](configs/examples/)，真实 Secret、数据库连接信息、节点路径、VPK 和备份保存在仓库外。Go migration 位于 `internal/platform/store/migrations/`，当前最新版本为 **19**，由 `platform-server migrate` 显式应用；迁移是前向的，恢复流程见[运维说明](docs/operations.md)。
 
 ```sh
 go test ./...
@@ -35,7 +35,7 @@ npm run build
 
 设置 `PLATFORM_TEST_DATABASE_URL` 后，Go 测试还会运行 PostgreSQL 集成和升级测试；未设置时相应测试跳过。跨平台和 PostgreSQL CI 定义在 [ci.yml](.github/workflows/ci.yml)。
 
-RC1 构建可从审查裁决后的固定 SHA 分别交叉编译三个 Go 命令的 Linux amd64 / Windows amd64 二进制，并运行 `web` 的 `npm ci && npm run build` 得到 `web/dist`。`platform-server` 与 Web bundle 应一起打包；节点包还需部署独立取得的固定 d2core v0.1.1 及其 `BUILD.json`。正式 artifacts、SHA256、第三方再分发核对和 Release 打包属于 RC/Release 阶段，本 Candidate 准备不产出正式包。
+从干净 checkout 用 Python 3.10+ 执行 `python tools/release.py --output dist/rc1`，再运行 `python tools/release_smoke.py dist/rc1`。构建生成 Linux 三命令、Windows Controller/Content Tool、production Web、三个部署包及 SHA256/manifest；不发布 Windows Platform Server。详情见[打包说明](docs/release.md)。节点单独取得固定 d2core v0.1.1 及其 `BUILD.json`，Platform 包不附带 d2core server binary；Controller 编入的 client 授权及依赖声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 部署参考入口为 [deploy/README.md](deploy/README.md)，具体安装、升级、备份及恢复见[运维说明](docs/operations.md)。Ubuntu 全新 systemd 安装、Windows 无人值守启动与公网入口、生产恢复及生产部署仍须按后续阶段实际验证。`prototype/p1/` 仅保留 P-1 历史视觉与交互参考，使用模拟数据，**不是当前 Web 实现**；正式前端在 `web/`。
 

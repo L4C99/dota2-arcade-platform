@@ -233,7 +233,7 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
         <section class="panel admin-card">
           <div class="admin-card-heading"><div><span class="eyebrow">游廊游戏</span><h2>地图设置</h2></div><span class="admin-count">{{ overview.games.length }} 张地图</span></div>
           <div v-for="game in overview.games" :key="game.id" class="admin-entity">
-            <div class="admin-entity-head"><div><h3>{{ game.displayName }}</h3><p>创意工坊 {{ game.workshopId }} · 当前内容版本 <code>{{ game.currentContentVersionId || '未设置' }}</code></p></div><span class="admin-badge">{{ !game.enabled ? '已停用' : game.acceptingNewRequests ? '可申请' : '暂停申请' }}</span></div>
+            <div class="admin-entity-head"><div><h3>{{ game.displayName }}</h3><p>Workshop ID {{ game.workshopId }} · 当前内容版本 <code>{{ game.currentContentVersionId || '未设置' }}</code></p></div><span class="admin-badge">{{ !game.enabled ? '已停用' : game.acceptingNewRequests ? '可申请' : '暂停申请' }}</span></div>
             <p v-if="game.maintenanceMessage" class="admin-note">维护提示：{{ game.maintenanceMessage }}</p>
             <div class="admin-actions"><button type="button" class="secondary-button" :disabled="busy" @click="act({action:'game.update',targetId:game.id,accepting:!game.acceptingNewRequests})">{{ game.acceptingNewRequests ? '暂停申请' : '恢复申请' }}</button><button type="button" class="admin-text-button" :disabled="busy" @click="editMessage('game.update',game.id,game.maintenanceMessage)">编辑维护提示</button><button type="button" class="admin-text-button admin-muted-action" :disabled="busy" @click="act({action:'game.update',targetId:game.id,enabled:!game.enabled})">{{ game.enabled ? '停用地图' : '启用地图' }}</button></div>
           </div>

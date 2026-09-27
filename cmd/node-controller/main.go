@@ -27,16 +27,23 @@ func main() {
 }
 
 func run(args []string) error {
-	if len(args) == 1 && args[0] == "version" {
-		fmt.Printf("node-controller %s (%s)\n", buildinfo.Version, buildinfo.Commit())
+	if len(args) == 1 && (args[0] == "--help" || args[0] == "help") {
+		fmt.Println("usage: node-controller version | check|heartbeat|run --config ABS_PATH")
 		return nil
 	}
-	if len(args) != 3 || args[1] != "--config" || (args[0] != "heartbeat" && args[0] != "run") {
-		return errors.New("usage: node-controller heartbeat|run --config ABS_PATH")
+	if len(args) == 1 && args[0] == "version" {
+		return buildinfo.Write(os.Stdout, "node-controller")
+	}
+	if len(args) != 3 || args[1] != "--config" || (args[0] != "heartbeat" && args[0] != "run" && args[0] != "check") {
+		return errors.New("usage: node-controller check|heartbeat|run --config ABS_PATH")
 	}
 	conf, secret, err := config.Load(args[2])
 	if err != nil {
 		return err
+	}
+	if args[0] == "check" {
+		fmt.Println("controller config and secret format valid; no service contacted")
+		return nil
 	}
 	client := platformclient.New(conf.PlatformURL, conf.NodeID, secret)
 	coreClient, err := core.New(conf.D2CoreDataDir)
