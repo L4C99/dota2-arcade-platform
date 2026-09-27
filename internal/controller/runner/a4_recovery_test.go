@@ -27,6 +27,26 @@ func TestA4RepeatedEmptyInventoryAndRetryRejectionsKeepUnknown(t *testing.T) {
 	}
 }
 
+func TestA4TerminalCreateJoinRepairIsReachable(t *testing.T) {
+	p := &reconcilePlatform{allocations: []nodev1.ActiveAllocation{{ID: "a", InstanceID: "i", State: "running"}}}
+	c := &fakeCore{instance: core.Instance{InstanceID: "i", Lifecycle: "active", Process: "running", Room: "ready", Port: 28000}}
+	r := Runner{Platform: p, Core: c, Network: nodev1.NetworkFacts{ConnectHost: "node.example", LocalPortMin: 28001, LocalPortMax: 28001, MappingMode: "identity"}}
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p.facts[0].JoinInfoErrorCode == "" {
+		t.Fatal("missing mapping not reported")
+	}
+	r.Network.LocalPortMin = 28000
+	r.Network.LocalPortMax = 28000
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p.facts[1].JoinInfo == nil || c.creates != 0 || c.stops != 0 {
+		t.Fatal("terminal create could not repair JoinInfo")
+	}
+}
+
 type a4StopPlatform struct {
 	fakePlatform
 	stop                 nodev1.Job

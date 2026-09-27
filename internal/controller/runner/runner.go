@@ -111,6 +111,10 @@ func (r *Runner) reconcileActive(ctx context.Context, platform activeReconciler)
 				fact.Outcome = "identity_unverified"
 			} else if instance.Lifecycle == "active" && instance.Process == "running" {
 				fact.Outcome = "active"
+				fact.Room = instance.Room
+				if allocation.State == "running" && instance.Room == "ready" {
+					fact.JoinInfo, fact.JoinInfoErrorCode = network.JoinInfo(r.Network, instance.Port)
+				}
 			}
 		}
 		if err := platform.ReportInstanceFact(ctx, allocation.ID, fact); err != nil {

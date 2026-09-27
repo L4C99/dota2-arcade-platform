@@ -72,3 +72,5 @@ Controller 用固定 v0.1.1 Go client 对同用户 d2core manager 发出 `list/c
 `accepted` 后保存两个 core ID；仅在 operation 终结且 status 显示 create 为 active/running/ready，或 stop 为 reclaimed/stopped/complete 时报告 `succeeded`。丢失 create 响应保留 `unknown`，不换 key、不盲目再次 create。明确的无副作用 validate/protocol 拒绝可报告 `rejected_no_effect`；已有 core ID 或无法判断副作用时报告 `unknown`。重启和长断联的完整对账属于 P0E 验收。
 
 A.4 Supplemental FIX-05：固定 core 下 unknown create 不接受 `rejected_no_effect`，包括 `RECONCILED_NO_EFFECT` 标签。管理员可对在线长期 unknown 执行审计 `allocation.quarantine`，但不能对纯 pending 未领取预留使用此恢复路径。Owner escape、容量保留和节点退役 runbook 见 operations.md；隔离不释放容量。
+
+A.4 FIX-08：`POST /allocations/{id}/fact` 可携 `room`、`joinInfo` 或 `joinInfoErrorCode`。终态 create 不再 open 后，Controller 的 active-allocation 对账仍可在同实例 active/running/ready 下补报实际端口及当前 revision。Platform 只更新 running Allocation 的可信连接事实，拒绝身份、端口、Ready/revision 不符，首次 join_info_available_at 不重写。生命周期幂等不吞掉此独立补报路径。

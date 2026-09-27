@@ -80,12 +80,15 @@ type ActiveAllocation struct {
 }
 
 type InstanceFact struct {
-	InstanceID string `json:"instanceId"`
-	Outcome    string `json:"outcome"`
-	Lifecycle  string `json:"lifecycle"`
-	Process    string `json:"process"`
-	Cleanup    string `json:"cleanup"`
-	Port       int    `json:"port"`
+	Room              string    `json:"room,omitempty"`
+	JoinInfo          *JoinInfo `json:"joinInfo,omitempty"`
+	JoinInfoErrorCode string    `json:"joinInfoErrorCode,omitempty"`
+	InstanceID        string    `json:"instanceId"`
+	Outcome           string    `json:"outcome"`
+	Lifecycle         string    `json:"lifecycle"`
+	Process           string    `json:"process"`
+	Cleanup           string    `json:"cleanup"`
+	Port              int       `json:"port"`
 }
 
 type Job struct {

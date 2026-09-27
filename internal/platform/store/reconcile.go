@@ -40,6 +40,17 @@ func (s *Store) ReportInstanceFact(ctx context.Context, nodeID, allocationID str
 	if f.Outcome == "active" && (f.Lifecycle != "active" || f.Process != "running") {
 		return ErrJobConflict
 	}
+	if f.JoinInfo != nil || f.JoinInfoErrorCode != "" {
+		if f.Outcome != "active" || f.Room != "ready" {
+			return ErrJobConflict
+		}
+		if err := (nodev1.ReportRequest{State: "succeeded", JoinInfo: f.JoinInfo, JoinInfoErrorCode: f.JoinInfoErrorCode}).Validate(); err != nil {
+			return ErrJobConflict
+		}
+		if f.JoinInfo != nil && f.JoinInfo.LocalPort != f.Port {
+			return ErrJobConflict
+		}
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -63,6 +74,30 @@ func (s *Store) ReportInstanceFact(ctx context.Context, nodeID, allocationID str
 	}
 	if state == "reclaimed" || state == "released_no_effect" {
 		return tx.Commit(ctx)
+	}
+	if f.JoinInfo != nil || f.JoinInfoErrorCode != "" {
+		if state != "running" {
+			return ErrJobConflict
+		}
+		if f.JoinInfo != nil {
+			var revision string
+			if err := tx.QueryRow(ctx, `SELECT entry_config_revision FROM node_entry_capabilities WHERE node_id=$1 FOR SHARE`, nodeID).Scan(&revision); err != nil {
+				return err
+			}
+			if f.JoinInfo.EntryConfigRevision != revision {
+				return ErrJobConflict
+			}
+			if joinPort == 0 || joinPort == f.Port {
+				j := f.JoinInfo
+				if _, err := tx.Exec(ctx, `UPDATE allocations SET join_local_port=$2,join_public_port=$3,join_connect_host=$4,join_protocol_ip=NULLIF($5,''),join_entry_config_revision=$6,join_info_error_code=NULL,join_info_available_at=COALESCE(join_info_available_at,now()) WHERE id=$1`, allocationID, j.LocalPort, j.PublicPort, j.ConnectHost, j.ProtocolIP, j.EntryConfigRevision); err != nil {
+					return err
+				}
+			}
+		} else {
+			if _, err := tx.Exec(ctx, `UPDATE allocations SET join_info_error_code=$2 WHERE id=$1`, allocationID, f.JoinInfoErrorCode); err != nil {
+				return err
+			}
+		}
 	}
 	if f.Outcome == "reclaimed" {
 		if _, err := tx.Exec(ctx, `UPDATE allocations SET state='reclaimed',reclaimed_at=COALESCE(reclaimed_at,now()) WHERE id=$1`, allocationID); err != nil {
