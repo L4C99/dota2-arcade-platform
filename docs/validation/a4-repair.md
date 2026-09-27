@@ -34,6 +34,8 @@
 
 ## FIX-05：未建立存储连续性证明
 
+**续作更新：**Owner 已提供同一 manager incarnation 的窄连续性契约，原先缺少 continuity 契约的问题已获得方向。实施前的定向验证发现另一项必要条件尚未成立：同一 manager 的后续拒绝不能证明较早超时请求已经执行完毕。见 [同 incarnation 延迟请求反例](a4-fix05-incarnation-counterexample.md)。按续作授权第九节再次 STOP；FIX-05 仍 BLOCKED，不将原契约简单标为 PASS。FIX-01～04 与既有五个提交全部保留，未修改实现或新增 migration。
+
 Owner 要求：同一 frozen key/request、明确 post-key-lookup、可信当前 storage continuity、可信 history window、无既有 core IDs，全部成立后才能生产 `RECONCILED_NO_EFFECT`。
 
 本机 Go module 的 Origin.Hash 核实为固定
