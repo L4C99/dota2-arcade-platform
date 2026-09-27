@@ -1,3 +1,6 @@
 *.go text eol=lf
 go.mod text eol=lf
 go.sum text eol=lf
+# Embedded migration checksums and executable shell scripts use Git's LF bytes.
+*.sql text eol=lf
+*.sh text eol=lf

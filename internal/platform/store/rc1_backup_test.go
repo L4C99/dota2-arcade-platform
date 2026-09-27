@@ -34,17 +34,6 @@ func rc1Snapshot(t *testing.T, pool *pgxpool.Pool, upgrading bool) string {
 	return result.String()
 }
 
-func TestRC1MigrationLedgerRejectsChangedChecksum(t *testing.T) {
-	s := playerTestStore(t)
-	ctx := context.Background()
-	if _, err := s.Pool.Exec(ctx, `UPDATE schema_migrations SET checksum='changed' WHERE version=1`); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.ApplyMigrations(ctx); err == nil || !strings.Contains(err.Error(), "checksum changed") {
-		t.Fatalf("changed history accepted: %v", err)
-	}
-}
-
 func TestRC1BackupRestore(t *testing.T) {
 	if runtime.GOOS != "linux" || os.Getenv("RC1_BACKUP_TEST") != "1" {
 		t.Skip("opt-in Linux disposable database backup gate")
@@ -134,6 +123,22 @@ func TestRC1BackupRestore(t *testing.T) {
 		t.Fatal("public service file accepted")
 	}
 	if err := os.Chmod(serviceFile, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(serviceFile, []byte(strings.Replace(service, "dbname="+source, "dbname="+prefix+"_missing", 1)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	failedDump := filepath.Join(dir, "failed.dump")
+	if _, err := exec.Command("bash", helper, failedDump).CombinedOutput(); err == nil {
+		t.Fatal("failed pg_dump accepted")
+	}
+	if _, err := os.Stat(failedDump); !os.IsNotExist(err) {
+		t.Fatal("failed dump was published")
+	}
+	if partials, err := filepath.Glob(failedDump + ".partial.*"); err != nil || len(partials) != 0 {
+		t.Fatal("failed backup left partial files")
+	}
+	if err := os.WriteFile(serviceFile, []byte(service), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if out, err := exec.Command("pg_restore", "--exit-on-error", "--no-owner", "--dbname", restored, dump).CombinedOutput(); err != nil {

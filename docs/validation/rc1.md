@@ -53,18 +53,47 @@ Restore is explicitly independent of Dota reclamation.
 
 ## Validation state
 
-Engineering implementation checks are in progress; **not yet RC1 READY**.
-Initial local Windows Go full suite on fresh disposable PostgreSQL 16.4 passed,
-including Store/HTTP/A.4 regressions. The expanded 18→19 history snapshot fixture
-passed after correcting its synthetic create sequence to use accepted before
-succeeded and a structured JoinInfo-unavailable reason. This was a test-fixture
-correction, not a business behavior change. Web clean npm ci/lint/typecheck/27
-tests/build passed. Coreproof and vet passed. Final SHA must rerun all gates.
+Implementation SHA `23b4b2c0352653d0deb2fda244c310053028e1ef` passed all five jobs
+in [CI 36310003148](https://github.com/L4C99/dota2-arcade-platform/actions/runs/36310003148):
+Ubuntu Go, Windows Go, Web/package/Linux smoke, PostgreSQL, Windows artifact smoke.
+The final document/gate commit must independently pass these jobs before the
+handoff declares RC1 READY. The final run is discoverable by its exact head_sha
+in GitHub Actions and is linked in the handoff; this earlier run is not substituted.
 
-CI now includes Linux backup→independent restore→row snapshot/migration sanity
-and disposal, systemd syntax with isolated paths, pointer switch/rollback fixture,
-all supported package builds and native Linux/Windows artifact smoke. Final
-results, commits and CI run are recorded when these gates complete.
+| Gate | Actual verification |
+| --- | --- |
+| Go | Local Windows full `go test ./... -count=1` with fresh disposable PostgreSQL 16.4 PASS (Store 38.850s, HTTP 3.631s); Ubuntu/Windows exact implementation-SHA CI test/vet/build PASS; gofmt and diff whitespace checks PASS |
+| Fixed coreproof | `go -C tests/coreproof test -mod=readonly -count=1 ./...` PASS locally and both CI OSes; no IPC/Dota claim |
+| Web | Clean npm ci, lint, typecheck, all 27 existing tests, production build PASS; same gates run inside packaging |
+| Migration | Fresh 1→19, 18→19, repeated current 19 PASS; existing checksum rejection test retained; all 0001–0019 Git SQL blobs unchanged from Post-A.4; LF attributes and build-time Git-byte comparison protect cross-platform embedded checksums |
+| History | Upgrade compares full snapshots of User/Session, Party/members/invite, requests/allocations/jobs/frozen executions/reports, content/catalog, Entry and Audit; pre-existing next-game intent fields preserved, new failure_reason NULL; A.4 invalid-next-game eligibility/failure-reason tests remain PASS |
+| Backup/restore | Linux CI uses separate disposable source and restore databases, private 0600 libpq service file, actual helper custom-format dump/TOC, 0600 output and no-overwrite/private-file rejection; restores with pg_restore, compares full key-table rows, reruns migration/checksums at 19, then drops both DBs and removes test files. Final gate also checks failed dump cleanup |
+| Deploy | bash syntax, JSON parse, missing-jq rejection, isolated systemd unit verify and pointer update/rollback/traversal-rejection PASS. PowerShell parse and isolated ValidateOnly PASS. Final native Windows artifact gate additionally removes each required binary/BUILD.json to verify rejection; no scheduled task registered |
+| Artifact | Five supported binaries, ELF/PE amd64 check, clean SHA/version/time identity, archive contents, Linux executable modes, SHA256 and required notices PASS. Native Linux/Windows help/config/Content Tool prepare/status/invalid-path smoke uses disposable synthetic data, not game VPK |
+| Platform artifact | Packaged Linux Platform migrate, /healthz, player/admin static routes and matching Web BUILD.json PASS with a disposable DB; subprocess stopped and database dropped |
+
+Caddy was not available in these runners/local environment, so actual Caddy
+binary syntax validation is **NOT VERIFIED / optional check unavailable**. The
+reference dedicated header overwrite was statically checked; existing A.4 trusted
+proxy login-throttling regression passed. systemd verification substitutes
+isolated executable/directory paths and does not claim a fresh Ubuntu installation.
+
+Preflight failures are retained: initial build printing Unicode test symbols
+failed under Windows GBK; output now explicitly uses UTF-8. First backup fixture
+quoted INI service values as connection-string values, causing a hostname lookup
+failure; corrected to libpq service syntax. Its initial create upgrade fixture
+was corrected to use accepted before succeeded and structured missing JoinInfo.
+These corrections did not change lifecycle/business semantics. A transient
+GitHub TLS push failure succeeded on normal retry; no force push/history rewrite.
+
+Current-tree hygiene scanned tracked paths and text for credentials, token/cookie,
+private keys, Admin/Node/Steam credentials, DSNs, private/public development hosts,
+SteamID/nicknames, .env/.local, dumps/logs/VPKs and build outputs. No sensitive
+payload or prohibited tracked artifact found. Matches are field names, fixtures,
+loopback CI credentials, reserved example addresses and example placeholders.
+Archive allowlists and integrity smoke reject secrets/game assets/backups/local
+directories; notices are retained. Historical checkpoints remain point-in-time
+records, with superseded context in the validation index.
 
 ## Final identity and artifact evidence
 
@@ -74,6 +103,29 @@ commit. `MANIFEST.json` records each filename, size, SHA256 and sourceSHA;
 `SHA256SUMS` covers all nine artifacts and the manifest. Retain these ignored
 release outputs with the final handoff; see [build procedure](../release.md).
 No artifact is committed to Git or published as a GitHub Release.
+
+Commits before final closure:
+
+- `24e3ef6`: license resolution, exact historical-code grant and MIT notice.
+- `d1376a6`: RC1 identity, packaging, deploy assets, documentation and numeric UI labels.
+- `23b4b2c`: libpq fixture/Windows encoding correction and packaged Platform health.
+- The closure commit containing this record completes LF checksum protection,
+  Windows package dependency negatives and backup error cleanup, then reruns CI.
+
+Artifacts (all version v1.0.0-rc1; exact full source SHA, size and SHA256 are in
+the final MANIFEST.json/SHA256SUMS):
+
+| Filename | OS/architecture |
+| --- | --- |
+| platform-server-linux-amd64 | Linux amd64 |
+| node-controller-linux-amd64 | Linux amd64 |
+| content-tool-linux-amd64 | Linux amd64 |
+| node-controller-windows-amd64.exe | Windows amd64 |
+| content-tool-windows-amd64.exe | Windows amd64 |
+| dota-arcade-v1.0.0-rc1-control-plane-linux-amd64.tar.gz | Linux amd64 + Web |
+| dota-arcade-v1.0.0-rc1-game-node-linux-amd64.tar.gz | Linux amd64 |
+| dota-arcade-v1.0.0-rc1-game-node-windows-amd64.zip | Windows amd64 |
+| dota-arcade-v1.0.0-rc1-web-any.tar.gz | Browser bundle |
 
 ## Known limitations / remaining gates
 

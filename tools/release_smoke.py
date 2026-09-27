@@ -105,6 +105,26 @@ def main():
         config["hardMaxInstances"] = 99
         configPath.write_text(json.dumps(config))
         call("node-controller", "check", "--config", configPath, success=False)
+        if native == "windows":
+            installRoot = temp / "install"
+            (installRoot / "bin").mkdir(parents=True)
+            (installRoot / "config").mkdir()
+            package = next(root.glob("*-game-node-windows-amd64.zip"))
+            with zipfile.ZipFile(package) as archive:
+                for name in ("node-controller.exe", "content-tool.exe", "install-node.ps1", "start-d2core-manager.ps1", "start-node-controller.ps1"):
+                    (installRoot / "bin" / name).write_bytes(archive.read("bin/" + name))
+            # Existence/build fixture only: never execute a fake or real d2core.
+            (installRoot / "bin/d2core.exe").write_bytes(b"preflight fixture only")
+            (installRoot / "bin/BUILD.json").write_text(json.dumps({"version":"0.1.1", "gitCommit":manifest["d2coreCommit"]}))
+            config["hardMaxInstances"] = 1
+            (installRoot / "config/node-controller.json").write_text(json.dumps(config))
+            command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(installRoot / "bin/install-node.ps1"), "-Root", str(installRoot), "-ValidateOnly"]
+            assert subprocess.run(command, capture_output=True).returncode == 0
+            for name in ("content-tool.exe", "d2core.exe", "BUILD.json", "node-controller.exe"):
+                missing = installRoot / "bin" / name
+                data = missing.read_bytes(); missing.unlink()
+                assert subprocess.run(command, capture_output=True).returncode != 0, name
+                missing.write_bytes(data)
     if native == "linux" and os.environ.get("PLATFORM_SMOKE_DATABASE_URL"):
         env = dict(os.environ, PLATFORM_DATABASE_URL=os.environ["PLATFORM_SMOKE_DATABASE_URL"],
                    PLATFORM_ENV="development", PLATFORM_MAX_PARTY_SIZE="4",

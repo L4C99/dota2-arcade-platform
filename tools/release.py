@@ -121,6 +121,10 @@ def main():
     migrations = sorted((ROOT / "internal/platform/store/migrations").glob("*.sql"))
     if [int(p.name.split("_")[0]) for p in migrations] != list(range(1, 20)):
         raise RuntimeError("unexpected migration baseline")
+    for path in migrations:
+        original = subprocess.check_output(["git", "show", "HEAD:" + path.relative_to(ROOT).as_posix()], cwd=ROOT)
+        if path.read_bytes() != original:
+            raise RuntimeError("migration checkout bytes differ from Git: " + path.name)
     modules = {}
     artifacts = []
     for goos, commands in [("linux", ["platform-server", "node-controller", "content-tool"]),
