@@ -15,7 +15,7 @@ func (s *Store) ClaimNextJob(ctx context.Context, nodeID string) (*nodev1.Job, e
 	return s.claimNextJob(ctx, nodeID, false)
 }
 
-// ClaimIndependentStop never claims ordinary work while old work is unresolved.
+// ClaimIndependentStop retains the restricted A.4 stop route.
 func (s *Store) ClaimIndependentStop(ctx context.Context, nodeID string) (*nodev1.Job, error) {
 	return s.claimNextJob(ctx, nodeID, true)
 }
@@ -26,11 +26,21 @@ func (s *Store) claimNextJob(ctx context.Context, nodeID string, independentStop
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	// Serialize claims on this node so two concurrent Controllers cannot each
+	// pass the unresolved-dependency predicate for different pending rows.
+	var lockedNode string
+	if err := tx.QueryRow(ctx, `SELECT id FROM nodes WHERE id=$1 FOR UPDATE`, nodeID).Scan(&lockedNode); err != nil {
+		return nil, err
+	}
 	var jobID string
 	err = tx.QueryRow(ctx, `SELECT j.id FROM node_jobs j
         JOIN nodes n ON n.id=j.node_id JOIN node_reports r ON r.node_id=n.id
         WHERE j.node_id=$1 AND j.state='pending' AND n.enabled AND r.compatibility_status='compatible'
         AND n.last_heartbeat > $2
+		AND NOT EXISTS(SELECT 1 FROM node_jobs other WHERE other.node_id=j.node_id AND other.id<>j.id
+		  AND other.state IN ('claimed','accepted','unknown')
+		  AND ((j.allocation_id IS NOT NULL AND other.allocation_id=j.allocation_id)
+		    OR (j.instance_id IS NOT NULL AND other.instance_id=j.instance_id)))
         AND (NOT $3 OR (j.kind='stop' AND j.instance_id IS NOT NULL
           AND EXISTS(SELECT 1 FROM node_jobs c JOIN allocations a ON a.id=c.allocation_id
             WHERE c.allocation_id=j.allocation_id AND c.kind='create' AND c.node_id=j.node_id

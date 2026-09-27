@@ -63,7 +63,7 @@ func (p *a4StopPlatform) Report(_ context.Context, _ string, r nodev1.ReportRequ
 	return p.stop, nil
 }
 
-func TestA4UnknownAllowsOnlyIndependentStop(t *testing.T) {
+func TestA4UnknownPreservesIndependentStop(t *testing.T) {
 	p := &a4StopPlatform{fakePlatform: fakePlatform{job: testJob()}, stop: nodev1.Job{ID: "stop", Kind: "stop", State: "claimed", InstanceID: "known"}}
 	p.Prepare(context.Background(), p.job.ID, nodev1.PrepareCreateRequest{Template: testTemplate(t), Port: 28000})
 	p.job.State = "unknown"
@@ -73,7 +73,7 @@ func TestA4UnknownAllowsOnlyIndependentStop(t *testing.T) {
 	if err := r.Step(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if p.ordinary != 0 || p.restricted != 1 || c.creates != 0 || p.job.State != "unknown" || len(p.reports) != 2 || p.reports[1].State != "succeeded" {
+	if p.ordinary != 1 || p.restricted != 1 || c.creates != 0 || p.job.State != "unknown" || len(p.reports) != 2 || p.reports[1].State != "succeeded" {
 		t.Fatalf("unsafe flow: %+v %+v", p, c)
 	}
 }

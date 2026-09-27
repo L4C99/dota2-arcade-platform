@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
@@ -32,10 +33,14 @@ type Runner struct {
 	Core             core.API
 	TemplateBindings map[string]string
 	Network          nodev1.NetworkFacts
+	// MaxConcurrentJobs bounds one cycle's independent core/API work. The
+	// Platform's durable capacity reservation remains the create limit.
+	MaxConcurrentJobs int
 }
 
-// Step reconciles local core state against durable work before claiming a new
-// job. The caller must have established a compatible node heartbeat.
+// Step inventories durable work before dispatch. The Platform claim transaction
+// excludes jobs sharing an Allocation or instance with unresolved work. No
+// worker survives this cycle: the next cycle (or process) reloads durable jobs.
 func (r *Runner) Step(ctx context.Context) error {
 	list, err := r.Core.List(ctx)
 	if err != nil {
@@ -45,42 +50,87 @@ func (r *Runner) Step(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, job := range jobs {
-		if job.State == "pending" {
-			continue
-		}
-		if err := r.handle(ctx, job, false, list); err != nil {
-			return err
-		}
+	limit := r.MaxConcurrentJobs
+	if limit < 1 {
+		limit = 1
 	}
-	if platform, ok := r.Platform.(activeReconciler); ok {
-		if err := r.reconcileActive(ctx, platform); err != nil {
-			return err
-		}
+	if limit > 32 {
+		limit = 32
 	}
-	// Leave another claim until all existing work has converged.
+	type work struct {
+		job   nodev1.Job
+		fresh bool
+	}
+	workItems := make([]work, 0, len(jobs)+limit)
 	for _, job := range jobs {
 		if job.State != "pending" {
-			if platform, ok := r.Platform.(interface {
-				ClaimIndependentStop(context.Context) (*nodev1.Job, error)
-			}); ok {
-				stop, err := platform.ClaimIndependentStop(ctx)
-				if err != nil || stop == nil {
-					return err
-				}
-				if stop.Kind != "stop" || stop.InstanceID == "" {
-					return errors.New("invalid independent stop")
-				}
-				return r.stop(ctx, *stop)
-			}
-			return nil
+			workItems = append(workItems, work{job: job})
 		}
 	}
-	job, err := r.Platform.Claim(ctx)
-	if err != nil || job == nil {
-		return err
+	var cycleErrors []error
+	// Keep the restricted stop route available while existing work is open.
+	// Ordinary claims now have the same dependency guard in the Store.
+	if len(workItems) > 0 {
+		if platform, ok := r.Platform.(interface {
+			ClaimIndependentStop(context.Context) (*nodev1.Job, error)
+		}); ok {
+			stop, claimErr := platform.ClaimIndependentStop(ctx)
+			if claimErr != nil {
+				cycleErrors = append(cycleErrors, claimErr)
+			} else if stop != nil {
+				if stop.Kind != "stop" || stop.InstanceID == "" {
+					cycleErrors = append(cycleErrors, errors.New("invalid independent stop"))
+				} else {
+					// Give cleanup a slot even when all ordinary workers would
+					// otherwise be occupied by slow existing creates.
+					workItems = append([]work{{job: *stop, fresh: true}}, workItems...)
+				}
+			}
+		}
 	}
-	return r.handle(ctx, *job, true, list)
+	claims := 0
+	for claims < limit && ctx.Err() == nil {
+		job, claimErr := r.Platform.Claim(ctx)
+		if claimErr != nil {
+			cycleErrors = append(cycleErrors, claimErr)
+			break
+		}
+		if job == nil {
+			break
+		}
+		workItems = append(workItems, work{job: *job, fresh: true})
+		claims++
+	}
+	// Each job is dispatched exactly once in this cycle. A slow or failing
+	// operation uses one slot but cannot cancel an independent job's work.
+	workCh := make(chan work)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	workers := min(limit, len(workItems))
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for item := range workCh {
+				if err := r.handle(ctx, item.job, item.fresh, list); err != nil {
+					mu.Lock()
+					cycleErrors = append(cycleErrors, fmt.Errorf("node job %s: %w", item.job.ID, err))
+					mu.Unlock()
+				}
+			}
+		}()
+	}
+	for _, item := range workItems {
+		workCh <- item
+	}
+	close(workCh)
+	wg.Wait()
+	if platform, ok := r.Platform.(activeReconciler); ok {
+		if err := r.reconcileActive(ctx, platform); err != nil {
+			cycleErrors = append(cycleErrors, err)
+		}
+	}
+	return errors.Join(cycleErrors...)
 }
 
 func (r *Runner) reconcileActive(ctx context.Context, platform activeReconciler) error {

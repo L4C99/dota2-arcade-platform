@@ -21,6 +21,9 @@ jobs:
         run: test -z "$(gofmt -l cmd internal)"
       - name: Test
         run: go test ./... -count=1
+      - name: Controller race regression
+        if: runner.os == 'Linux'
+        run: go test -race ./internal/controller/runner -count=10
       - name: Fixed core delayed-create safety counterexample
         run: go -C tests/coreproof test -mod=readonly -count=1 ./...
       - name: Vet

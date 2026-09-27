@@ -50,7 +50,10 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	worker := &runner.Runner{Platform: client, Core: coreClient, TemplateBindings: conf.TemplateBindings, Network: conf.Network}
+	// One slot per configured instance, with a second slot on single-capacity
+	// nodes so an independent stop can progress beside an unresolved create.
+	worker := &runner.Runner{Platform: client, Core: coreClient, TemplateBindings: conf.TemplateBindings,
+		Network: conf.Network, MaxConcurrentJobs: min(max(conf.HardMaxInstances, 2), 32)}
 	factReader := config.NewFactReader(conf)
 	send := func(ctx context.Context) (nodev1.HeartbeatResult, error) {
 		protocol := 0

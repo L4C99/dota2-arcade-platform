@@ -30,6 +30,9 @@ func (p *fakePlatform) OpenJobs(context.Context) ([]nodev1.Job, error) {
 	return []nodev1.Job{p.job}, nil
 }
 func (p *fakePlatform) Claim(context.Context) (*nodev1.Job, error) {
+	if p.job.State != "pending" {
+		return nil, nil
+	}
 	p.job.State = "claimed"
 	j := p.job
 	return &j, nil
