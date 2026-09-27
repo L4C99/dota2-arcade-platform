@@ -181,49 +181,11 @@ func (s *Store) CreateUserRequestSelected(ctx context.Context, userID, gameID, p
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return ServerRequest{}, false, err
 	}
-	var globalAccept, gameEnabled, gameAccept, presetEnabled, presetAccept bool
-	var maxPlayers int
-	var globalMessage, gameMessage, presetMessage string
-	err = tx.QueryRow(ctx, `SELECT s.accepting_new_requests,s.maintenance_message,
-		g.enabled,g.accepting_new_requests,g.maintenance_message,
-		p.enabled,p.accepting_new_requests,p.maintenance_message,p.max_players
-		FROM platform_settings s JOIN arcade_games g ON g.id=$1
-		JOIN game_presets p ON p.id=$2 AND p.arcade_game_id=g.id
-		WHERE s.singleton=true FOR SHARE OF s,g,p`, gameID, presetID).
-		Scan(&globalAccept, &globalMessage, &gameEnabled, &gameAccept, &gameMessage, &presetEnabled, &presetAccept, &presetMessage, &maxPlayers)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ServerRequest{}, false, ErrInvalidSelection
-	}
-	if err != nil {
+	if err := validateFreshRequest(ctx, tx, gameID, presetID, partyID, mode, manualNodeID); err != nil {
 		return ServerRequest{}, false, err
-	}
-	if !globalAccept {
-		return ServerRequest{}, false, &MaintenanceError{Scope: "global", Message: globalMessage}
-	}
-	if !gameEnabled || !gameAccept {
-		return ServerRequest{}, false, &MaintenanceError{Scope: "arcadeGame", Message: gameMessage}
-	}
-	if !presetEnabled || !presetAccept {
-		return ServerRequest{}, false, &MaintenanceError{Scope: "gamePreset", Message: presetMessage}
-	}
-	if partyID != "" {
-		var members int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM party_members WHERE party_id=$1`, partyID).Scan(&members); err != nil {
-			return ServerRequest{}, false, err
-		}
-		if members > maxPlayers {
-			return ServerRequest{}, false, ErrPresetPartyTooLarge
-		}
 	}
 	var selectedNode any
 	if mode == "manual" {
-		var exists bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM nodes WHERE id=$1 AND enabled)`, manualNodeID).Scan(&exists); err != nil {
-			return ServerRequest{}, false, err
-		}
-		if !exists {
-			return ServerRequest{}, false, ErrInvalidNodeSelection
-		}
 		selectedNode = manualNodeID
 	}
 	id, err := NewID()
@@ -242,4 +204,64 @@ func (s *Store) CreateUserRequestSelected(ctx context.Context, userID, gameID, p
 		return ServerRequest{}, false, err
 	}
 	return r, true, tx.Commit(ctx)
+}
+
+// validateFreshRequest is shared by ordinary requests and next-game consumption.
+// The Party row serializes membership changes at the actual creation boundary.
+func validateFreshRequest(ctx context.Context, tx pgx.Tx, gameID, presetID, partyID, mode, manualNodeID string) error {
+	if partyID != "" {
+		var id string
+		if err := tx.QueryRow(ctx, `SELECT id FROM parties WHERE id=$1 AND dissolved_at IS NULL FOR UPDATE`, partyID).Scan(&id); err != nil {
+			return err
+		}
+	}
+	var globalAccept, gameEnabled, gameAccept, presetEnabled, presetAccept bool
+	var maxPlayers int
+	var globalMessage, gameMessage, presetMessage string
+	err := tx.QueryRow(ctx, `SELECT s.accepting_new_requests,s.maintenance_message,
+		g.enabled,g.accepting_new_requests,g.maintenance_message,
+		p.enabled,p.accepting_new_requests,p.maintenance_message,p.max_players
+		FROM platform_settings s JOIN arcade_games g ON g.id=$1
+		JOIN game_presets p ON p.id=$2 AND p.arcade_game_id=g.id
+		WHERE s.singleton=true FOR SHARE OF s,g,p`, gameID, presetID).
+		Scan(&globalAccept, &globalMessage, &gameEnabled, &gameAccept, &gameMessage, &presetEnabled, &presetAccept, &presetMessage, &maxPlayers)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInvalidSelection
+	}
+	if err != nil {
+		return err
+	}
+	if !globalAccept {
+		return &MaintenanceError{Scope: "global", Message: globalMessage}
+	}
+	if !gameEnabled || !gameAccept {
+		return &MaintenanceError{Scope: "arcadeGame", Message: gameMessage}
+	}
+	if !presetEnabled || !presetAccept {
+		return &MaintenanceError{Scope: "gamePreset", Message: presetMessage}
+	}
+	if partyID != "" {
+		var members int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM party_members WHERE party_id=$1`, partyID).Scan(&members); err != nil {
+			return err
+		}
+		if members > maxPlayers {
+			return ErrPresetPartyTooLarge
+		}
+	}
+	if mode == "manual" {
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT enabled FROM nodes WHERE id=$1 FOR SHARE`, manualNodeID).Scan(&exists); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrInvalidNodeSelection
+			}
+			return err
+		}
+		if !exists {
+			return ErrInvalidNodeSelection
+		}
+
+	}
+
+	return nil
 }

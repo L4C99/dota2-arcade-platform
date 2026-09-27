@@ -114,3 +114,5 @@ For the A.7 small production multiplayer trial required before final V1 Release,
 6. 禁止以重新注册同一物理节点、换 Node ID 的方式恢复账面容量。登记替代节点前核对物理资产台账，不能把旧机器伪装成新机器。重新投入旧机器只能在旧资源经受支持路径完整回收后，或经 Owner 另行授权、审计的整机退役/重建流程。行政退役不等于资源回收，不生成 RECONCILED_NO_EFFECT。本 A.4 不授权实际退役重建主机操作。
 
 Owner Acceptance（2026-09-27）：项目所有者接受以上 V1 安全优先的可用性残余限制，允许旧容量永久保留，由经授权 Agent/管理员执行审计隔离、玩家脱困和必要节点退役/重建。Owner 不要求升级 d2core。未来自动回收此类 unknown 需另起版本设计并审查 recovery proof primitive；不是数据已证明回收，也不是允许误释放。
+
+A.4 migration 19 只新增 next_game_intents.failure_reason，保留 1–18 checksum 与所有合法历史。升级前照常备份；回滚应用时保留 additive column，不执行破坏性 down migration。旧程序不理解失败原因，不应恢复自动消费这些 paused intents；发生回滚应暂停新申请并由管理员核对。

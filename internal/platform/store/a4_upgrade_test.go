@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestP5UpgradeFromMigration13PreservesCatalog(t *testing.T) {
+func TestA4UpgradeFromMigration18PreservesCatalog(t *testing.T) {
 	dsn := os.Getenv("PLATFORM_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("PLATFORM_TEST_DATABASE_URL is not set")
@@ -28,7 +28,7 @@ func TestP5UpgradeFromMigration13PreservesCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema := "p5_upgrade_" + strings.ReplaceAll(id, "-", "")
+	schema := "a4_upgrade_" + strings.ReplaceAll(id, "-", "")
 	if _, err := base.Exec(ctx, `CREATE SCHEMA "`+schema+`"`); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestP5UpgradeFromMigration13PreservesCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	for version := 1; version <= 13; version++ {
+	for version := 1; version <= 18; version++ {
 		entries, err := migrationFiles.ReadDir("migrations")
 		if err != nil {
 			t.Fatal(err)
@@ -109,7 +109,7 @@ func TestP5UpgradeFromMigration13PreservesCatalog(t *testing.T) {
 	}
 	var steamVerified, steamEnabled, chinaVerified, chinaEnabled bool
 	if err := pool.QueryRow(ctx, `SELECT steam_entry_verified,steam_entry_enabled,steamchina_entry_verified,steamchina_entry_enabled
-		FROM node_entry_capabilities WHERE node_id=$1`, nodeID).Scan(&steamVerified, &steamEnabled, &chinaVerified, &chinaEnabled); err != nil || steamVerified || steamEnabled || chinaVerified || chinaEnabled {
-		t.Fatalf("old partial verification not invalidated: %v %v %v %v %v", steamVerified, steamEnabled, chinaVerified, chinaEnabled, err)
+		FROM node_entry_capabilities WHERE node_id=$1`, nodeID).Scan(&steamVerified, &steamEnabled, &chinaVerified, &chinaEnabled); err != nil || !steamVerified || !steamEnabled || !chinaVerified || !chinaEnabled {
+		t.Fatalf("current verification was changed: %v %v %v %v %v", steamVerified, steamEnabled, chinaVerified, chinaEnabled, err)
 	}
 }

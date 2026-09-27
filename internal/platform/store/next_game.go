@@ -14,6 +14,7 @@ type NextGameIntent struct {
 	NewRequestID    *string    `json:"newRequestId,omitempty"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	ConsumedAt      *time.Time `json:"consumedAt,omitempty"`
+	FailureReason   string     `json:"failureReason,omitempty"`
 }
 
 func (s *Store) UserNextGameIntent(ctx context.Context, userID, requestID string) (*NextGameIntent, error) {
@@ -21,9 +22,9 @@ func (s *Store) UserNextGameIntent(ctx context.Context, userID, requestID string
 		return nil, err
 	}
 	var intent NextGameIntent
-	err := s.Pool.QueryRow(ctx, `SELECT source_request_id,state,new_request_id,created_at,consumed_at
+	err := s.Pool.QueryRow(ctx, `SELECT source_request_id,state,new_request_id,created_at,consumed_at,COALESCE(failure_reason,'')
 		FROM next_game_intents WHERE source_request_id=$1`, requestID).
-		Scan(&intent.SourceRequestID, &intent.State, &intent.NewRequestID, &intent.CreatedAt, &intent.ConsumedAt)
+		Scan(&intent.SourceRequestID, &intent.State, &intent.NewRequestID, &intent.CreatedAt, &intent.ConsumedAt, &intent.FailureReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -37,15 +38,15 @@ func (s *Store) UserNextGameIntent(ctx context.Context, userID, requestID string
 // reclaim (or the explicit owner abandon transaction after quarantine). The
 // unique source key and row lock make repeated reports and clicks idempotent.
 func consumeNextGameIntent(ctx context.Context, tx pgx.Tx, sourceRequestID string, afterAbandon bool) error {
-	var state string
-	err := tx.QueryRow(ctx, `SELECT state FROM next_game_intents WHERE source_request_id=$1 FOR UPDATE`, sourceRequestID).Scan(&state)
+	var state, failure string
+	err := tx.QueryRow(ctx, `SELECT state,COALESCE(failure_reason,'') FROM next_game_intents WHERE source_request_id=$1 FOR UPDATE`, sourceRequestID).Scan(&state, &failure)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if state == "consumed" || (state == "paused" && !afterAbandon) {
+	if failure != "" || state == "consumed" || (state == "paused" && !afterAbandon) {
 		return nil
 	}
 	var ownerUserID, ownerPartyID, manualNodeID *string
@@ -53,6 +54,23 @@ func consumeNextGameIntent(ctx context.Context, tx pgx.Tx, sourceRequestID strin
 	if err := tx.QueryRow(ctx, `SELECT owner_user_id,owner_party_id,arcade_game_id,game_preset_id,
 		node_selection_mode,manual_node_id FROM server_requests WHERE id=$1`, sourceRequestID).
 		Scan(&ownerUserID, &ownerPartyID, &gameID, &presetID, &mode, &manualNodeID); err != nil {
+		return err
+	}
+	party, node := "", ""
+	if ownerPartyID != nil {
+		party = *ownerPartyID
+	}
+	if manualNodeID != nil {
+		node = *manualNodeID
+	}
+	if err := validateFreshRequest(ctx, tx, gameID, presetID, party, mode, node); err != nil {
+		var maintenance *MaintenanceError
+		if !errors.As(err, &maintenance) && !errors.Is(err, ErrInvalidSelection) && !errors.Is(err, ErrInvalidNodeSelection) && !errors.Is(err, ErrPresetPartyTooLarge) {
+			return err
+		}
+		// Business rejection must not roll back the already proved reclaim or
+		// owner escape. Persist the reason and require a new selection.
+		_, err = tx.Exec(ctx, `UPDATE next_game_intents SET state='paused',failure_reason=$2,updated_at=now() WHERE source_request_id=$1`, sourceRequestID, err.Error())
 		return err
 	}
 	newID, err := NewID()

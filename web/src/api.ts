@@ -37,6 +37,7 @@ export interface ServerRequest {
 }
 
 export interface NextGameIntent {
+	 failureReason?: string
   sourceRequestId: string
   state: 'pending' | 'paused' | 'consumed'
   newRequestId?: string

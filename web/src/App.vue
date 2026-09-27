@@ -463,6 +463,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); window.removeEventLi
         <div class="status-top"><span class="eyebrow">当前申请</span><span class="status-pill"><span class="status-dot"/>{{ state.title }}</span></div>
         <h2>{{ state.title }}</h2>
         <p class="status-description">{{ state.description }}</p>
+        <p v-if="nextGameIntent?.failureReason" class="queue-note">当前人数、内容或节点资格已变化，无法自动继续下一局。旧资源结果已保存，请重新选择并申请。</p>
         <p v-if="elapsed" class="elapsed-line">{{ elapsed.summary }}</p>
         <p v-if="elapsed?.detail" class="elapsed-detail">{{ elapsed.detail }}</p>
         <div class="facts" aria-label="申请内容">
