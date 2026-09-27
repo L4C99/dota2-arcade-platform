@@ -9,16 +9,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/contentid"
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 )
-
-var workshopPattern = regexp.MustCompile(`^[0-9]+$`)
-var versionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 type Config struct {
 	ContentRoot string
@@ -67,10 +64,10 @@ func (c Config) check() error {
 }
 
 func validID(workshop, version string) error {
-	if !workshopPattern.MatchString(workshop) {
+	if !contentid.ValidWorkshop(workshop) {
 		return errors.New("invalid Workshop ID")
 	}
-	if version != "" && (!versionPattern.MatchString(version) || strings.EqualFold(version, "current") || strings.EqualFold(version, "previous") || strings.EqualFold(version, "pending")) {
+	if version != "" && !contentid.ValidVersion(version) {
 		return errors.New("invalid version")
 	}
 	return nil

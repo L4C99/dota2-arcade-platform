@@ -35,3 +35,5 @@ Audit records the administrator identity, action, target, time and relevant prio
 A.4 FIX-09: `entry.update` verification and enable=true require `expectedEntryConfigRevision` from the displayed entry. A missing/stale revision returns 409 without mutation or success audit. Closing remains possible without an attestation. Refresh and repeat real-client verification against the new configuration.
 
 A.4 FIX-11: session logout returns 503 and retains its cookie if database revocation fails. Already-invalid tokens remain idempotent. Administrator login inserts the replacement session and revokes the previous cookie token in one transaction; either both commit or neither does. UI logout failures retain authenticated state and offer retry.
+
+A.4 content identifiers: Workshop ID is 1–20 ASCII decimal digits; ContentVersion ID is 1–128 ASCII characters, starts alphanumeric, then alphanumeric/dot/underscore/hyphen. current/previous/pending are reserved case-insensitively. Catalog, Controller contract/config and Content Tool use the shared grammar. Existing immutable IDs are never renamed automatically; audit legacy invalid IDs before further publication.

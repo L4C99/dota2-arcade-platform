@@ -111,3 +111,6 @@ PASS: offline/stale heartbeat preserves valid running JoinInfo with warning; una
 
 ## FIX-13 — bounded optional diagnostics
 PASS: two-second A2S total budget, no fabricated failure for unqueried/cancelled probes, independent Job context. Network tests cover 100 silent Ready instances plus successful/challenge and actual failed UDP probes; node-controller compiles.
+
+## FIX-14 — shared content identifier boundaries
+Implemented shared Workshop/version validators, registration rejection before writes, and Web constraints. Boundary tests and PostgreSQL rejection/no-audit regression passed; Content Tool/config/content publication targeted tests passed. Existing development catalog anomaly audit remains part of the final development-node preflight.

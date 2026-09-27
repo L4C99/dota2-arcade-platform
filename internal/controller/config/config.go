@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/contentid"
 	"io"
 	"net"
 	"net/url"
@@ -36,7 +37,6 @@ type Config struct {
 }
 
 var nodeIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-var workshopIDPattern = regexp.MustCompile(`^[0-9]{1,20}$`)
 
 func Load(path string) (Config, string, error) {
 	if !filepath.IsAbs(path) {
@@ -101,7 +101,7 @@ func (c Config) Validate() error {
 	}
 	seen := make(map[string]bool)
 	for _, binding := range c.ContentBindings {
-		if !workshopIDPattern.MatchString(binding.WorkshopID) || seen[binding.WorkshopID] || !filepath.IsAbs(binding.CurrentLinkPath) || !filepath.IsAbs(binding.MetadataPath) {
+		if !contentid.ValidWorkshop(binding.WorkshopID) || seen[binding.WorkshopID] || !filepath.IsAbs(binding.CurrentLinkPath) || !filepath.IsAbs(binding.MetadataPath) {
 			return errors.New("invalid content binding")
 		}
 		seen[binding.WorkshopID] = true

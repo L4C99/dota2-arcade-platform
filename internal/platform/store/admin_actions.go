@@ -8,12 +8,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/contentid"
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 	"github.com/jackc/pgx/v5"
 )
 
 var ErrInvalidAdminAction = errors.New("invalid administrator action")
-var workshopIDPattern = regexp.MustCompile(`^[0-9]+$`)
 var contentSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type AdminAction struct {
@@ -91,7 +91,7 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 	targetID := a.TargetID
 	switch a.Action {
 	case "game.create":
-		if a.TargetID != "" || !workshopIDPattern.MatchString(a.WorkshopID) || strings.TrimSpace(a.DisplayName) == "" {
+		if a.TargetID != "" || !contentid.ValidWorkshop(a.WorkshopID) || strings.TrimSpace(a.DisplayName) == "" {
 			return ErrInvalidAdminAction
 		}
 		id, err := NewID()
@@ -115,7 +115,7 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		targetType, targetID = "template_revision", a.TemplateRevisionID
 		change = map[string]any{"arcadeGameId": a.TargetID, "description": strings.TrimSpace(a.Description)}
 	case "content.create":
-		if a.TargetID == "" || strings.TrimSpace(a.ContentVersionID) == "" || !contentSHA256Pattern.MatchString(a.ContentSHA256) {
+		if a.TargetID == "" || !contentid.ValidVersion(a.ContentVersionID) || !contentSHA256Pattern.MatchString(a.ContentSHA256) {
 			return ErrInvalidAdminAction
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO content_versions(id,arcade_game_id,content_sha256) VALUES($1,$2,$3)`,

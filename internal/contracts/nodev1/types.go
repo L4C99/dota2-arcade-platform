@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/L4C99/dota2-arcade-platform/internal/contracts/contentid"
 	"net"
 	"regexp"
 	"sort"
@@ -145,7 +146,6 @@ type JoinInfo struct {
 	EntryConfigRevision string `json:"entryConfigRevision"`
 }
 
-var workshopIDPattern = regexp.MustCompile(`^[0-9]{1,20}$`)
 var coreTokenPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 var revisionPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
@@ -289,7 +289,7 @@ func (h Heartbeat) Validate() error {
 	}
 	seen := make(map[string]bool)
 	for _, item := range h.Content {
-		if !workshopIDPattern.MatchString(item.WorkshopID) || seen[item.WorkshopID] {
+		if !contentid.ValidWorkshop(item.WorkshopID) || seen[item.WorkshopID] {
 			return fmt.Errorf("invalid or duplicate workshop ID")
 		}
 		seen[item.WorkshopID] = true
