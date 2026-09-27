@@ -83,3 +83,18 @@ func TestA4TerminalReclaimRejectsLateBusinessTransitions(t *testing.T) {
 		}
 	}
 }
+
+func TestA4FailedActiveInstanceSchedulesOneStop(t *testing.T) {
+	s, node, _, request, allocation := p4cRunning(t)
+	f := nodev1.InstanceFact{InstanceID: "i_p4c", Outcome: "uncertain", Lifecycle: "failed", Process: "stopped", Cleanup: "pending", Port: 28000}
+	for i := 0; i < 2; i++ {
+		if err := s.ReportInstanceFact(context.Background(), node, allocation, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p4aStates(t, s, request, allocation, "stopping", "stopping", 1)
+	var count int
+	if err := s.Pool.QueryRow(context.Background(), `SELECT count(*) FROM node_jobs WHERE allocation_id=$1 AND kind='stop'`, allocation).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("stops %d: %v", count, err)
+	}
+}

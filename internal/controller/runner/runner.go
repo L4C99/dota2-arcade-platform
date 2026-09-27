@@ -107,6 +107,8 @@ func (r *Runner) reconcileActive(ctx context.Context, platform activeReconciler)
 			fact.Lifecycle, fact.Process, fact.Cleanup, fact.Port = instance.Lifecycle, instance.Process, instance.Cleanup, instance.Port
 			if reclaimed(instance) {
 				fact.Outcome = "reclaimed"
+			} else if instance.Process == "unknown" {
+				fact.Outcome = "identity_unverified"
 			} else if instance.Lifecycle == "active" && instance.Process == "running" {
 				fact.Outcome = "active"
 			}
@@ -325,6 +327,14 @@ func (r *Runner) observe(ctx context.Context, job nodev1.Job) error {
 			OperationID: job.OperationID, ErrorCode: code, ErrorStage: "cleanup"})
 	}
 	if op.Status == "succeeded" {
+		if job.Kind == "create" && (instance.Process == "unknown" || instance.Lifecycle == "failed" || instance.Process == "stopped") {
+			code := "INSTANCE_FAILED"
+			if instance.Process == "unknown" {
+				code = "IDENTITY_UNVERIFIED"
+			}
+			return r.report(ctx, job, nodev1.ReportRequest{State: "failed_with_effect", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: code, ErrorStage: "recover"})
+		}
 		if job.Kind == "create" && instance.Lifecycle == "active" && instance.Process == "running" && instance.Room == "ready" {
 			join, joinError := network.JoinInfo(r.Network, instance.Port)
 			return r.report(ctx, job, nodev1.ReportRequest{State: "succeeded", InstanceID: job.InstanceID,

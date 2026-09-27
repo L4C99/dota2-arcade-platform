@@ -80,6 +80,10 @@ func (s *Store) ReportInstanceFact(ctx context.Context, nodeID, allocationID str
 				return err
 			}
 		}
+	} else if f.Outcome == "uncertain" && f.Lifecycle == "failed" && (f.Process == "stopped" || f.Process == "running") && state != "quarantined" && state != "stopping" {
+		if err := applyAllocationJobReport(ctx, tx, allocationID, nodeID, "create", "failed_with_effect", expectedID, "INSTANCE_FAILED", nil, ""); err != nil {
+			return err
+		}
 	} else if f.Outcome == "identity_unverified" || f.Outcome == "active" && joinPort != 0 && f.Port != joinPort {
 		code := "IDENTITY_UNVERIFIED"
 		if f.Outcome == "active" {

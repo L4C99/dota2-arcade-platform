@@ -38,3 +38,33 @@ func TestA4UnknownAllowsOnlyIndependentStop(t *testing.T) {
 		t.Fatalf("unsafe flow: %+v %+v", p, c)
 	}
 }
+
+func TestA4SuccessfulCreateObservesCurrentInstance(t *testing.T) {
+	for _, tc := range []struct{ lifecycle, process, room, want, code string }{
+		{"failed", "stopped", "failed", "failed_with_effect", "INSTANCE_FAILED"},
+		{"active", "running", "loading", "accepted", ""},
+		{"failed", "unknown", "failed", "failed_with_effect", "IDENTITY_UNVERIFIED"},
+		{"reclaimed", "stopped", "", "failed_with_effect", "INSTANCE_FAILED"},
+	} {
+		t.Run(tc.lifecycle+tc.process+tc.room, func(t *testing.T) {
+			p := &fakePlatform{job: testJob()}
+			p.job.State = "accepted"
+			p.job.InstanceID = "i"
+			p.job.OperationID = "o"
+			c := &fakeCore{op: core.Operation{OperationID: "o", InstanceID: "i", Kind: "create", Status: "succeeded"}, instance: core.Instance{InstanceID: "i", Lifecycle: tc.lifecycle, Process: tc.process, Room: tc.room}}
+			r := Runner{Platform: p, Core: c}
+			if err := r.observe(context.Background(), p.job); err != nil {
+				t.Fatal(err)
+			}
+			if p.job.State != tc.want {
+				t.Fatalf("state %s want %s", p.job.State, tc.want)
+			}
+			if tc.code != "" && p.reports[0].ErrorCode != tc.code {
+				t.Fatalf("reports %+v", p.reports)
+			}
+			if c.stops != 0 || c.creates != 0 {
+				t.Fatal("observation caused direct side effects")
+			}
+		})
+	}
+}

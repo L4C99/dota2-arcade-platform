@@ -363,7 +363,7 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE server_requests SET state='stopping',updated_at=$2 WHERE id=$1`, requestID, at)
+		_, err = tx.Exec(ctx, `UPDATE server_requests SET state='stopping',updated_at=$2 WHERE id=$1 AND state<>'abandoned'`, requestID, at)
 		if err != nil {
 			return err
 		}
