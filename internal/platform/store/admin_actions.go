@@ -463,6 +463,46 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			requestAfter = "stopping"
 		}
 		change = map[string]any{"requestBefore": state, "stopJobId": jobID, "allocationId": allocationID, "requestAfter": requestAfter}
+	case "allocation.terminate_pending":
+		targetType = "allocation"
+		// Lock the same job row as ClaimNextJob before checking any evidence.
+		var jobID, jobState, requestID, allocationState string
+		var untouched bool
+		if err := tx.QueryRow(ctx, `SELECT j.id,j.state,j.claimed_at IS NULL AND j.instance_id IS NULL AND j.operation_id IS NULL
+			AND NOT EXISTS(SELECT 1 FROM node_job_executions e WHERE e.node_job_id=j.id)
+			AND NOT EXISTS(SELECT 1 FROM node_job_reports r WHERE r.node_job_id=j.id)
+			FROM node_jobs j WHERE j.allocation_id=$1 AND j.kind='create' FOR UPDATE OF j`, a.TargetID).Scan(&jobID, &jobState, &untouched); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT server_request_id,state FROM allocations WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&requestID, &allocationState); err != nil {
+			return err
+		}
+		if jobState == "rejected_no_effect" && allocationState == "released_no_effect" {
+			var code string
+			if err := tx.QueryRow(ctx, `SELECT COALESCE(error_code,'') FROM node_jobs WHERE id=$1`, jobID).Scan(&code); err != nil {
+				return err
+			}
+			if code != "PENDING_TERMINATED" {
+				return ErrJobConflict
+			}
+		} else {
+			if jobState != "pending" || allocationState != "reserved" || !untouched {
+				return ErrJobConflict
+			}
+			if _, err := tx.Exec(ctx, `UPDATE node_jobs SET state='rejected_no_effect',error_code='PENDING_TERMINATED',error_stage='dispatch',updated_at=now() WHERE id=$1`, jobID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO node_job_reports(node_job_id,state,error_code,error_stage) VALUES($1,'rejected_no_effect','PENDING_TERMINATED','dispatch')`, jobID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE allocations SET state='released_no_effect',error_code='PENDING_TERMINATED' WHERE id=$1`, a.TargetID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='unavailable',updated_at=now() WHERE id=$1`, requestID); err != nil {
+				return err
+			}
+		}
+		change = map[string]any{"jobId": jobID, "proof": "never claimed; no execution, IDs or reports", "capacityReleased": true}
 	case "allocation.quarantine":
 		targetType = "allocation"
 		var requestID, state string
