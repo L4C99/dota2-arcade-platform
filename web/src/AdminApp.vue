@@ -33,6 +33,10 @@ const overview = ref<Overview | null>(null)
 const tab = ref<'overview' | 'content' | 'nodes' | 'instances' | 'audit'>('overview')
 const globalDraft = reactive({ accepting: true, maintenance: '', announcement: '' })
 const nodeDraft = reactive<Record<string, { priority: number; desired: number }>>({})
+const nodeBaseline = reactive<Record<string, { priority: number; desired: number }>>({})
+function nodeDirty(id: string): boolean { const d = nodeDraft[id], b = nodeBaseline[id]; return !!d && !!b && (d.priority !== b.priority || d.desired !== b.desired) }
+function nodeConflict(node: Node): boolean { const b = nodeBaseline[node.id]; return nodeDirty(node.id) && !!b && (b.priority !== node.priority || b.desired !== node.desired) }
+function resetNodeDraft(node: Node): void { nodeDraft[node.id] = { priority: node.priority, desired: node.desired }; nodeBaseline[node.id] = { ...nodeDraft[node.id] } }
 const selectedNodeId = ref('')
 const selectedRequestId = ref('')
 const requestView = ref<'active' | 'history'>('active')
@@ -119,9 +123,13 @@ async function refresh(): Promise<void> {
   overview.value = data
   Object.assign(globalDraft, { accepting: data.settings.acceptingNewRequests,
     maintenance: data.settings.maintenanceMessage, announcement: data.settings.siteAnnouncement })
-  for (const node of data.nodes) nodeDraft[node.id] = { priority: node.priority, desired: node.desired }
+  for (const node of data.nodes) if (!nodeDirty(node.id)) resetNodeDraft(node)
   if (!data.nodes.some(node => node.id === selectedNodeId.value)) selectedNodeId.value = data.nodes[0]?.id || ''
   if (!data.games.some(game => game.id === catalogDraft.gameId)) catalogDraft.gameId = data.games[0]?.id || ''
+}
+
+async function retryOverview(): Promise<void> {
+  try { await refresh(); error.value = '' } catch (cause) { error.value = String(cause) }
 }
 
 onMounted(async () => {
@@ -147,7 +155,10 @@ async function logout(): Promise<void> {
 async function act(action: Action, confirmation = ''): Promise<void> {
   if (busy.value || confirmation && !window.confirm(confirmation)) return
   busy.value = true; error.value = ''; notice.value = ''
-  try { await api('/actions', 'POST', action); await refresh(); notice.value = '更改已保存并记录审计。' }
+  try { await api('/actions', 'POST', action);
+    if (action.action === 'node.update' && action.targetId && action.priority !== undefined && action.desired !== undefined)
+      nodeBaseline[action.targetId] = { priority: action.priority, desired: action.desired }
+    await refresh(); notice.value = '更改已保存并记录审计。' }
   catch (cause) { error.value = String(cause) }
   finally { busy.value = false }
 }
@@ -196,8 +207,9 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
       <span class="eyebrow">独立管理员会话</span><h1>登录管理后台</h1><p>用于维护申请、节点和异常服务器。登录后操作会记录审计。</p>
       <form @submit.prevent="login"><label>用户名<input v-model.trim="username" required autocomplete="username" maxlength="128" /></label><label>密码<input v-model="password" required type="password" autocomplete="current-password" /></label><button type="submit" class="primary-button" :disabled="busy">{{ busy ? '正在登录…' : '登录' }}</button></form>
     </section>
-    <template v-else-if="overview">
-      <div class="admin-heading"><div><span class="eyebrow">运维控制台</span><h1>管理后台</h1><p>查看平台运行情况，处理申请和异常。</p></div><button type="button" class="secondary-button" :disabled="busy" @click="refresh">刷新状态</button></div>
+    <section v-else-if="!overview" class="panel admin-card"><h1>管理数据暂不可用</h1><p>管理员会话仍保留，请重试加载。</p><button type="button" class="secondary-button" @click="retryOverview">重试加载</button></section>
+    <template v-else>
+      <div class="admin-heading"><div><span class="eyebrow">运维控制台</span><h1>管理后台</h1><p>查看平台运行情况，处理申请和异常。</p></div><button type="button" class="secondary-button" :disabled="busy" @click="retryOverview">刷新状态</button></div>
       <nav class="admin-tabs" aria-label="管理页面"><button v-for="item in ([['overview','总览'],['content','内容与维护'],['nodes','节点'],['instances','申请与实例'],['audit','审计']] as const)" :key="item[0]" type="button" :class="{ selected: tab === item[0] }" @click="tab = item[0]">{{ item[1] }}</button></nav>
       <template v-if="tab === 'overview'">
         <div class="admin-metrics"><div v-for="(value, label) in counts" :key="label" class="panel admin-metric"><span>{{ { waiting:'排队', creating:'创建中', running:'运行中', stopping:'停止中', quarantined:'隔离中', failedUnreclaimed:'待回收异常' }[label] }}</span><strong>{{ value }}</strong></div></div>
@@ -258,7 +270,9 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
               <p>A2S 配置：{{ selectedNode.a2sEnabled === undefined ? '尚未上报' : selectedNode.a2sEnabled ? '已启用' : '未启用' }}</p>
               <div class="admin-control-row"><button type="button" class="secondary-button" :disabled="busy" @click="act({action:'node.update',targetId:selectedNode.id,draining:!selectedNode.draining})">{{ selectedNode.draining ? '结束节点维护' : '进入节点维护' }}</button><span>维护时暂停新分配，已有服务器继续运行。</span></div>
               <div class="admin-form-row"><label>分配优先级<input v-model.number="nodeDraft[selectedNode.id].priority" type="number" step="1" /></label><label>期望容量<input v-model.number="nodeDraft[selectedNode.id].desired" type="number" min="0" :max="selectedNode.hard" /></label></div>
-              <button type="button" class="secondary-button" :disabled="busy" @click="act({action:'node.update',targetId:selectedNode.id,priority:nodeDraft[selectedNode.id].priority,desired:nodeDraft[selectedNode.id].desired})">保存调度设置</button>
+              <p v-if="nodeConflict(selectedNode)" role="alert">服务器上的调度设置已变化。请放弃草稿并同步，再重新编辑。</p>
+              <button type="button" class="secondary-button" :disabled="busy || nodeConflict(selectedNode)" @click="act({action:'node.update',targetId:selectedNode.id,priority:nodeDraft[selectedNode.id].priority,desired:nodeDraft[selectedNode.id].desired})">保存调度设置</button>
+              <button v-if="nodeDirty(selectedNode.id)" type="button" class="secondary-button" :disabled="busy" @click="resetNodeDraft(selectedNode)">放弃草稿并同步</button>
               <details class="admin-technical"><summary>组件版本与核对</summary><p>节点控制器 {{ selectedNode.controllerVersion || '未上报' }} · d2core {{ selectedNode.d2coreVersion || '未上报' }}</p><p>核对批次 {{ selectedNode.reconcileCompleted }}/{{ selectedNode.reconcileRequested }}{{ selectedNode.reconcileRequested > selectedNode.reconcileCompleted ? ' · 等待节点处理' : '' }}</p><button type="button" class="secondary-button" :disabled="busy" @click="act({action:'node.reconcile',targetId:selectedNode.id})">请求完整核对</button></details>
             </section>
             <section class="panel admin-card">

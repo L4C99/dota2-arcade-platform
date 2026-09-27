@@ -120,3 +120,6 @@ PASS: pre-write containment guard resolves existing parents and Windows Junction
 
 ## FIX-16 — deployment prerequisites
 PASS locally: Windows ValidateOnly rejects missing content-tool.exe and accepts a complete fixture without registering tasks. Linux wrapper explicitly checks jq; README lists installation prerequisite. Linux execution is queued in full matrix. No host configuration changed.
+
+## FIX-17 — retained node drafts and recoverable overview errors
+PASS: refresh preserves dirty node scheduling fields; changed server values block stale save until explicit discard/resync. 503 overview offers retry without dropping authenticated state; 401 returns to login. Mounted component regressions also cover logout failure. Full Web suite: 27 passing tests; typecheck passed.
