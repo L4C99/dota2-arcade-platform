@@ -76,9 +76,23 @@ func seedPlayerCatalog(t *testing.T, s *Store) (string, string) {
 	if _, err := s.Pool.Exec(ctx, `INSERT INTO template_revisions(id,arcade_game_id) VALUES('test-template',$1)`, gameID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Pool.Exec(ctx, `INSERT INTO game_presets(id,arcade_game_id,display_name,max_players,template_revision_id)
-		VALUES($1,$2,'N6',10,'test-template')`, presetID, gameID); err != nil {
+	// Existing regression fixtures model the pre-v1.0.2 player catalog. The
+	// upgrade test also invokes this helper against migration 19 itself.
+	var hasContract bool
+	if err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns
+		WHERE table_schema=current_schema() AND table_name='game_presets' AND column_name='validation_contract')`).Scan(&hasContract); err != nil {
 		t.Fatal(err)
+	}
+	if hasContract {
+		if _, err := s.Pool.Exec(ctx, `INSERT INTO game_presets(id,arcade_game_id,display_name,max_players,template_revision_id,validation_contract)
+			VALUES($1,$2,'N6',10,'test-template','legacy_v1')`, presetID, gameID); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		if _, err := s.Pool.Exec(ctx, `INSERT INTO game_presets(id,arcade_game_id,display_name,max_players,template_revision_id)
+			VALUES($1,$2,'N6',10,'test-template')`, presetID, gameID); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return gameID, presetID
 }

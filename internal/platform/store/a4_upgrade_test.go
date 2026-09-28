@@ -82,8 +82,13 @@ func TestA4UpgradeFromMigration18PreservesCatalog(t *testing.T) {
 	}
 	s := &Store{Pool: pool}
 	gameID, presetID := seedPlayerCatalog(t, s)
-	// Include legitimate pre-upgrade request/allocation/job history, not only
-	// catalog rows. The additive migration must preserve these byte-for-byte.
+	// New Store code is paired with the latest schema; preserve the legacy
+	// catalog while upgrading before exercising current Store methods.
+	if err := s.ApplyMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Exercise legacy request/allocation/job behavior after the schema upgrade;
+	// TestV102MigrationFrom19 separately checks preserved pre-upgrade rows.
 	resourceNode := p3CapacityNode(t, s, "upgrade reservation", 1)
 	userID, _, err := s.CreateUserSession(ctx)
 	if err != nil {
@@ -152,7 +157,7 @@ func TestA4UpgradeFromMigration18PreservesCatalog(t *testing.T) {
 		t.Fatalf("legacy intent failure reason: %v", err)
 	}
 	var version int
-	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 19 {
+	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 20 {
 		t.Fatalf("migration version %d: %v", version, err)
 	}
 	var current, workshop string

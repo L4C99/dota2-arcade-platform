@@ -56,11 +56,35 @@ func (s *Store) ReportInstanceFact(ctx context.Context, nodeID, allocationID str
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var requestID, state, expectedID string
+	var discoveredRequest *string
+	if err := tx.QueryRow(ctx, `SELECT server_request_id FROM allocations WHERE id=$1 AND node_id=$2`, allocationID, nodeID).Scan(&discoveredRequest); err != nil {
+		return err
+	}
+	if discoveredRequest != nil {
+		var lockedRequest string
+		if err := tx.QueryRow(ctx, `SELECT id FROM server_requests WHERE id=$1 FOR UPDATE`, *discoveredRequest).Scan(&lockedRequest); err != nil {
+			return err
+		}
+	}
+	var lockedNode string
+	if err := tx.QueryRow(ctx, `SELECT id FROM nodes WHERE id=$1 FOR SHARE`, nodeID).Scan(&lockedNode); err != nil {
+		return err
+	}
+	var entryRevision string
+	if f.JoinInfo != nil {
+		if err := tx.QueryRow(ctx, `SELECT entry_config_revision FROM node_entry_capabilities WHERE node_id=$1 FOR SHARE`, nodeID).Scan(&entryRevision); err != nil {
+			return err
+		}
+	}
+	if _, _, err := lockBusinessAllocation(ctx, tx, allocationID, nodeID); err != nil {
+		return err
+	}
+	var requestID, runID *string
+	var state, expectedID string
 	var joinPort int
-	if err := tx.QueryRow(ctx, `SELECT a.server_request_id,a.state,j.instance_id,COALESCE(a.join_local_port,0)
+	if err := tx.QueryRow(ctx, `SELECT a.server_request_id,a.validation_run_id,a.state,j.instance_id,COALESCE(a.join_local_port,0)
 		FROM allocations a JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create'
-		WHERE a.id=$1 AND a.node_id=$2 FOR UPDATE OF a`, allocationID, nodeID).Scan(&requestID, &state, &expectedID, &joinPort); err != nil {
+		WHERE a.id=$1 AND a.node_id=$2`, allocationID, nodeID).Scan(&requestID, &runID, &state, &expectedID, &joinPort); err != nil {
 		return err
 	}
 	if expectedID != f.InstanceID {
@@ -80,11 +104,7 @@ func (s *Store) ReportInstanceFact(ctx context.Context, nodeID, allocationID str
 			return ErrJobConflict
 		}
 		if f.JoinInfo != nil {
-			var revision string
-			if err := tx.QueryRow(ctx, `SELECT entry_config_revision FROM node_entry_capabilities WHERE node_id=$1 FOR SHARE`, nodeID).Scan(&revision); err != nil {
-				return err
-			}
-			if f.JoinInfo.EntryConfigRevision != revision {
+			if f.JoinInfo.EntryConfigRevision != entryRevision {
 				return ErrJobConflict
 			}
 			if joinPort == 0 || joinPort == f.Port {
@@ -104,14 +124,21 @@ func (s *Store) ReportInstanceFact(ctx context.Context, nodeID, allocationID str
 			return err
 		}
 		var paused bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents WHERE source_request_id=$1 AND state='paused')`, requestID).Scan(&paused); err != nil {
-			return err
+		if requestID != nil {
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents WHERE source_request_id=$1 AND state='paused')`, requestID).Scan(&paused); err != nil {
+				return err
+			}
 		}
-		if !paused {
+		if requestID != nil && !paused {
 			if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='ended',updated_at=now() WHERE id=$1 AND state<>'abandoned'`, requestID); err != nil {
 				return err
 			}
-			if err := consumeNextGameIntent(ctx, tx, requestID, false); err != nil {
+			if err := consumeNextGameIntent(ctx, tx, *requestID, false); err != nil {
+				return err
+			}
+		}
+		if runID != nil {
+			if err := advanceValidationFromFact(ctx, tx, *runID, "reclaimed", f.JoinInfo != nil); err != nil {
 				return err
 			}
 		}
@@ -127,10 +154,22 @@ func (s *Store) ReportInstanceFact(ctx context.Context, nodeID, allocationID str
 		if _, err := tx.Exec(ctx, `UPDATE allocations SET state='quarantined',error_code=$2,quarantined_at=COALESCE(quarantined_at,now()) WHERE id=$1`, allocationID, code); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now() WHERE id=$1 AND state<>'abandoned'`, requestID); err != nil {
-			return err
+		if requestID != nil {
+			if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now() WHERE id=$1 AND state<>'abandoned'`, requestID); err != nil {
+				return err
+			}
+			if err := pauseNextGameIntent(ctx, tx, *requestID); err != nil {
+				return err
+			}
 		}
-		if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
+		if runID != nil {
+			if err := advanceValidationFromFact(ctx, tx, *runID, "quarantined", false); err != nil {
+				return err
+			}
+		}
+	}
+	if runID != nil && f.Outcome == "active" && f.Room == "ready" {
+		if err := advanceValidationFromFact(ctx, tx, *runID, "ready", f.JoinInfo != nil); err != nil {
 			return err
 		}
 	}

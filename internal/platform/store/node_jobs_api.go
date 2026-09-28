@@ -150,10 +150,30 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 		return nodev1.Job{}, err
 	}
 	defer tx.Rollback(ctx)
+	// Discover the player owner without locking, then take public Node before
+	// any Job/Allocation lock. The helper rechecks all discovered relations.
+	var discoveredRequest *string
+	if err := tx.QueryRow(ctx, `SELECT a.server_request_id FROM node_jobs j
+		LEFT JOIN allocations a ON a.id=j.allocation_id WHERE j.id=$1 AND j.node_id=$2`, jobID, nodeID).Scan(&discoveredRequest); err != nil {
+		return nodev1.Job{}, err
+	}
+	if discoveredRequest != nil {
+		var lockedRequest string
+		if err := tx.QueryRow(ctx, `SELECT id FROM server_requests WHERE id=$1 FOR UPDATE`, *discoveredRequest).Scan(&lockedRequest); err != nil {
+			return nodev1.Job{}, err
+		}
+	}
+	var lockedNode string
+	if err := tx.QueryRow(ctx, `SELECT id FROM nodes WHERE id=$1 FOR SHARE`, nodeID).Scan(&lockedNode); err != nil {
+		return nodev1.Job{}, err
+	}
+	if _, _, _, err = lockJobBusinessRows(ctx, tx, nodeID, jobID); err != nil {
+		return nodev1.Job{}, err
+	}
 	var oldState, kind, instanceID, operationID, errorCode, errorStage, allocationID string
 	err = tx.QueryRow(ctx, `SELECT state,kind,COALESCE(instance_id,''),COALESCE(operation_id,''),
 		COALESCE(error_code,''),COALESCE(error_stage,''),COALESCE(allocation_id::text,'')
-		FROM node_jobs WHERE id=$1 AND node_id=$2 FOR UPDATE`, jobID, nodeID).
+		FROM node_jobs WHERE id=$1 AND node_id=$2`, jobID, nodeID).
 		Scan(&oldState, &kind, &instanceID, &operationID, &errorCode, &errorStage, &allocationID)
 	if err != nil {
 		return nodev1.Job{}, err
@@ -246,10 +266,12 @@ func (f FrozenCreate) Contract() nodev1.FrozenCreate {
 
 func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, nodeID, kind, state, instanceID, errorCode string,
 	join *nodev1.JoinInfo, joinErrorCode string) error {
-	var requestID, selectionMode, currentAllocationState string
-	if err := tx.QueryRow(ctx, `SELECT a.server_request_id,r.node_selection_mode,a.state FROM allocations a
-		JOIN server_requests r ON r.id=a.server_request_id WHERE a.id=$1 FOR UPDATE OF a`, allocationID).
-		Scan(&requestID, &selectionMode, &currentAllocationState); err != nil {
+	var requestID *string
+	var runID *string
+	var selectionMode, currentAllocationState string
+	if err := tx.QueryRow(ctx, `SELECT a.server_request_id,a.validation_run_id,COALESCE(r.node_selection_mode,''),a.state FROM allocations a
+		LEFT JOIN server_requests r ON r.id=a.server_request_id WHERE a.id=$1`, allocationID).
+		Scan(&requestID, &runID, &selectionMode, &currentAllocationState); err != nil {
 		return err
 	}
 	// Resource terminal states are monotonic. Keep the late job report as
@@ -296,9 +318,11 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 		case "succeeded":
 			allocationState, requestState = "reclaimed", "ended"
 			var pausedIntent bool
-			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents
+			if requestID != nil {
+				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM next_game_intents
 				WHERE source_request_id=$1 AND state='paused')`, requestID).Scan(&pausedIntent); err != nil {
-				return err
+					return err
+				}
 			}
 			if pausedIntent {
 				// A paused next-game intent still needs the owner to
@@ -343,17 +367,24 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 			return err
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE server_requests SET state=$2,updated_at=$3 WHERE id=$1 AND state <> 'abandoned'`, requestID, requestState, at)
-	if err != nil {
-		return err
-	}
-	if allocationState == "quarantined" {
-		if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
+	if requestID != nil {
+		_, err = tx.Exec(ctx, `UPDATE server_requests SET state=$2,updated_at=$3 WHERE id=$1 AND state <> 'abandoned'`, requestID, requestState, at)
+		if err != nil {
 			return err
 		}
 	}
-	if kind == "stop" && state == "succeeded" && currentAllocationState != "quarantined" {
-		if err := consumeNextGameIntent(ctx, tx, requestID, false); err != nil {
+	if runID != nil {
+		if err := advanceValidationFromJob(ctx, tx, *runID, kind, state, allocationState, errorCode, join != nil); err != nil {
+			return err
+		}
+	}
+	if allocationState == "quarantined" && requestID != nil {
+		if err := pauseNextGameIntent(ctx, tx, *requestID); err != nil {
+			return err
+		}
+	}
+	if kind == "stop" && state == "succeeded" && currentAllocationState != "quarantined" && requestID != nil {
+		if err := consumeNextGameIntent(ctx, tx, *requestID, false); err != nil {
 			return err
 		}
 	}
@@ -362,8 +393,8 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,instance_id)
-			VALUES($1,$2,'stop',false,$3,$4) ON CONFLICT DO NOTHING`, stopJobID, nodeID, allocationID, instanceID)
+		_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,instance_id,required_capability)
+			VALUES($1,$2,'stop',false,$3,$4,(SELECT required_capability FROM node_jobs WHERE allocation_id=$3 AND kind='create')) ON CONFLICT DO NOTHING`, stopJobID, nodeID, allocationID, instanceID)
 		if err != nil {
 			return err
 		}
@@ -371,9 +402,11 @@ func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, node
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE server_requests SET state='stopping',updated_at=$2 WHERE id=$1 AND state<>'abandoned'`, requestID, at)
-		if err != nil {
-			return err
+		if requestID != nil {
+			_, err = tx.Exec(ctx, `UPDATE server_requests SET state='stopping',updated_at=$2 WHERE id=$1 AND state<>'abandoned'`, requestID, at)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -250,9 +250,6 @@ func (s *Store) stopUserRequest(ctx context.Context, userID, requestID string, n
 		return ServerRequest{}, err
 	}
 	defer tx.Rollback(ctx)
-	if err := lockUser(ctx, tx, userID); err != nil {
-		return ServerRequest{}, err
-	}
 	var partyID, leaderID string
 	err = tx.QueryRow(ctx, `SELECT party_id FROM party_members WHERE user_id=$1`, userID).Scan(&partyID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -260,7 +257,7 @@ func (s *Store) stopUserRequest(ctx context.Context, userID, requestID string, n
 	}
 	ownerField, ownerID := "owner_user_id", userID
 	if err == nil {
-		if err := tx.QueryRow(ctx, `SELECT leader_user_id FROM parties WHERE id=$1 AND dissolved_at IS NULL FOR UPDATE`, partyID).Scan(&leaderID); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT leader_user_id FROM parties WHERE id=$1 AND dissolved_at IS NULL`, partyID).Scan(&leaderID); err != nil {
 			return ServerRequest{}, err
 		}
 		if leaderID != userID {
@@ -271,6 +268,9 @@ func (s *Store) stopUserRequest(ctx context.Context, userID, requestID string, n
 	r, err := scanServerRequest(tx.QueryRow(ctx, `SELECT id,arcade_game_id,game_preset_id,state,requested_at,updated_at,node_selection_mode,manual_node_id
 		FROM server_requests WHERE id=$1 AND `+ownerField+`=$2 FOR UPDATE`, requestID, ownerID))
 	if err != nil {
+		return ServerRequest{}, err
+	}
+	if err := requireCurrentRequestOwner(ctx, tx, requestID, userID); err != nil {
 		return ServerRequest{}, err
 	}
 	if r.State == "stopping" || r.State == "ended" {
@@ -291,27 +291,30 @@ func (s *Store) stopUserRequest(ctx context.Context, userID, requestID string, n
 	var allocationID, nodeID, instanceID string
 	err = tx.QueryRow(ctx, `SELECT a.id,a.node_id,j.instance_id
 		FROM allocations a JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create' AND j.state='succeeded'
-		WHERE a.server_request_id=$1 AND a.state='running' ORDER BY a.attempt_sequence DESC LIMIT 1 FOR UPDATE OF a`, requestID).
+		WHERE a.server_request_id=$1 AND a.state='running' ORDER BY a.attempt_sequence DESC LIMIT 1`, requestID).
 		Scan(&allocationID, &nodeID, &instanceID)
 	if err != nil {
 		return ServerRequest{}, err
 	}
+	if _, _, err := lockBusinessAllocation(ctx, tx, allocationID, nodeID); err != nil {
+		return ServerRequest{}, err
+	}
+	var stillRunning bool
+	if err := tx.QueryRow(ctx, `SELECT state='running' AND server_request_id=$2 FROM allocations WHERE id=$1`, allocationID, requestID).Scan(&stillRunning); err != nil {
+		return ServerRequest{}, err
+	}
+	if !stillRunning {
+		return ServerRequest{}, ErrJobConflict
+	}
 	if instanceID == "" {
 		return ServerRequest{}, fmt.Errorf("%w: missing instance identity", ErrJobConflict)
-	}
-	if nextGame {
-		_, err = tx.Exec(ctx, `INSERT INTO next_game_intents(source_request_id,source_allocation_id)
-			VALUES($1,$2)`, requestID, allocationID)
-		if err != nil {
-			return ServerRequest{}, err
-		}
 	}
 	jobID, err := NewID()
 	if err != nil {
 		return ServerRequest{}, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,instance_id)
-		VALUES($1,$2,'stop',false,$3,$4)`, jobID, nodeID, allocationID, instanceID)
+	_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,instance_id,required_capability)
+		VALUES($1,$2,'stop',false,$3,$4,(SELECT required_capability FROM node_jobs WHERE allocation_id=$3 AND kind='create'))`, jobID, nodeID, allocationID, instanceID)
 	if err != nil {
 		return ServerRequest{}, err
 	}
@@ -324,6 +327,13 @@ func (s *Store) stopUserRequest(ctx context.Context, userID, requestID string, n
 	_, err = tx.Exec(ctx, `UPDATE server_requests SET state='stopping',updated_at=$2 WHERE id=$1`, requestID, at)
 	if err != nil {
 		return ServerRequest{}, err
+	}
+	if nextGame {
+		_, err = tx.Exec(ctx, `INSERT INTO next_game_intents(source_request_id,source_allocation_id)
+			VALUES($1,$2)`, requestID, allocationID)
+		if err != nil {
+			return ServerRequest{}, err
+		}
 	}
 	return r, tx.Commit(ctx)
 }

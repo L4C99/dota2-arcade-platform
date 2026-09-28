@@ -13,11 +13,14 @@ import (
 )
 
 type FrozenCreate struct {
-	NodeJobID      string `json:"nodeJobId"`
-	IdempotencyKey string `json:"idempotencyKey"`
-	TemplatePath   string `json:"template"`
-	Port           int    `json:"port"`
-	FingerprintSHA []byte `json:"-"`
+	NodeJobID                 string `json:"nodeJobId"`
+	IdempotencyKey            string `json:"idempotencyKey"`
+	TemplatePath              string `json:"template"`
+	Port                      int    `json:"port"`
+	FingerprintSHA            []byte `json:"-"`
+	RequiredCapability        string `json:"requiredCapability"`
+	TemplateManifestAlgorithm string `json:"templateManifestAlgorithm,omitempty"`
+	TemplateFingerprintSHA256 string `json:"templateFingerprintSha256,omitempty"`
 }
 
 var ErrJobConflict = errors.New("node job conflict")
@@ -62,6 +65,16 @@ func (s *Store) CreateIntegrationCreateJob(ctx context.Context, nodeID, bindingK
 // PrepareCreate persists every d2core create parameter before the first core
 // call. A repeated prepare must match the previously frozen request exactly.
 func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template string, port int) (FrozenCreate, error) {
+	return s.prepareCreate(ctx, nodeID, jobID, template, port, "", "")
+}
+
+// PrepareCreateWithManifest is the Store boundary for I2's verified manifest
+// report. The legacy entry point cannot freeze a v1.0.2 execution.
+func (s *Store) PrepareCreateWithManifest(ctx context.Context, nodeID, jobID, template string, port int, algorithm, fingerprintSHA256 string) (FrozenCreate, error) {
+	return s.prepareCreate(ctx, nodeID, jobID, template, port, algorithm, fingerprintSHA256)
+}
+
+func (s *Store) prepareCreate(ctx context.Context, nodeID, jobID, template string, port int, algorithm, manifestSHA string) (FrozenCreate, error) {
 	if template == "" || port < 0 || port > 65535 {
 		return FrozenCreate{}, fmt.Errorf("%w: invalid create request", ErrJobConflict)
 	}
@@ -72,28 +85,45 @@ func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template strin
 		return FrozenCreate{}, err
 	}
 	defer tx.Rollback(ctx)
-	var kind, state string
-	err = tx.QueryRow(ctx, "SELECT kind,state FROM node_jobs WHERE id=$1 AND node_id=$2 FOR UPDATE", jobID, nodeID).Scan(&kind, &state)
+	if _, _, _, err = lockJobBusinessRows(ctx, tx, nodeID, jobID); err != nil {
+		return FrozenCreate{}, err
+	}
+	var kind, state, requiredCapability string
+	err = tx.QueryRow(ctx, "SELECT kind,state,required_capability FROM node_jobs WHERE id=$1 AND node_id=$2", jobID, nodeID).Scan(&kind, &state, &requiredCapability)
 	if err != nil {
 		return FrozenCreate{}, err
 	}
 	if kind != "create" || state == "pending" || state == "succeeded" || state == "rejected_no_effect" || state == "failed_with_effect" {
 		return FrozenCreate{}, fmt.Errorf("%w: job cannot be prepared in state %s", ErrJobConflict, state)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO node_job_executions(node_job_id,core_idempotency_key,resolved_template_path,requested_port,request_fingerprint)
-        VALUES($1,$2,$3,$4,$5) ON CONFLICT (node_job_id) DO NOTHING`, jobID, key, template, port, fingerprint[:])
+	if requiredCapability == "content_validation_v102" {
+		var expected string
+		if err := tx.QueryRow(ctx, `SELECT v.template_fingerprint_sha256 FROM node_jobs j
+			JOIN allocations a ON a.id=j.allocation_id JOIN validation_runs v ON v.id=a.validation_run_id
+			WHERE j.id=$1`, jobID).Scan(&expected); err != nil {
+			return FrozenCreate{}, err
+		}
+		if algorithm != "template-manifest-sha256-v1" || manifestSHA != expected {
+			return FrozenCreate{}, fmt.Errorf("%w: manifest identity mismatch", ErrJobConflict)
+		}
+	} else if algorithm != "" || manifestSHA != "" {
+		return FrozenCreate{}, ErrJobConflict
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO node_job_executions(node_job_id,core_idempotency_key,resolved_template_path,requested_port,request_fingerprint,required_capability,template_manifest_algorithm,template_fingerprint_sha256)
+		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,'')) ON CONFLICT (node_job_id) DO NOTHING`, jobID, key, template, port, fingerprint[:], requiredCapability, algorithm, manifestSHA)
 	if err != nil {
 		return FrozenCreate{}, err
 	}
 	var frozen FrozenCreate
 	frozen.NodeJobID = jobID
-	err = tx.QueryRow(ctx, `SELECT core_idempotency_key,resolved_template_path,requested_port,request_fingerprint
+	err = tx.QueryRow(ctx, `SELECT core_idempotency_key,resolved_template_path,requested_port,request_fingerprint,required_capability,
+		COALESCE(template_manifest_algorithm,''),COALESCE(template_fingerprint_sha256,'')
         FROM node_job_executions WHERE node_job_id=$1`, jobID).
-		Scan(&frozen.IdempotencyKey, &frozen.TemplatePath, &frozen.Port, &frozen.FingerprintSHA)
+		Scan(&frozen.IdempotencyKey, &frozen.TemplatePath, &frozen.Port, &frozen.FingerprintSHA, &frozen.RequiredCapability, &frozen.TemplateManifestAlgorithm, &frozen.TemplateFingerprintSHA256)
 	if err != nil {
 		return FrozenCreate{}, err
 	}
-	if frozen.IdempotencyKey != key || frozen.TemplatePath != template || frozen.Port != port || !bytes.Equal(frozen.FingerprintSHA, fingerprint[:]) {
+	if frozen.IdempotencyKey != key || frozen.TemplatePath != template || frozen.Port != port || frozen.RequiredCapability != requiredCapability || frozen.TemplateManifestAlgorithm != algorithm || frozen.TemplateFingerprintSHA256 != manifestSHA || !bytes.Equal(frozen.FingerprintSHA, fingerprint[:]) {
 		return FrozenCreate{}, fmt.Errorf("%w: frozen create request changed", ErrJobConflict)
 	}
 	startedAt := time.Now().UTC()
@@ -110,6 +140,12 @@ func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template strin
 	if err != nil {
 		return FrozenCreate{}, err
 	}
+	_, err = tx.Exec(ctx, `UPDATE validation_runs v SET state='create_observing',updated_at=$2
+		FROM allocations a JOIN node_jobs j ON j.allocation_id=a.id
+		WHERE j.id=$1 AND a.validation_run_id=v.id AND v.state='create_pending'`, jobID, startedAt)
+	if err != nil {
+		return FrozenCreate{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return FrozenCreate{}, err
 	}
@@ -119,10 +155,12 @@ func (s *Store) PrepareCreate(ctx context.Context, nodeID, jobID, template strin
 func (s *Store) FrozenCreateForJob(ctx context.Context, nodeID, jobID string) (FrozenCreate, error) {
 	var frozen FrozenCreate
 	frozen.NodeJobID = jobID
-	err := s.Pool.QueryRow(ctx, `SELECT e.core_idempotency_key,e.resolved_template_path,e.requested_port,e.request_fingerprint
+	err := s.Pool.QueryRow(ctx, `SELECT e.core_idempotency_key,e.resolved_template_path,e.requested_port,e.request_fingerprint,
+		e.required_capability,COALESCE(e.template_manifest_algorithm,''),COALESCE(e.template_fingerprint_sha256,'')
         FROM node_job_executions e JOIN node_jobs j ON j.id=e.node_job_id
         WHERE j.id=$1 AND j.node_id=$2`, jobID, nodeID).
-		Scan(&frozen.IdempotencyKey, &frozen.TemplatePath, &frozen.Port, &frozen.FingerprintSHA)
+		Scan(&frozen.IdempotencyKey, &frozen.TemplatePath, &frozen.Port, &frozen.FingerprintSHA,
+			&frozen.RequiredCapability, &frozen.TemplateManifestAlgorithm, &frozen.TemplateFingerprintSHA256)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return FrozenCreate{}, pgx.ErrNoRows
 	}

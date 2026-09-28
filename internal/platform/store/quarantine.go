@@ -31,7 +31,8 @@ func (s *Store) QuarantineOneUnreachable(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	defer tx.Rollback(ctx)
-	var allocationID, requestID string
+	var allocationID string
+	var requestID *string
 	err = tx.QueryRow(ctx, `SELECT a.id,a.server_request_id FROM allocations a
 		JOIN nodes n ON n.id=a.node_id JOIN platform_settings s ON s.singleton=true
 		WHERE n.last_heartbeat IS NOT NULL
@@ -40,24 +41,54 @@ func (s *Store) QuarantineOneUnreachable(ctx context.Context) (bool, error) {
 			OR (a.state='reserved' AND EXISTS (
 				SELECT 1 FROM node_jobs j WHERE j.allocation_id=a.id AND j.kind='create'
 				AND j.state IN ('claimed','accepted','unknown','failed_with_effect'))))
-		ORDER BY n.last_heartbeat,a.assigned_at,a.id FOR UPDATE OF a SKIP LOCKED LIMIT 1`).Scan(&allocationID, &requestID)
+		ORDER BY n.last_heartbeat,a.assigned_at,a.id LIMIT 1`).Scan(&allocationID, &requestID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
+	var nodeID string
+	if err := tx.QueryRow(ctx, `SELECT node_id FROM allocations WHERE id=$1`, allocationID).Scan(&nodeID); err != nil {
+		return false, err
+	}
+	if _, _, err := lockBusinessAllocation(ctx, tx, allocationID, nodeID); err != nil {
+		return false, err
+	}
+	var stillEligible bool
+	if err := tx.QueryRow(ctx, `SELECT n.last_heartbeat IS NOT NULL AND
+		n.last_heartbeat <= now()-s.quarantine_after_node_unreachable AND
+		(a.state IN ('create_unknown','creating','running','stopping','failed_unreclaimed') OR
+		(a.state='reserved' AND EXISTS(SELECT 1 FROM node_jobs j WHERE j.allocation_id=a.id AND j.kind='create'
+		AND j.state IN ('claimed','accepted','unknown','failed_with_effect'))))
+		FROM allocations a JOIN nodes n ON n.id=a.node_id JOIN platform_settings s ON s.singleton=true
+		WHERE a.id=$1`, allocationID).Scan(&stillEligible); err != nil {
+		return false, err
+	}
+	if !stillEligible {
+		return false, nil
+	}
 	if _, err := tx.Exec(ctx, `UPDATE allocations
 		SET state='quarantined',error_code='NODE_UNREACHABLE',quarantined_at=now()
 		WHERE id=$1`, allocationID); err != nil {
 		return false, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now()
-		WHERE id=$1 AND state <> 'abandoned'`, requestID); err != nil {
-		return false, err
-	}
-	if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
-		return false, err
+	if requestID != nil {
+		if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now()
+			WHERE id=$1 AND state <> 'abandoned'`, *requestID); err != nil {
+			return false, err
+		}
+		if err := pauseNextGameIntent(ctx, tx, *requestID); err != nil {
+			return false, err
+		}
+	} else {
+		var runID string
+		if err := tx.QueryRow(ctx, `SELECT validation_run_id FROM allocations WHERE id=$1`, allocationID).Scan(&runID); err != nil {
+			return false, err
+		}
+		if err := advanceValidationFromFact(ctx, tx, runID, "quarantined", false); err != nil {
+			return false, err
+		}
 	}
 	if err := auditOperator(ctx, tx, "system", "allocation.quarantine.unreachable", "allocation", allocationID, map[string]any{"after": "quarantined", "capacityReleased": false}); err != nil {
 		return false, err
@@ -73,8 +104,17 @@ func (s *Store) MarkAllocationQuarantined(ctx context.Context, allocationID stri
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var requestID, state string
-	if err := tx.QueryRow(ctx, `SELECT server_request_id,state FROM allocations WHERE id=$1 FOR UPDATE`, allocationID).
+	var nodeID string
+	if err := tx.QueryRow(ctx, `SELECT node_id FROM allocations WHERE id=$1`, allocationID).Scan(&nodeID); err != nil {
+		return err
+	}
+	if _, _, err := lockBusinessAllocation(ctx, tx, allocationID, nodeID); err != nil {
+		return err
+	}
+	var requestID *string
+	var runID *string
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT server_request_id,state FROM allocations WHERE id=$1`, allocationID).
 		Scan(&requestID, &state); err != nil {
 		return err
 	}
@@ -98,12 +138,23 @@ func (s *Store) MarkAllocationQuarantined(ctx context.Context, allocationID stri
 		quarantined_at=COALESCE(quarantined_at,now()) WHERE id=$1`, allocationID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now()
-		WHERE id=$1 AND state <> 'abandoned'`, requestID); err != nil {
-		return err
-	}
-	if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
-		return err
+	if requestID != nil {
+		if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now()
+			WHERE id=$1 AND state <> 'abandoned'`, *requestID); err != nil {
+			return err
+		}
+		if err := pauseNextGameIntent(ctx, tx, *requestID); err != nil {
+			return err
+		}
+	} else {
+		if err := tx.QueryRow(ctx, `SELECT validation_run_id FROM allocations WHERE id=$1`, allocationID).Scan(&runID); err != nil {
+			return err
+		}
+		if runID != nil {
+			if err := advanceValidationFromFact(ctx, tx, *runID, "quarantined", false); err != nil {
+				return err
+			}
+		}
 	}
 	if err := auditOperator(ctx, tx, "operator_cli", "allocation.quarantine", "allocation", allocationID, map[string]any{"before": state, "after": "quarantined", "capacityReleased": false}); err != nil {
 		return err
@@ -119,9 +170,6 @@ func (s *Store) AbandonQuarantinedUserRequest(ctx context.Context, userID, reque
 		return ServerRequest{}, err
 	}
 	defer tx.Rollback(ctx)
-	if err := lockUser(ctx, tx, userID); err != nil {
-		return ServerRequest{}, err
-	}
 	var partyID, leaderID string
 	err = tx.QueryRow(ctx, `SELECT party_id FROM party_members WHERE user_id=$1`, userID).Scan(&partyID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -129,7 +177,7 @@ func (s *Store) AbandonQuarantinedUserRequest(ctx context.Context, userID, reque
 	}
 	ownerField, ownerID := "owner_user_id", userID
 	if err == nil {
-		if err := tx.QueryRow(ctx, `SELECT leader_user_id FROM parties WHERE id=$1 AND dissolved_at IS NULL FOR UPDATE`, partyID).Scan(&leaderID); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT leader_user_id FROM parties WHERE id=$1 AND dissolved_at IS NULL`, partyID).Scan(&leaderID); err != nil {
 			return ServerRequest{}, err
 		}
 		if leaderID != userID {
@@ -142,15 +190,24 @@ func (s *Store) AbandonQuarantinedUserRequest(ctx context.Context, userID, reque
 	if err != nil {
 		return ServerRequest{}, err
 	}
+	if err := requireCurrentRequestOwner(ctx, tx, requestID, userID); err != nil {
+		return ServerRequest{}, err
+	}
 	if r.State == "abandoned" {
 		return r, tx.Commit(ctx)
 	}
 	if r.State != "quarantined" {
 		return ServerRequest{}, fmt.Errorf("%w: request is not quarantined", ErrJobConflict)
 	}
-	var allocationState string
-	if err := tx.QueryRow(ctx, `SELECT state FROM allocations WHERE server_request_id=$1
-		ORDER BY attempt_sequence DESC LIMIT 1 FOR UPDATE`, requestID).Scan(&allocationState); err != nil {
+	var allocationState, allocationID, nodeID string
+	if err := tx.QueryRow(ctx, `SELECT id,node_id,state FROM allocations WHERE server_request_id=$1
+		ORDER BY attempt_sequence DESC LIMIT 1`, requestID).Scan(&allocationID, &nodeID, &allocationState); err != nil {
+		return ServerRequest{}, err
+	}
+	if _, _, err := lockBusinessAllocation(ctx, tx, allocationID, nodeID); err != nil {
+		return ServerRequest{}, err
+	}
+	if err := tx.QueryRow(ctx, `SELECT state FROM allocations WHERE id=$1`, allocationID).Scan(&allocationState); err != nil {
 		return ServerRequest{}, err
 	}
 	var pausedIntent bool

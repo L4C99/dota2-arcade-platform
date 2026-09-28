@@ -75,6 +75,22 @@ func auditOperator(ctx context.Context, tx pgx.Tx, kind, action, targetType, tar
 	return err
 }
 
+func guardLegacyContentAction(ctx context.Context, tx pgx.Tx, gameID string) error {
+	var locked string
+	if err := tx.QueryRow(ctx, `SELECT id FROM arcade_games WHERE id=$1 FOR UPDATE`, gameID).Scan(&locked); err != nil {
+		return err
+	}
+	var upgraded bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM game_presets WHERE arcade_game_id=$1 AND validation_contract='v1_0_2')
+		OR EXISTS(SELECT 1 FROM content_releases WHERE arcade_game_id=$1)`, gameID).Scan(&upgraded); err != nil {
+		return err
+	}
+	if upgraded {
+		return fmt.Errorf("%w: legacy content action closed for upgraded game", ErrJobConflict)
+	}
+	return nil
+}
+
 func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAction) error {
 	if len(a.TargetID) > 200 || len(a.GameID) > 200 || a.Message != nil && len(*a.Message) > 1000 ||
 		len(a.DisplayName) > 128 || len(a.ContentVersionID) > 128 || len(a.TemplateRevisionID) > 128 ||
@@ -143,12 +159,18 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			return ErrInvalidAdminAction
 		}
 		var old string
+		var lockedNode string
+		if err := tx.QueryRow(ctx, `SELECT id FROM nodes WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&lockedNode); err != nil {
+			return err
+		}
 		err := tx.QueryRow(ctx, `SELECT binding_key FROM node_template_bindings WHERE node_id=$1 AND template_revision_id=$2 FOR UPDATE`, a.TargetID, a.TemplateRevisionID).Scan(&old)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO node_template_bindings(node_id,template_revision_id,binding_key) VALUES($1,$2,$3)
-			ON CONFLICT(node_id,template_revision_id) DO UPDATE SET binding_key=EXCLUDED.binding_key`,
+			ON CONFLICT(node_id,template_revision_id) DO UPDATE SET
+			binding_generation=node_template_bindings.binding_generation+CASE WHEN node_template_bindings.binding_key IS DISTINCT FROM EXCLUDED.binding_key THEN 1 ELSE 0 END,
+			binding_key=EXCLUDED.binding_key`,
 			a.TargetID, a.TemplateRevisionID, strings.TrimSpace(a.BindingKey)); err != nil {
 			return err
 		}
@@ -157,6 +179,9 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 	case "content.validate":
 		if a.TargetID == "" || a.GameID == "" || a.ContentVersionID == "" || !a.Confirmed {
 			return ErrInvalidAdminAction
+		}
+		if err := guardLegacyContentAction(ctx, tx, a.GameID); err != nil {
+			return err
 		}
 		var drained, compatibleAndFresh bool
 		var state, version, reportedHash, expectedHash string
@@ -188,6 +213,9 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		}
 		var old string
 		if err := tx.QueryRow(ctx, `SELECT COALESCE(current_content_version_id,'') FROM arcade_games WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&old); err != nil {
+			return err
+		}
+		if err := guardLegacyContentAction(ctx, tx, a.TargetID); err != nil {
 			return err
 		}
 		var readyNode string
@@ -325,6 +353,10 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if a.TargetID == "" || a.GameID == "" || a.Accepting == nil {
 			return ErrInvalidAdminAction
 		}
+		var lockedNode string
+		if err := tx.QueryRow(ctx, `SELECT id FROM nodes WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&lockedNode); err != nil {
+			return err
+		}
 		var old bool
 		if err := tx.QueryRow(ctx, `SELECT accepting_new_allocations FROM node_content_bindings WHERE node_id=$1 AND arcade_game_id=$2 FOR UPDATE`, a.TargetID, a.GameID).Scan(&old); err != nil {
 			return err
@@ -426,12 +458,23 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		err := tx.QueryRow(ctx, `SELECT a.id,a.state,a.node_id,j.instance_id,COALESCE(j.error_code,'') FROM allocations a
 			JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create' AND j.instance_id IS NOT NULL
 			WHERE a.server_request_id=$1 AND a.state IN ('running','quarantined')
-			ORDER BY a.attempt_sequence DESC LIMIT 1 FOR UPDATE OF a`, a.TargetID).Scan(&allocationID, &allocationState, &nodeID, &instanceID, &createError)
+			ORDER BY a.attempt_sequence DESC LIMIT 1`, a.TargetID).Scan(&allocationID, &allocationState, &nodeID, &instanceID, &createError)
 		if errors.Is(err, pgx.ErrNoRows) && state == "abandoned" {
 			return fmt.Errorf("%w: abandoned resource is not quarantined", ErrJobConflict)
 		}
 		if err != nil {
 			return err
+		}
+		if _, _, err := lockBusinessAllocation(ctx, tx, allocationID, nodeID); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT a.state,COALESCE(j.instance_id,''),COALESCE(j.error_code,'') FROM allocations a
+			JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create' WHERE a.id=$1`, allocationID).
+			Scan(&allocationState, &instanceID, &createError); err != nil {
+			return err
+		}
+		if allocationState != "running" && allocationState != "quarantined" {
+			return ErrJobConflict
 		}
 		if state == "abandoned" && allocationState != "quarantined" {
 			return fmt.Errorf("%w: abandoned resource is not quarantined", ErrJobConflict)
@@ -450,8 +493,8 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,instance_id)
-			VALUES($1,$2,'stop',false,$3,$4)`, jobID, nodeID, allocationID, instanceID); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,instance_id,required_capability)
+			VALUES($1,$2,'stop',false,$3,$4,(SELECT required_capability FROM node_jobs WHERE allocation_id=$3 AND kind='create'))`, jobID, nodeID, allocationID, instanceID); err != nil {
 			return err
 		}
 		if state == "running" {
@@ -469,8 +512,16 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		change = map[string]any{"requestBefore": state, "stopJobId": jobID, "allocationId": allocationID, "requestAfter": requestAfter}
 	case "allocation.terminate_pending":
 		targetType = "allocation"
+		var targetNode string
+		if err := tx.QueryRow(ctx, `SELECT node_id FROM allocations WHERE id=$1`, a.TargetID).Scan(&targetNode); err != nil {
+			return err
+		}
+		if _, _, err := lockBusinessAllocation(ctx, tx, a.TargetID, targetNode); err != nil {
+			return err
+		}
 		// Lock the same job row as ClaimNextJob before checking any evidence.
-		var jobID, jobState, requestID, allocationState string
+		var jobID, jobState, allocationState string
+		var requestID, runID *string
 		var untouched bool
 		if err := tx.QueryRow(ctx, `SELECT j.id,j.state,j.claimed_at IS NULL AND j.instance_id IS NULL AND j.operation_id IS NULL
 			AND NOT EXISTS(SELECT 1 FROM node_job_executions e WHERE e.node_job_id=j.id)
@@ -478,7 +529,7 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			FROM node_jobs j WHERE j.allocation_id=$1 AND j.kind='create' FOR UPDATE OF j`, a.TargetID).Scan(&jobID, &jobState, &untouched); err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `SELECT server_request_id,state FROM allocations WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&requestID, &allocationState); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT server_request_id,validation_run_id,state FROM allocations WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&requestID, &runID, &allocationState); err != nil {
 			return err
 		}
 		if jobState == "rejected_no_effect" && allocationState == "released_no_effect" {
@@ -502,15 +553,30 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			if _, err := tx.Exec(ctx, `UPDATE allocations SET state='released_no_effect',error_code='PENDING_TERMINATED' WHERE id=$1`, a.TargetID); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='unavailable',updated_at=now() WHERE id=$1`, requestID); err != nil {
-				return err
+			if requestID != nil {
+				if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='unavailable',updated_at=now() WHERE id=$1`, requestID); err != nil {
+					return err
+				}
+			}
+			if runID != nil {
+				if err := advanceValidationFromJob(ctx, tx, *runID, "create", "rejected_no_effect", "released_no_effect", "PENDING_TERMINATED", false); err != nil {
+					return err
+				}
 			}
 		}
 		change = map[string]any{"jobId": jobID, "proof": "never claimed; no execution, IDs or reports", "capacityReleased": true}
 	case "allocation.quarantine":
 		targetType = "allocation"
-		var requestID, state string
-		if err := tx.QueryRow(ctx, `SELECT server_request_id,state FROM allocations WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&requestID, &state); err != nil {
+		var targetNode string
+		if err := tx.QueryRow(ctx, `SELECT node_id FROM allocations WHERE id=$1`, a.TargetID).Scan(&targetNode); err != nil {
+			return err
+		}
+		if _, _, err := lockBusinessAllocation(ctx, tx, a.TargetID, targetNode); err != nil {
+			return err
+		}
+		var requestID, runID *string
+		var state string
+		if err := tx.QueryRow(ctx, `SELECT server_request_id,validation_run_id,state FROM allocations WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&requestID, &runID, &state); err != nil {
 			return err
 		}
 		if state == "reclaimed" || state == "released_no_effect" {
@@ -529,11 +595,18 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 			if _, err := tx.Exec(ctx, `UPDATE allocations SET state='quarantined',error_code='MANUAL_QUARANTINE',quarantined_at=COALESCE(quarantined_at,now()) WHERE id=$1`, a.TargetID); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now() WHERE id=$1 AND state<>'abandoned'`, requestID); err != nil {
-				return err
+			if requestID != nil {
+				if _, err := tx.Exec(ctx, `UPDATE server_requests SET state='quarantined',updated_at=now() WHERE id=$1 AND state<>'abandoned'`, requestID); err != nil {
+					return err
+				}
+				if err := pauseNextGameIntent(ctx, tx, *requestID); err != nil {
+					return err
+				}
 			}
-			if err := pauseNextGameIntent(ctx, tx, requestID); err != nil {
-				return err
+			if runID != nil {
+				if err := advanceValidationFromFact(ctx, tx, *runID, "quarantined", false); err != nil {
+					return err
+				}
 			}
 		}
 		change = map[string]any{"before": state, "after": "quarantined", "capacityReleased": false}

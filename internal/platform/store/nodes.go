@@ -140,12 +140,9 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 	if err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}
-	// A missing or unrecognized Controller fact cannot leave an older binding
-	// looking confirmed. The Platform controls only the accepting flag.
-	if _, err := tx.Exec(ctx, `UPDATE node_content_bindings SET reported_state='unknown',
-		reported_content_version_id=NULL,reported_content_sha256=NULL,reported_at=$2 WHERE node_id=$1`, nodeID, reportedAt); err != nil {
-		return nodev1.HeartbeatResult{}, err
-	}
+	// Compare the final fact to the preceding heartbeat's final fact. Resetting
+	// every row to unknown first would falsely advance the revision on repeats.
+	seenGames := make([]string, 0, len(h.Content))
 	for _, fact := range h.Content {
 		var gameID string
 		var versionID *string
@@ -159,6 +156,7 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 		if err != nil {
 			return nodev1.HeartbeatResult{}, err
 		}
+		seenGames = append(seenGames, gameID)
 		state := "unknown"
 		var reportedHash *string
 		if fact.State != "confirmed" {
@@ -171,14 +169,27 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 		} else {
 			versionID = nil
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO node_content_bindings(node_id,arcade_game_id,reported_content_version_id,reported_state,reported_at,reported_content_sha256)
-			VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(node_id,arcade_game_id) DO UPDATE SET
+		_, err = tx.Exec(ctx, `INSERT INTO node_content_bindings(node_id,arcade_game_id,reported_content_version_id,reported_state,reported_at,reported_content_sha256,content_fact_revision)
+			VALUES($1,$2,$3,$4,$5,$6,CASE WHEN $4='confirmed' THEN 1 ELSE 0 END) ON CONFLICT(node_id,arcade_game_id) DO UPDATE SET
+			content_fact_revision=node_content_bindings.content_fact_revision+CASE WHEN
+			  (node_content_bindings.reported_content_version_id,node_content_bindings.reported_state,node_content_bindings.reported_content_sha256)
+			  IS DISTINCT FROM
+			  (EXCLUDED.reported_content_version_id,EXCLUDED.reported_state,EXCLUDED.reported_content_sha256)
+			  THEN 1 ELSE 0 END,
 			reported_content_version_id=EXCLUDED.reported_content_version_id,
 			reported_state=EXCLUDED.reported_state,reported_at=EXCLUDED.reported_at,reported_content_sha256=EXCLUDED.reported_content_sha256`,
 			nodeID, gameID, versionID, state, reportedAt, reportedHash)
 		if err != nil {
 			return nodev1.HeartbeatResult{}, err
 		}
+	}
+	// Missing facts are unknown; an already unknown row only refreshes time.
+	if _, err := tx.Exec(ctx, `UPDATE node_content_bindings SET
+		content_fact_revision=content_fact_revision+CASE WHEN reported_state<>'unknown'
+		 OR reported_content_version_id IS NOT NULL OR reported_content_sha256 IS NOT NULL THEN 1 ELSE 0 END,
+		reported_state='unknown',reported_content_version_id=NULL,reported_content_sha256=NULL,reported_at=$2
+		WHERE node_id=$1 AND NOT (arcade_game_id=ANY($3::uuid[]))`, nodeID, reportedAt, seenGames); err != nil {
+		return nodev1.HeartbeatResult{}, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO node_reports(node_id,controller_version,node_api_version,d2core_version,d2core_commit,
         d2core_protocol_version,compatibility_status,hard_max_instances,network_facts,content_facts,reported_at)

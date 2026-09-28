@@ -70,6 +70,8 @@ jobs:
       - run: go test ./internal/platform/store ./internal/platform/httpapi -count=1
         env:
           RC1_BACKUP_TEST: '1'
+      - name: Full Go race regression with PostgreSQL
+        run: go test -race ./... -count=1
 
   web:
     runs-on: ubuntu-24.04

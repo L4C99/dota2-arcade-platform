@@ -31,8 +31,22 @@ func TestP5AMultiCatalogPublicationAndWaitingVersion(t *testing.T) {
 	}
 	act(AdminAction{Action: "template.create", TargetID: game2, TemplateRevisionID: "second-template", Description: "known startup semantics"})
 	act(AdminAction{Action: "content.create", TargetID: game2, ContentVersionID: "second-v1", ContentSHA256: strings.Repeat("b", 64)})
-	act(AdminAction{Action: "preset.create", TargetID: game2, DisplayName: "Solo", TemplateRevisionID: "second-template", MaxPlayers: 1})
-	act(AdminAction{Action: "preset.create", TargetID: game2, DisplayName: "Group", TemplateRevisionID: "second-template", MaxPlayers: 8})
+	// This regression exercises the bounded legacy publication path. Imported
+	// v1.0.1 presets are legacy; newly created Admin presets default to v1_0_2.
+	for _, preset := range []struct {
+		name string
+		max  int
+	}{{"Solo", 1}, {"Group", 8}} {
+		id, err := NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Pool.Exec(ctx, `INSERT INTO game_presets
+			(id,arcade_game_id,display_name,max_players,template_revision_id,validation_contract,enabled,accepting_new_requests)
+			VALUES($1,$2,$3,$4,'second-template','legacy_v1',false,false)`, id, game2, preset.name, preset.max); err != nil {
+			t.Fatal(err)
+		}
+	}
 	catalog, err := s.PlayerCatalog(ctx)
 	if err != nil {
 		t.Fatal(err)
