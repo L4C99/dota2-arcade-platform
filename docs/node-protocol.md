@@ -1,4 +1,4 @@
-# Node API v1（P0C/P0D）
+# Node API v1 当前协议
 
 Node Controller 主动连接 Platform Server 的 `/api/node/v1`。正式环境经 Caddy 使用 HTTPS；Platform Server 只接收 Caddy 转发的本地 HTTP。开发模式只允许 Controller 访问 loopback HTTP。生产不关闭 TLS 证书校验。
 
@@ -43,9 +43,9 @@ Controller 后续把 hard 降低时，历史 desired 可以暂时高于 hard；�
 
 Platform 以服务端记录的最新心跳时间判定 Node `online`（小于 2 分钟）、`stale`（2 到小于 5 分钟）、`offline`（至少 5 分钟或从无心跳）。只有 `online` Node 可接收新 Allocation 和待领取的 NodeJob。此阈值是 P3 调度/领取阈值，与 P4 的异常隔离计时无关。变成 stale/offline 不改变已有 Allocation、NodeJob 或 occupied，也不推断 d2core instance 已停止。
 
-Controller 恢复联系后仍先执行 d2core list，再读取本 Node 的 open durable jobs、已冻结 create 参数，并通过 operation/status 对账；可能有副作用的 unknown create 始终保留原 Node 和容量。只有明确的 `rejected_no_effect` 才释放该 attempt。自动请求随后可在另一个 eligible Node 生成顺序递增的新 attempt，并重新快照当前内容版本；曾明确拒绝该请求的 Node 不会立即重复尝试。手动请求不改派到其他 Node。若全部已尝试 Node 均明确无副作用地拒绝，申请进入 `unavailable`，避免无限重试。完整 P4 quarantine/玩家脱困流程不在 P3C。
+Controller 恢复联系后仍先执行 d2core list，再读取本 Node 的 open durable jobs、已冻结 create 参数，并通过 operation/status 对账；可能有副作用的 unknown create 始终保留原 Node 和容量。只有明确的 `rejected_no_effect` 才释放该 attempt。自动请求随后可在另一个 eligible Node 生成顺序递增的新 attempt，并重新快照当前内容版本；曾明确拒绝该请求的 Node 不会立即重复尝试。手动请求不改派到其他 Node。若全部已尝试 Node 均明确无副作用地拒绝，申请进入 `unavailable`，避免无限重试。quarantine 与玩家脱困按完整状态流程执行。
 
-P4B 将 `PlatformSettings.quarantine_after_node_unreachable` 的冻结默认值设为 15 分钟。Platform 部署可通过 `PLATFORM_QUARANTINE_AFTER_NODE_UNREACHABLE` 指定正的 Go duration（例如 `20m`）；服务启动时把部署值写入 PlatformSettings。阈值到达且 Allocation 可能有副作用时，后台循环将其标记 `quarantined`，但保留 Node 容量、原端口和全部历史；这不表示 d2core 已停止。迟到的普通 create/stop 报告不能把已隔离 Allocation 恢复为可用状态，只有明确的资源终态证明才可结束占用。数据库授权的运维人员可用 `platform-server allocation quarantine <allocation-id>` 根据诊断提前隔离；P4D 管理员 Web 控制面将提供相应操作与 Audit。
+P4B 将 `PlatformSettings.quarantine_after_node_unreachable` 的冻结默认值设为 15 分钟。Platform 部署可通过 `PLATFORM_QUARANTINE_AFTER_NODE_UNREACHABLE` 指定正的 Go duration（例如 `20m`）；服务启动时把部署值写入 PlatformSettings。阈值到达且 Allocation 可能有副作用时，后台循环将其标记 `quarantined`，但保留 Node 容量、原端口和全部历史；这不表示 d2core 已停止。迟到的普通 create/stop 报告不能把已隔离 Allocation 恢复为可用状态，只有明确的资源终态证明才可结束占用。数据库授权的运维人员可用 `platform-server allocation quarantine <allocation-id>` 根据诊断提前隔离；管理员 Web 控制面也提供对应操作与 Audit。
 
 ## P4D/P4E 完整实例对账
 
@@ -75,4 +75,4 @@ A.4 Supplemental FIX-05：固定 core 下 unknown create 不接受 `rejected_no_
 
 A.4 FIX-08：`POST /allocations/{id}/fact` 可携 `room`、`joinInfo` 或 `joinInfoErrorCode`。终态 create 不再 open 后，Controller 的 active-allocation 对账仍可在同实例 active/running/ready 下补报实际端口及当前 revision。Platform 只更新 running Allocation 的可信连接事实，拒绝身份、端口、Ready/revision 不符，首次 join_info_available_at 不重写。生命周期幂等不吞掉此独立补报路径。
 
-A.4 A2S diagnostics have a two-second total budget. Only attempted queries report ok/failed; unqueried instances carry no fresh diagnostic. Budget/cancellation does not imply UDP failure. Jobs use a fresh timeout independent of heartbeat/probes.
+A.4 A2S 诊断总预算为两秒。只有实际尝试的查询才上报 `ok/failed`；未查询实例没有新的诊断事实。预算耗尽或取消不等于 UDP 失败。Job 使用独立于心跳/探测的新 timeout。

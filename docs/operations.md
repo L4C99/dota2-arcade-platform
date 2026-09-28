@@ -1,36 +1,36 @@
-# V1 operations and recovery
+# V1/v1.0.1 Production 运维与恢复
 
-This runbook describes the P5 reference assets and development verification workflow. It does not authorize production changes. Fixed d2core is **v0.1.1**, commit `988720ad85af1f0d97bfe98ec4da4fcbb070beea`; Platform Server never calls it directly.
+本文是当前 V1/v1.0.1 Production 的运维与恢复 runbook。正式版本状态见[根 README](../README.md)与 [v1.0.1 Release](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.1)。固定 d2core 为 **v0.1.1**，commit `988720ad85af1f0d97bfe98ec4da4fcbb070beea`；Platform Server 不直接调用它。实际维护、升级和故障恢复须有对应操作授权，并按本节的安全边界执行。
 
-## Baseline checks
+## 操作前基线核对
 
-Before maintenance, record the current build SHA, schema migration, `/healthz`, Admin Audit, active ServerRequests, Allocations, open NodeJobs, quarantine, next-game intents, node connectivity, Drain, hard/desired/occupied capacity, Controller and fixed d2core build, direct d2core list, Dota processes, template bindings, ContentRoot links and Controller-reported NodeContentBindings. Do not infer reclamation from a stopped UI card or `quarantined` state. A resource is free only after d2core confirms `reclaimed/stopped/complete`.
+维护前记录当前构建 SHA、schema migration、`/healthz`、Admin Audit、活动 ServerRequest、Allocation、open NodeJob、quarantine、next-game intent、节点连通性和 Drain、hard/desired/occupied 容量、Controller 与固定 d2core 构建身份、d2core `list`、Dota 进程、模板绑定、ContentRoot 链接以及 Controller 上报的 NodeContentBinding。不能根据 UI 已结束或 `quarantined` 推断实例已回收；只有 d2core 确认 `reclaimed/stopped/complete` 才释放容量。
 
-Keep deployment credentials, database dumps, VPKs and private player logs outside Git. Controller, d2core and Dota run under the same ordinary node account. On each node, the Controller `network.localPortMin/localPortMax` and d2core manager `--port-min/--port-max` must come from one deployment config; fixed d2core v0.1.1 cannot report the manager's bounds over its local API.
+部署凭据、数据库备份、VPK 和私有玩家日志须留在 Git 外。Controller、d2core 和 Dota 使用同一普通节点账户。每个节点的 Controller `network.localPortMin/localPortMax` 与 d2core manager `--port-min/--port-max` 必须来自同一部署配置；固定 d2core v0.1.1 的本地 API 不能回报 manager 的端口边界。
 
-## Database and Platform upgrade
+## 数据库与 Platform 升级
 
-1. Announce a maintenance window and pause new requests. Let active instances end or keep the old Platform build available until they do. Record active jobs and capacity.
-2. Take a timestamped PostgreSQL custom-format dump with `deploy/scripts/backup-postgres.sh` into a protected, persistent backup directory. Verify `pg_restore --list` and a restore into a **separate disposable database** before relying on it. Never commit the dump.
-3. Build and package Platform binary and Web assets together under a new immutable release directory. Preserve the previous directory and deployment environment file. Do not run from a source tree.
-4. Validate the package SHA256, build identity and paired Web bundle. In the maintenance window, stop Platform writes and run the candidate's `platform-server migrate` explicitly with the private environment. Only after success atomically point `current` at that candidate and start Platform (systemd repeats the idempotent migration and refuses startup on failure). Check local health, public HTTPS health, player/admin UI, AdminSession, Audit, Party and open resource states. Reconcile every node; never clear an unknown job merely to make health green.
-5. For code-only rollback, point `current` back to the previous build and restart after checking schema compatibility. A forward-only migration is **not** undone by replacing a binary. If the old build cannot read the new schema, stop writes, restore the verified pre-upgrade dump into a new database instance, inspect all Node/Allocation side effects independently, then switch the private DB URL to the recovered database. This is a controlled recovery, not `DROP/recreate` of the live DB. Never assume restoring business rows stopped d2core instances.
+1. 公告维护窗口并暂停新申请；等待活动实例结束，或保留旧版 Platform 直至其结束。记录 open Job 与容量。
+2. 用 `deploy/scripts/backup-postgres.sh` 将带时间戳的 PostgreSQL custom-format 备份写入受保护的持久目录。依次核对 `pg_restore --list` 和**独立临时数据库**的恢复结果；备份不得提交 Git。
+3. 把 Platform binary 与 Web 资源配对打包到新的不可变版本目录。保留上一版本目录和私有部署环境文件；不要从源码树运行。
+4. 核对包的 SHA256、构建身份与配对 Web bundle。维护窗口中停止 Platform 写入，在私有环境下显式运行候选版本的 `platform-server migrate`。成功后才原子切换 `current` 并启动 Platform；systemd 会重复执行幂等 migration，失败则拒绝启动。核对本机和公网 HTTPS health、玩家/管理员页面、AdminSession、Audit、Party 及 open 资源；逐节点 reconcile，不能为使 health 变绿而清除 unknown Job。
+5. 仅代码回滚前先确认旧版与当前 schema 兼容，再将 `current` 指回旧版并重启。替换 binary **不会撤销**前向 migration。旧版无法读取新 schema 时，应停止写入，将已验证的升级前备份恢复到新的数据库实例，独立检查 Node/Allocation 副作用，再切换私有 DB URL。这是受控恢复，不能对现有数据库做 `DROP/recreate`；恢复业务行也不代表 d2core 实例停止。
 
-## Controller update, Linux and Windows
+## Controller 升级与回滚（Linux / Windows）
 
-For each node in turn: set Node Drain, require occupied=0, open NodeJob=0 and direct d2core list empty after full reclaim. Preserve the old Controller binary and private configuration; validate the new binary's identity and config before replacing it. Restart, require a compatible heartbeat, request Controller reconcile, verify unchanged Allocation identities, ContentVersions, Entry revision/verified/enabled and content/entry/network binding facts, then Resume. Controller rollback has the same Drain/empty/reconcile boundary. If a job response is lost, leave its outcome unknown until reconciliation; do not dispatch the same ServerRequest to another node. On Linux use the systemd units in `deploy/systemd/`; on Windows use the two startup tasks and transcripts installed by `deploy/windows/install-node.ps1`. Actual Windows unattended startup/reboot remains NOT VERIFIED until its real environment gate.
+逐节点执行：先 Node Drain，等待完整回收后确认 occupied=0、open NodeJob=0、d2core `list` 为空。保留旧 Controller binary 与私有配置，替换前核对新版身份和配置。重启后要求兼容心跳，请求 Controller reconcile，并核对 Allocation 身份、ContentVersion、Entry revision/verified/enabled 及内容、入口、网络绑定事实均未意外变化，然后 Resume。Controller 回滚也遵守同样的 Drain、空实例、reconcile 边界。Job 响应丢失时保持 `unknown` 直到对账，不能把同一 ServerRequest 改派到别的节点。Linux 使用 `deploy/systemd/` 的 unit；Windows 使用 `deploy/windows/install-node.ps1` 安装的启动任务与 transcript，并在目标环境核验无人值守启动/重启。
 
-### Create dispatch hotfix acceptance (v1.0.1 candidate)
+### v1.0.1 create-dispatch 历史验收（已完成）
 
-The Production before record is a 173.578-second interval from B's create Job creation to claim while independent A remained accepted; A terminal to B claim was about 5.068 seconds. Preserve the original read-only incident report. For an authorized isolated acceptance, use one compatible Node with at least two free capacity slots and two independent Player requests a few seconds apart. Record the Platform UTC timestamps and immutable IDs for both Requests, Allocations, NodeJobs, and core operations. The decisive after assertion is `B.create_started_at < A.create Job terminal report time` (or A still open when B starts). Confirm both can reach Ready/JoinInfo independently, then stop both and verify each instance's `reclaimed/stopped/complete` status and occupied capacity returning to its initial value. Also exercise a Controller restart with both Jobs accepted: both must resume under their original instance and operation IDs without another create intention. A failure or unknown on one must retain its reservation and must not prevent the other from starting when an extra slot remains. Use no Production fault injection or Steam readiness changes for this acceptance.
+该验收已完成，原 Candidate 的步骤与判据保留在[历史验证记录](validation/v1.0.1-create-dispatch.md)。当时的 Production Before 观察为：独立 A 的 create 保持 accepted 期间，B 从 Job 创建到 claim 等待 173.578 秒；A 终结到 B claim 约 5.068 秒。After 验收以 `B.create_started_at < A.create Job terminal report time` 为关键判据，另核对两个独立实例的 Ready/JoinInfo、分别完整回收，以及 Controller 重启后沿原 instance/operation 身份恢复。私有观察与验收明细保存在仓库外。本段是历史验收背景，不是每次日常升级必须重跑的 Production 故障注入步骤。
 
-## d2core or Dota maintenance
+## d2core 与 Dota 维护
 
-The V1 dependency remains fixed at d2core v0.1.1. Any future d2core update requires separate authorization: Drain node, wait for all instances to be fully reclaimed, back up its private data and config, upgrade manually, check build/protocol and direct list, let Controller resync, then Resume. Never update d2core beneath active instances.
+V1 依赖固定为 d2core v0.1.1。未来升级 d2core 须单独授权：Drain Node，等待所有实例完整回收，备份私有数据与配置，人工升级，核对 build/protocol 与 `list`，让 Controller resync，最后 Resume。不能在活动实例下替换 d2core。
 
-Dota/App570 updates are manual and separately authorized. Drain node, let instances end, run SteamCMD update manually, create a local validation instance using the formal TemplateRevision only while drained, test real client entry, explicitly stop and confirm full reclaim, Controller resync, then Resume. Neither Controller nor Content Tool updates Dota.
+Dota/App570 更新也须单独授权并人工执行：Drain Node，等待实例结束，人工执行 SteamCMD 更新；仅在 Drain 期间用正式 TemplateRevision 创建本地验证实例，以真实客户端进服测试，显式 stop 并确认完整回收，再 Controller resync、Resume。Controller 和 Content Tool 都不会更新 Dota。
 
-## ContentVersion and VPK rolling release
+## ContentVersion 与 VPK 滚动发布
 
 The Admin content page now starts with **接入新地图** and **更新现有地图 VPK**. These task views derive progress and the next action from the existing Admin overview; they do not add a ContentUpdateJob or create Node facts. **现有地图管理** shows published version and admission across Nodes. The former object-level controls remain under **高级管理 · 手动管理平台记录**, while Node-level admission and template mapping remain available on the Node page. Detailed semantics of those controls:
 
@@ -102,7 +102,7 @@ If a content switch fails, keep binding `accepting=false` and Node Drain as need
 
 `a2s_enabled` is the Node's deployment fact. The Controller checks each actual Ready instance separately; Admin Allocation details show its local port, `ok/failed` and last check. No Ready instance means no query fact, not a failure. Legacy aggregate `a2s_query_ok` is deprecated/derived and must not be used for entry/node health, player URI, connect, capacity or scheduling. Under [V1.0 Amendment 001](specs/v1-amendment-001-entry-verification.md), for each Node and independently for Steam and steamchina, a trusted administrator confirms that a real client used the scheme URI to enter one real Ready instance under the current `entry_config_revision`. Admin requires explicit second confirmation, then records `verified_at`, `verified_by` and Audit. Within the same revision `verified` remains true; if an entry misbehaves, turn `enabled=false`, retain the attestation, and restore `enabled=true` after repair. Changing protocol IP, local/public mappings or other URI/A2S deployment configuration changes the revision and clears both schemes' verification and enabled flags. Routine Platform/Controller restarts, Web updates, content changes and instance lifecycle do not require reverification when entry network facts remain unchanged. No port-pool A2S or per-port human coverage is required. The always available fallback after Ready and valid JoinInfo is `connect <host>:<actual-public-port>`.
 
-For the A.7 small production multiplayer trial required before final V1 Release, use at least two real people: create or join a Party through the Web, choose Game/Preset and node mode, request, wait for Ready/JoinInfo, join the same real Dota server, play, then normal stop or next game and confirm full reclaim and Party persistence. Record `requested_at`, `assigned_at`, `create_started_at`, `ready_at` and `join_info_available_at` for natural trials. Browser sessions or bots do not count as real people. Do not force faults during their game. P5F development closure instead uses the real single-owner Player Web flow and two independent anonymous Party sessions under [Amendment 002](specs/v1-amendment-002-human-trial-gate.md).
+A.7 小范围 Production 多人试用已在正式 V1 Release 前完成。其历史验收标准为：至少两位真人通过 Web 加入同一 Party，选择游戏/玩法和 Node 模式，申请并等待 Ready/JoinInfo，进入同一真实 Dota 实例并游玩，随后正常 stop 或 next-game，确认完整回收与 Party 持久性。两个浏览器 Session 或 Bot 不能代替两位真人；P5F 开发收口原本只要求一名真实 Owner 的 Player Web 流程和两个独立匿名 Party Session，见 [Amendment 002](specs/v1-amendment-002-human-trial-gate.md)。这段说明属于已完成的历史门槛，当前 Release 状态以[根 README](../README.md)为准。
 
 ## V1 Known Limitation：永久未知 create（FIX-05，Owner accepted）
 

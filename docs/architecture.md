@@ -1,22 +1,22 @@
-# V1 architecture
+# V1 当前架构
 
-The [frozen V1 specification](specs/v1.md), [Amendment 001](specs/v1-amendment-001-entry-verification.md) and [Amendment 002](specs/v1-amendment-002-human-trial-gate.md) define product and acceptance rules. This page is a repository map for implementation review.
+[冻结 V1 规格](specs/v1.md)、[Amendment 001](specs/v1-amendment-001-entry-verification.md) 和 [Amendment 002](specs/v1-amendment-002-human-trial-gate.md)定义产品与验收边界。本文说明当前 v1.0.1 的组件和运行关系；当前发布状态见[根 README](../README.md)。
 
 ```text
 Browser ─HTTPS→ Caddy ─loopback HTTP→ Platform Server ─→ PostgreSQL
                                      ↑
-                                     │ HTTPS, Node API v1 (Controller initiated)
+                                     │ HTTPS，Node API v1（Controller 主动连接）
                                      │
-             Node Controller ─local API/client→ d2core v0.1.1 ─→ Dota instances
-                    │ reads
-             Node content files ← Content Tool (offline, operator invoked)
+             Node Controller ─本地 API/client→ d2core v0.1.1 ─→ Dota instances
+                    │ 读取
+             节点内容文件 ← Content Tool（离线，运维人员显式调用）
 ```
 
-- `cmd/platform-server/`, `internal/platform/httpapi/` and `internal/platform/store/` hold the single Platform process, HTTP APIs, scheduler state and database access. PostgreSQL migrations are embedded from `internal/platform/store/migrations/`; current latest is 19. `ServerRequest`, sequential `Allocation` attempts, durable `NodeJob` and d2core instance are distinct identities.
-- `cmd/node-controller/`, `internal/controller/` and `internal/contracts/nodev1/` hold the Windows/Linux Controller and wire contract. Only the Controller calls d2core, through its supported local Go client. A create job freezes its resolved request and key before the first core call; unknown effects require reconciliation. Capacity is released only after full reclaim.
-- The Controller inventories durable jobs each cycle and advances independent NodeJobs with a bounded worker count (the configured hard instance limit, with a minimum of two for independent stop progress and a maximum of 32). The Platform claim transaction excludes another open Job on the same Allocation or known instance. A slow create can therefore overlap another Allocation's create; PostgreSQL Allocation reservations still enforce `min(hard_max_instances, desired_max_instances)`. Worker memory is discarded after each cycle, so restart recovery uses persisted NodeJobs and d2core identities.
-- `cmd/content-tool/` and `internal/contenttool/` hold the offline Windows/Linux version tool. It does not Drain, call Platform, or change the published catalog. The Controller reports actual local content and its digest; Platform records the target for future Allocations.
-- `web/` is the current Vue app. It calls Platform only. `prototype/p1/` is retained historical mock UI, not a served application.
-- `deploy/` contains reference Caddy, systemd, Windows startup and PostgreSQL backup assets. They are deployment examples; production rollout and unattended install verification remain later gates.
+- `cmd/platform-server/`、`internal/platform/httpapi/` 和 `internal/platform/store/` 实现单实例 Platform、HTTP API、调度状态和数据库访问。PostgreSQL migration 内嵌于 `internal/platform/store/migrations/`，当前最新版本为 19。`ServerRequest`、顺序 `Allocation` attempts、持久 `NodeJob` 与 d2core instance 是不同身份。
+- `cmd/node-controller/`、`internal/controller/` 和 `internal/contracts/nodev1/` 实现 Windows/Linux Controller 与 Node API v1。只有 Controller 通过固定 d2core v0.1.1 的正式本地 Go client 调用 d2core。create 在首次 core 调用前冻结请求及 key；有副作用歧义时保留 `unknown` 并对账，容量只在安全无副作用终结或完整回收后释放。
+- v1.0.1 中，Controller 每轮读取持久任务，并用有界 worker 推进独立 NodeJob：worker 数取配置的 `hard_max_instances`，最少 2、最多 32；单个任务的延迟或传输错误不取消其他独立任务。Platform 的 claim 事务排除同一 Allocation 或已知 instance 上的其他 open Job。独立 Allocation 的 create 因而可以同时推进；PostgreSQL Allocation 预留仍按 `min(hard_max_instances, desired_max_instances)` 限制新实例容量。每轮 worker 退出后，下轮或重启都从持久 NodeJob 与 d2core 身份恢复。
+- `cmd/content-tool/` 与 `internal/contenttool/` 实现 Windows/Linux 离线内容版本工具。它不自动 Drain、调用 Platform 或发布目录目标。Controller 读取节点实际内容及 SHA256；Platform 为未来 Allocation 记录发布目标。V1 以 Node 为内容版本隔离边界，不在活动实例之间热切换同一 Node 的版本。
+- `web/` 是当前 Vue 应用，只访问 Platform；`prototype/p1/` 是保留的历史 mock。Dota 客户端的游戏流量直接到游戏 Node，不经过 Caddy 或 Platform。
+- `deploy/` 提供 Caddy、systemd、Windows 启动与 PostgreSQL 备份资产。实际升级、Drain、回滚与恢复按[当前运维说明](operations.md)执行。
 
-For detailed behavior see the [Node protocol](node-protocol.md), [player API](player-api.md), [administrator API](admin-api.md), [operations runbook](operations.md) and [P5 closure](validation/p5-summary.md). Game traffic goes directly from the Dota client to the game node, not through Caddy or Platform.
+接口和发布流程分别见 [Node 协议](node-protocol.md)、[玩家 API](player-api.md)、[管理员 API](admin-api.md)及[Release 说明](release.md)。开发与验收过程的时点记录见[Validation 索引](validation/README.md)。
