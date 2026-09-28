@@ -17,6 +17,7 @@ import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_MIGRATION_VERSION = 20
 
 
 def run(args, cwd=ROOT, env=None):
@@ -116,10 +117,10 @@ def main():
     out.mkdir(parents=True, exist_ok=False)
     time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     metadata = {"version": args.version, "gitCommit": sha, "gitDirty": False, "buildTime": time,
-                "nodeAPIVersion": 1, "migrationVersion": 19, "d2coreVersion": "0.1.1",
+                "nodeAPIVersion": 1, "migrationVersion": EXPECTED_MIGRATION_VERSION, "d2coreVersion": "0.1.1",
                 "d2coreCommit": "988720ad85af1f0d97bfe98ec4da4fcbb070beea"}
     migrations = sorted((ROOT / "internal/platform/store/migrations").glob("*.sql"))
-    if [int(p.name.split("_")[0]) for p in migrations] != list(range(1, 20)):
+    if [int(p.name.split("_")[0]) for p in migrations] != list(range(1, EXPECTED_MIGRATION_VERSION + 1)):
         raise RuntimeError("unexpected migration baseline")
     for path in migrations:
         original = subprocess.check_output(["git", "show", "HEAD:" + path.relative_to(ROOT).as_posix()], cwd=ROOT)
