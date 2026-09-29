@@ -10,6 +10,10 @@ import (
 )
 
 func i3PassRun(t *testing.T, s *Store, c ValidationCandidate) ValidationRun {
+	return i3PassRunBeforeFinalize(t, s, c, nil)
+}
+
+func i3PassRunBeforeFinalize(t *testing.T, s *Store, c ValidationCandidate, beforeFinalize func(ValidationRun)) ValidationRun {
 	t.Helper()
 	ctx := context.Background()
 	run, err := s.ReserveValidation(ctx, c)
@@ -55,6 +59,9 @@ func i3PassRun(t *testing.T, s *Store, c ValidationCandidate) ValidationRun {
 	if _, err := s.ReportJob(ctx, c.NodeID, run.StopJobID, nodev1.ReportRequest{State: "succeeded", InstanceID: "i_validation", OperationID: "o_stop"}); err != nil {
 		t.Fatal(err)
 	}
+	if beforeFinalize != nil {
+		beforeFinalize(run)
+	}
 	if err := s.FinalizeReadyValidations(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +70,51 @@ func i3PassRun(t *testing.T, s *Store, c ValidationCandidate) ValidationRun {
 		t.Fatalf("automatic finalizer %+v %v", run, err)
 	}
 	return run
+}
+
+// Seed a terminal Allocation whose create Job remains unresolved. The row is
+// intentionally inconsistent with reclaim so the PASS gate must examine Job
+// history even when the Allocation itself no longer occupies capacity.
+func i3SeedTerminalJob(t *testing.T, s *Store, source ValidationRun, createdOffset, jobState string) string {
+	t.Helper()
+	ctx := context.Background()
+	runID, _ := NewID()
+	allocationID, _ := NewID()
+	jobID, _ := NewID()
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `INSERT INTO validation_runs(id,started_by_admin_user_id,node_id,arcade_game_id,game_preset_id,
+		content_version_id,content_sha256,template_revision_id,template_binding_key,template_fingerprint_sha256,
+		template_binding_generation,maintenance_epoch,content_fact_revision,template_fact_revision,
+		state,human_result,human_confirmed_by,human_confirmed_at,ready_at,join_info_available_at,created_at)
+		SELECT $1,started_by_admin_user_id,node_id,arcade_game_id,game_preset_id,content_version_id,content_sha256,
+		template_revision_id,template_binding_key,template_fingerprint_sha256,template_binding_generation,
+		maintenance_epoch,content_fact_revision,template_fact_revision,'reclaim_observing','pass',
+		started_by_admin_user_id,now(),now(),now(),now()-$3::interval
+		FROM validation_runs WHERE id=$2`, runID, source.ID, createdOffset); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO allocations(id,arcade_game_id,attempt_sequence,node_id,content_version_id,template_revision_id,
+		state,assigned_at,reclaimed_at,purpose,validation_run_id)
+		SELECT $1,arcade_game_id,1,node_id,content_version_id,template_revision_id,'reclaimed',now(),now(),'validation',$2
+		FROM validation_runs WHERE id=$2`, allocationID, runID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,state,required_capability,
+		template_binding_key,expected_template_fingerprint_sha256,template_binding_generation,
+		expected_workshop_id,expected_content_version_id,expected_vpk_sha256)
+		SELECT $1,node_id,'create',false,$2,$3,required_capability,template_binding_key,
+		expected_template_fingerprint_sha256,template_binding_generation,expected_workshop_id,
+		expected_content_version_id,expected_vpk_sha256 FROM node_jobs WHERE id=$4`, jobID, allocationID, jobState, source.CreateJobID); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	return jobID
 }
 
 func i3Publish(t *testing.T, s *Store, c ValidationCandidate, run ValidationRun, more ...ReleasePresetPlan) string {
@@ -81,6 +133,49 @@ func i3Publish(t *testing.T, s *Store, c ValidationCandidate, run ValidationRun,
 		t.Fatal(err)
 	}
 	return id
+}
+
+func TestI3FinalPassWaitsForScopedTerminalAllocationJob(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	ctx := context.Background()
+	i3PassRunBeforeFinalize(t, s, c, func(run ValidationRun) {
+		jobID := i3SeedTerminalJob(t, s, run, "1 day", "unknown")
+		if _, err := s.FinalizeValidationRun(ctx, run.ID); !errors.Is(err, ErrJobConflict) {
+			t.Fatalf("unknown create on reclaimed Allocation permitted PASS: %v", err)
+		}
+		if _, err := s.Pool.Exec(ctx, `UPDATE node_jobs SET state='succeeded' WHERE id=$1`, jobID); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestI3FinalPassWaitsForNodeIntegrationJob(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	ctx := context.Background()
+	i3PassRunBeforeFinalize(t, s, c, func(run ValidationRun) {
+		jobID, _ := NewID()
+		if _, err := s.Pool.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,state)
+			VALUES($1,$2,'stop',true,'unknown')`, jobID, c.NodeID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.FinalizeValidationRun(ctx, run.ID); !errors.Is(err, ErrJobConflict) {
+			t.Fatalf("unresolved integration Job permitted PASS: %v", err)
+		}
+		if _, err := s.Pool.Exec(ctx, `UPDATE node_jobs SET state='succeeded' WHERE id=$1`, jobID); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestI3FinalizerPagesPastStableConflicts(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	i3PassRunBeforeFinalize(t, s, c, func(run ValidationRun) {
+		for i := 0; i < 101; i++ {
+			i3SeedTerminalJob(t, s, run, "1 day", "succeeded")
+		}
+		// Each old candidate remains conflicting. The helper's single convergence
+		// call must still reach and finalize the later real Run.
+	})
 }
 
 func TestI3NoPassBlocksPlayerAndBindingReopen(t *testing.T) {
@@ -107,6 +202,29 @@ func TestI3NoPassBlocksPlayerAndBindingReopen(t *testing.T) {
 	}
 	if err := s.ApplyAdminAction(ctx, c.AdminID, AdminAction{Action: "binding.update", TargetID: c.NodeID, GameID: c.GameID, Accepting: boolPtr(true)}); !errors.Is(err, ErrValidationIncomplete) {
 		t.Fatalf("binding bypass: %v", err)
+	}
+}
+
+func TestI3StoreRejectsMissingValidationRequestIDWithoutWrites(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	c.RequestID = ""
+	if _, err := s.ReserveValidation(context.Background(), c); !errors.Is(err, ErrInvalidAdminAction) {
+		t.Fatalf("empty request ID: %v", err)
+	}
+	for _, table := range []string{"validation_runs", "allocations", "node_jobs"} {
+		var count int
+		if err := s.Pool.QueryRow(context.Background(), "SELECT count(*) FROM "+table).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("%s writes after invalid ID: %d %v", table, count, err)
+		}
+	}
+}
+
+func TestI3MaintenanceRejectsMalformedRequestID(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	for _, requestID := range []string{"", strings.Repeat("x", 129)} {
+		if _, err := s.BeginScopedMaintenance(context.Background(), c.NodeID, c.GameID, c.AdminID, requestID, "test", 1); !errors.Is(err, ErrInvalidAdminAction) {
+			t.Fatalf("malformed request ID: %v", err)
+		}
 	}
 }
 
@@ -181,6 +299,15 @@ func TestI3FirstReleasePerPresetAndPlayerCapability(t *testing.T) {
 	if changed, err := s.TryAllocateOne(ctx); err != nil || !changed {
 		t.Fatalf("valid PASS refused: %t %v", changed, err)
 	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proofID, proofErr := effectiveValidationProof(ctx, tx, c.NodeID, c.GameID, c.PresetID, c.ContentVersionID, c.TemplateRevisionID, run.ID)
+	tx.Rollback(ctx)
+	if proofErr != nil || proofID != run.ID {
+		t.Fatalf("later player create Job invalidated historical PASS: %q %v", proofID, proofErr)
+	}
 	var capability, fingerprint, workshop, content, sha string
 	var generation int64
 	if err := s.Pool.QueryRow(ctx, `SELECT required_capability,expected_template_fingerprint_sha256,template_binding_generation,
@@ -227,6 +354,14 @@ func TestI3ValidationStartRequestDurabilityAndProofDrift(t *testing.T) {
 		}
 	}
 	check(true)
+	if _, err := s.Pool.Exec(ctx, `UPDATE allocations SET state='quarantined',reclaimed_at=NULL WHERE id=$1`, run.AllocationID); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
+	if _, err := s.Pool.Exec(ctx, `UPDATE allocations SET state='reclaimed',reclaimed_at=now() WHERE id=$1`, run.AllocationID); err != nil {
+		t.Fatal(err)
+	}
+	check(true)
 	if _, err := s.Pool.Exec(ctx, `UPDATE node_content_bindings SET content_fact_revision=content_fact_revision+1 WHERE node_id=$1 AND arcade_game_id=$2`, c.NodeID, c.GameID); err != nil {
 		t.Fatal(err)
 	}
@@ -267,9 +402,16 @@ func TestI3TemplateOnlyPublicationUsesNewPresetProof(t *testing.T) {
 		t.Fatalf("maintenance epoch %d %v", epoch, err)
 	}
 	newCandidate := c
+	newCandidate.RequestID = "template-validation"
 	newCandidate.TemplateRevisionID = "test-template-2"
 	newCandidate.ExpectedMaintenanceEpoch = 2
 	newRun := i3PassRun(t, s, newCandidate)
+	paused := ReleasePublishRequest{GameID: c.GameID, ExpectedOldContentVersionID: "test-v1", NewContentVersionID: "test-v1",
+		Presets: []ReleasePresetPlan{{PresetID: c.PresetID, ExpectedOldTemplateRevisionID: "test-template", NewTemplateRevisionID: "test-template-2",
+			ExpectedOldAccepting: true, NewAccepting: false}}, RequestID: "template-only-paused"}
+	if _, err := s.PublishRelease(ctx, c.AdminID, paused); !errors.Is(err, ErrValidationIncomplete) {
+		t.Fatalf("same-content template-only all-paused release without proof: %v", err)
+	}
 	request := ReleasePublishRequest{GameID: c.GameID, ExpectedOldContentVersionID: "test-v1", NewContentVersionID: "test-v1",
 		Presets: []ReleasePresetPlan{{PresetID: c.PresetID, ExpectedOldTemplateRevisionID: "test-template", NewTemplateRevisionID: "test-template-2",
 			ExpectedOldAccepting: true, NewAccepting: true, ValidationRunID: firstRun.ID}}, RequestID: "template-only"}
@@ -317,6 +459,7 @@ func TestI3ContentChangeAndRollbackNeedAllPresetsAndNewEpochProof(t *testing.T) 
 			t.Fatal(err)
 		}
 		candidate := c
+		candidate.RequestID = "validation-" + requestID
 		candidate.ContentVersionID = version
 		candidate.ExpectedMaintenanceEpoch = oldEpoch + 1
 		return i3PassRun(t, s, candidate)

@@ -81,7 +81,10 @@ func (s *Store) ScopedMaintenanceStatus(ctx context.Context, nodeID, gameID stri
 // BeginScopedMaintenance serializes with scheduler reservations at the Node
 // lock. A request ID returns the prior epoch only for the identical operation.
 func (s *Store) BeginScopedMaintenance(ctx context.Context, nodeID, gameID, adminID, requestID, reason string, expectedEpoch int64) (int64, error) {
-	if requestID == "" || len(requestID) > 128 || reason == "" || expectedEpoch < 0 {
+	if requestID == "" || len(requestID) > 128 {
+		return 0, ErrInvalidAdminAction
+	}
+	if reason == "" || expectedEpoch < 0 {
 		return 0, ErrJobConflict
 	}
 	tx, err := s.Pool.Begin(ctx)
@@ -315,11 +318,11 @@ func (s *Store) RecordInventory(ctx context.Context, nodeID, scanID string, comp
 // and pending create Job. New Controller facts are prerequisites, never
 // synthesized from an administrator's expected values.
 func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (ValidationRun, error) {
+	if c.RequestID == "" || len(c.RequestID) > 128 {
+		return ValidationRun{}, ErrInvalidAdminAction
+	}
 	if c.ExpectedMaintenanceEpoch <= 0 || !contentSHA256Pattern.MatchString(c.ExpectedTemplateFingerprintSHA256) {
 		return ValidationRun{}, ErrJobConflict
-	}
-	if len(c.RequestID) > 128 {
-		return ValidationRun{}, ErrInvalidAdminAction
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -927,8 +930,10 @@ func (s *Store) FinalizeValidationRun(ctx context.Context, runID string) (Valida
 		return ValidationRun{}, ErrJobConflict
 	}
 	var unresolved, otherResources int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM node_jobs j JOIN allocations a ON a.id=j.allocation_id
-		WHERE a.validation_run_id=$1 AND j.state IN ('pending','claimed','accepted','unknown')`, runID).Scan(&unresolved); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM node_jobs j
+		LEFT JOIN allocations a ON a.id=j.allocation_id
+		WHERE j.node_id=$1 AND j.state IN ('pending','claimed','accepted','unknown')
+		AND (j.integration_only OR (a.arcade_game_id=$2 AND j.kind IN ('create','stop')))`, nodeID, gameID).Scan(&unresolved); err != nil {
 		return ValidationRun{}, err
 	}
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM allocations WHERE node_id=$1 AND arcade_game_id=$2 AND id<>$3
@@ -979,39 +984,57 @@ func (s *Store) FinalizeValidationRun(ctx context.Context, runID string) (Valida
 // FinalizeReadyValidations is a server-side convergence step. Reads in Admin
 // never mutate Runs, and a human confirmation never directly grants PASS.
 func (s *Store) FinalizeReadyValidations(ctx context.Context) error {
-	rows, err := s.Pool.Query(ctx, `SELECT v.id,v.human_result,v.state FROM validation_runs v
+	type pending struct{ id, human, state string }
+	var cursorCreated time.Time
+	var cursorID string
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var afterCreated, afterID any
+		if cursorID != "" {
+			afterCreated, afterID = cursorCreated, cursorID
+		}
+		rows, err := s.Pool.Query(ctx, `SELECT v.id,v.human_result,v.state,v.created_at FROM validation_runs v
 		JOIN allocations a ON a.validation_run_id=v.id
 		WHERE v.state NOT IN ('passed','failed') AND a.state IN ('reclaimed','released_no_effect')
-		ORDER BY v.created_at,v.id LIMIT 100`)
-	if err != nil {
-		return err
-	}
-	type pending struct{ id, human, state string }
-	var runs []pending
-	for rows.Next() {
-		var r pending
-		if err := rows.Scan(&r.id, &r.human, &r.state); err != nil {
+		AND ($1::timestamptz IS NULL OR (v.created_at,v.id) > ($1::timestamptz,$2::uuid))
+		ORDER BY v.created_at,v.id LIMIT 100`, afterCreated, afterID)
+		if err != nil {
+			return err
+		}
+		var runs []pending
+		for rows.Next() {
+			var r pending
+			if err := rows.Scan(&r.id, &r.human, &r.state, &cursorCreated); err != nil {
+				rows.Close()
+				return err
+			}
+			cursorID = r.id
+			runs = append(runs, r)
+		}
+		if err := rows.Err(); err != nil {
 			rows.Close()
 			return err
 		}
-		runs = append(runs, r)
-	}
-	if err := rows.Err(); err != nil {
 		rows.Close()
-		return err
-	}
-	rows.Close()
-	for _, r := range runs {
-		if r.human == "pass" && r.state == "reclaim_observing" {
-			_, err = s.FinalizeValidationRun(ctx, r.id)
-		} else if r.human != "pass" || r.state == "quarantined" {
-			_, err = s.FinalizeValidationFailure(ctx, r.id, "VALIDATION_NOT_PASSED")
-		} else {
-			continue
+		for _, r := range runs {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if r.human == "pass" && r.state == "reclaim_observing" {
+				_, err = s.FinalizeValidationRun(ctx, r.id)
+			} else if r.human != "pass" || r.state == "quarantined" {
+				_, err = s.FinalizeValidationFailure(ctx, r.id, "VALIDATION_NOT_PASSED")
+			} else {
+				continue
+			}
+			if err != nil && !errors.Is(err, ErrJobConflict) {
+				return err
+			}
 		}
-		if err != nil && !errors.Is(err, ErrJobConflict) {
-			return err
+		if len(runs) < 100 {
+			return nil
 		}
 	}
-	return nil
 }

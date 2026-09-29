@@ -261,7 +261,7 @@ func v102ValidationFixture(t *testing.T, hard int) (*Store, ValidationCandidate)
 	if again, err := s.BeginScopedMaintenance(ctx, node, game, admin, "maintenance-1", "content validation", 0); err != nil || again != 1 {
 		t.Fatalf("maintenance retry %d %v", again, err)
 	}
-	return s, ValidationCandidate{NodeID: node, GameID: game, PresetID: preset, ContentVersionID: "test-v1", TemplateRevisionID: "test-template", AdminID: admin, ExpectedMaintenanceEpoch: 1, ExpectedTemplateFingerprintSHA256: fingerprint}
+	return s, ValidationCandidate{NodeID: node, GameID: game, PresetID: preset, ContentVersionID: "test-v1", TemplateRevisionID: "test-template", AdminID: admin, RequestID: "validation-fixture", ExpectedMaintenanceEpoch: 1, ExpectedTemplateFingerprintSHA256: fingerprint}
 }
 
 func TestV102ValidationReserveAndCapability(t *testing.T) {
@@ -285,6 +285,7 @@ func TestV102ValidationReserveAndCapability(t *testing.T) {
 	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM allocations WHERE node_id=$1 AND state NOT IN ('reclaimed','released_no_effect')`, c.NodeID).Scan(&occupied); err != nil || occupied != 1 {
 		t.Fatalf("occupied %d %v", occupied, err)
 	}
+	c.RequestID = "second-validation"
 	if _, err := s.ReserveValidation(ctx, c); err == nil {
 		t.Fatal("second Run reserved before first reclaim")
 	}

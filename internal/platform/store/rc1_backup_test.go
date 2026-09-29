@@ -19,7 +19,11 @@ import (
 func rc1Snapshot(t *testing.T, pool *pgxpool.Pool, upgrading bool) string {
 	t.Helper()
 	var result strings.Builder
-	for _, table := range []string{"users", "user_sessions", "admin_users", "admin_sessions", "parties", "party_members", "party_invites", "arcade_games", "game_presets", "content_versions", "template_revisions", "nodes", "node_content_bindings", "node_entry_capabilities", "server_requests", "allocations", "node_jobs", "node_job_executions", "node_job_reports", "audit_events", "next_game_intents"} {
+	tables := []string{"users", "user_sessions", "admin_users", "admin_sessions", "parties", "party_members", "party_invites", "arcade_games", "game_presets", "content_versions", "template_revisions", "nodes", "node_content_bindings", "node_entry_capabilities", "server_requests", "allocations", "node_jobs", "node_job_executions", "node_job_reports", "audit_events", "next_game_intents"}
+	if !upgrading {
+		tables = append(tables, "validation_runs", "maintenance_begin_requests", "node_template_facts", "node_inventory_snapshots", "node_inventory_instances", "admin_i3_requests", "content_releases", "content_release_presets")
+	}
+	for _, table := range tables {
 		row := "to_jsonb(r)"
 		if upgrading && table == "next_game_intents" {
 			row += " - 'failure_reason'"
@@ -81,7 +85,14 @@ func TestRC1BackupRestore(t *testing.T) {
 	if _, err := s.CreateAdmin(ctx, "restore-fixture", "test-only-long-password"); err != nil {
 		t.Fatal(err)
 	}
+	// A second schema in the same source database records the formal I3 ledger
+	// through Store APIs while retaining the earlier player/next-game fixture.
+	i3Store, candidate := v102ValidationFixture(t, 2)
+	run := i3PassRun(t, i3Store, candidate)
+	i3Publish(t, i3Store, candidate, run)
 	before := rc1Snapshot(t, s.Pool, false)
+	i3Before := rc1Snapshot(t, i3Store.Pool, false)
+	i3Schema := i3Store.Pool.Config().ConnConfig.RuntimeParams["search_path"]
 	dir := t.TempDir()
 	serviceFile := filepath.Join(dir, "pg_service.conf")
 	c := conf.ConnConfig
@@ -157,6 +168,20 @@ func TestRC1BackupRestore(t *testing.T) {
 	}
 	if after := rc1Snapshot(t, pool, false); after != before {
 		t.Fatal("restore row history mismatch")
+	}
+	i3Conf := conf.Copy()
+	i3Conf.ConnConfig.RuntimeParams["search_path"] = i3Schema
+	i3Pool, err := pgxpool.NewWithConfig(ctx, i3Conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(i3Pool.Close)
+	i3Restored := &Store{Pool: i3Pool}
+	if err := i3Restored.ApplyMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if after := rc1Snapshot(t, i3Pool, false); after != i3Before {
+		t.Fatal("I3 restore row history mismatch")
 	}
 	var latest, count int
 	if err := pool.QueryRow(ctx, `SELECT max(version),count(*) FROM schema_migrations`).Scan(&latest, &count); err != nil || latest != 22 || count != 22 {

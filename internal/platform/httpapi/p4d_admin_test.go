@@ -128,6 +128,19 @@ func TestP4DAdminHTTPAuthorizationSessionAndCSRF(t *testing.T) {
 			}
 		})
 	}
+	longID := strings.Repeat("x", 129)
+	for _, test := range []struct{ name, path, body string }{
+		{"maintenance.begin", i3Path, strings.Replace(i3Body, "i3-http", longID, 1)},
+		{"validation.start", "/api/v1/admin/validation/start", `{"nodeId":"00000000-0000-0000-0000-000000000001","gameId":"00000000-0000-0000-0000-000000000002","presetId":"00000000-0000-0000-0000-000000000003","contentVersionId":"v1","templateRevisionId":"t1","expectedMaintenanceEpoch":1,"expectedTemplateFingerprint":"` + strings.Repeat("f", 64) + `","requestId":"` + longID + `"}`},
+		{"release.publish", "/api/v1/admin/release/publish", `{"gameId":"00000000-0000-0000-0000-000000000002","expectedOldContentVersionId":"v1","newContentVersionId":"v2","presets":[{"presetId":"00000000-0000-0000-0000-000000000003","expectedOldTemplateRevisionId":"t1","newTemplateRevisionId":"t2","expectedOldAccepting":false,"newAccepting":false}],"requestId":"` + longID + `"}`},
+	} {
+		t.Run("I3 long "+test.name, func(t *testing.T) {
+			w := call("POST", test.path, test.body, "https://example.org", cookie)
+			if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"INVALID_ACTION"`) {
+				t.Fatalf("malformed request ID: %d %s", w.Code, w.Body.String())
+			}
+		})
+	}
 	var actor string
 	if err := pool.QueryRow(ctx, `SELECT actor_admin_user_id FROM audit_events WHERE action='global.update'`).Scan(&actor); err != nil || actor != adminID {
 		t.Fatalf("audit actor=%s: %v", actor, err)

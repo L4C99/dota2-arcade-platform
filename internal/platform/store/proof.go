@@ -15,6 +15,7 @@ import (
 func effectiveValidationProof(ctx context.Context, tx pgx.Tx, nodeID, gameID, presetID, contentID, revisionID, runID string) (string, error) {
 	var id string
 	err := tx.QueryRow(ctx, `SELECT v.id FROM validation_runs v
+		JOIN allocations va ON va.validation_run_id=v.id AND va.state='reclaimed'
 		JOIN content_versions cv ON cv.arcade_game_id=v.arcade_game_id AND cv.id=v.content_version_id
 		JOIN nodes n ON n.id=v.node_id
 		JOIN node_reports nr ON nr.node_id=n.id

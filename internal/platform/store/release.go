@@ -189,7 +189,7 @@ func (s *Store) PublishRelease(ctx context.Context, adminID string, request Rele
 		// A first or content-changing release may formally pause every Preset
 		// without admitting players. Keep rollback proof-required, and require
 		// a complete plan with every target closed for this narrow case.
-		if request.RollbackOfReleaseID != "" || len(planByID) != len(current) {
+		if request.RollbackOfReleaseID != "" || (!first && oldContent == request.NewContentVersionID) || len(planByID) != len(current) {
 			return "", ErrValidationIncomplete
 		}
 		for _, p := range request.Presets {

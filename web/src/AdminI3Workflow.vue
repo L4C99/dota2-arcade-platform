@@ -91,6 +91,10 @@ watch(gameId, () => {
   for (const key of Object.keys(plan)) delete plan[key]
   for (const p of presets.value) plan[p.id] = { selected: true, template: p.templateRevisionId, accepting: false, runId: '' }
 })
+watch(presets, current => {
+  for (const key of Object.keys(plan)) if (!current.some(p => p.id === key)) delete plan[key]
+  for (const p of current) plan[p.id] ??= { selected: true, template: p.templateRevisionId, accepting: false, runId: '' }
+}, { immediate: true })
 watch(presetId, () => { candidateTemplate.value = presets.value.find(x => x.id === presetId.value)?.templateRevisionId || '' })
 watch(templateBinding, value => { bindingKey.value = value?.bindingKey || ''; fingerprint.value = value?.expectedFingerprintSha256 || '' }, { immediate: true })
 

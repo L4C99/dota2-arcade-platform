@@ -44,3 +44,15 @@ it('shows the manual content publish control only for legacy games',async()=>{
  selector.value='legacy';selector.dispatchEvent(new Event('change',{bubbles:true}));await settle()
  expect(root.textContent).toContain('旧合同手动发布')
 })
+it('shows legacy content validation only for a pure legacy game on the Node tab',async()=>{
+ const game=(id:string)=>({id,displayName:id,workshopId:'123456',currentContentVersionId:'v1',maintenanceMessage:'',enabled:true,acceptingNewRequests:true})
+ const preset=(id:string,gameId:string,contract:string)=>({id,arcadeGameId:gameId,displayName:id,templateRevisionId:'t1',maintenanceMessage:'',enabled:true,acceptingNewRequests:true,maxPlayers:10,validationContract:contract})
+ const binding=(gameId:string)=>({nodeId:'n',arcadeGameId:gameId,reportedContentVersionId:'v1',reportedContentSha256:'a'.repeat(64),reportedState:'confirmed',acceptingNewAllocations:false})
+ const data={...overview(),games:[game('upgraded'),game('released'),game('legacy')],presets:[preset('p1','upgraded','v1_0_2'),preset('p2','released','legacy_v1'),preset('p3','legacy','legacy_v1')],releases:[{id:'r',gameId:'released'}],bindings:[binding('upgraded'),binding('released'),binding('legacy')],contentVersions:[{id:'v1',arcadeGameId:'upgraded',contentSha256:'a'.repeat(64)},{id:'v1',arcadeGameId:'released',contentSha256:'a'.repeat(64)},{id:'v1',arcadeGameId:'legacy',contentSha256:'a'.repeat(64)}],inventories:[]}
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>new Response(JSON.stringify(url.endsWith('/overview')?data:{}),{status:200})))
+ await mount();click('节点');await settle()
+ const cards=[...root.querySelectorAll<HTMLElement>('.admin-map-binding')]
+ expect(cards.find(x=>x.textContent?.includes('upgraded'))?.querySelector('.admin-map-record')).toBeNull()
+ expect(cards.find(x=>x.textContent?.includes('released'))?.querySelector('.admin-map-record')).toBeNull()
+ expect(cards.find(x=>x.textContent?.includes('legacy'))?.querySelector('.admin-map-record')).not.toBeNull()
+})

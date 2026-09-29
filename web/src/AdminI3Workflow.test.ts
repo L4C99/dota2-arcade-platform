@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
-import { createApp, nextTick, type App } from 'vue'
+import { createApp, nextTick, reactive, type App } from 'vue'
 import AdminI3Workflow from './AdminI3Workflow.vue'
 
 let app: App | undefined
@@ -99,4 +99,23 @@ it('allows a complete first release that pauses every unproven Preset', async ()
   const publish = [...root!.querySelectorAll('button')].find(x => x.textContent?.includes('发布正式组合'))!
   expect(publish.disabled).toBe(false)
   expect(root!.textContent).toContain('首次升级或内容指针变化：必须列出全部现存玩法')
+})
+
+it('syncs a same-game Preset refresh without losing existing plan drafts', async () => {
+  const view = reactive(data())
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ maintenanceEpoch: 3, closed: true, targetOccupied: 0, targetUnresolvedJobs: 0, nodeOccupied: 0 }), { status: 200 })))
+  await mount(view)
+  const rows = () => [...root!.querySelectorAll<HTMLElement>('.admin-task-preset')].filter(x => x.querySelector('input[type=checkbox]'))
+  const p1 = rows().find(x => x.textContent?.includes('P1'))!
+  const draft = p1.querySelector<HTMLInputElement>('input[type=checkbox]')!
+  draft.click(); await settle()
+  view.presets.push({ id: 'p3', arcadeGameId: 'g', displayName: 'P3', templateRevisionId: 't1', validationContract: 'v1_0_2', acceptingNewRequests: false })
+  await settle()
+  const p3 = rows().find(x => x.textContent?.includes('P3'))!
+  expect(p3.querySelector<HTMLInputElement>('input[type=checkbox]')?.checked).toBe(true)
+  expect(p3.querySelector('select')?.value).toBe('t1')
+  expect(p1.querySelector<HTMLInputElement>('input[type=checkbox]')?.checked).toBe(false)
+  view.presets.splice(1, 1)
+  await settle()
+  expect(rows().some(x => x.textContent?.includes('P2'))).toBe(false)
 })
