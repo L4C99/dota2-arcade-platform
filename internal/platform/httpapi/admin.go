@@ -59,13 +59,13 @@ func (a *api) adminAction(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, store.ErrInvalidAdminAction):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_action"})
-	case errors.Is(err, store.ErrInvalidDesiredCapacity), errors.Is(err, store.ErrJobConflict):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "action_conflict"})
 	case errors.Is(err, store.ErrCASConflict), errors.Is(err, store.ErrValidationIncomplete),
 		errors.Is(err, store.ErrScopedResourcesActive), errors.Is(err, store.ErrCapacityFull),
 		errors.Is(err, store.ErrContentFactMismatch), errors.Is(err, store.ErrTemplateFactMismatch),
 		errors.Is(err, store.ErrInventoryUnknown), errors.Is(err, store.ErrUnaccountedInstance):
 		i3Error(w, err)
+	case errors.Is(err, store.ErrInvalidDesiredCapacity), errors.Is(err, store.ErrJobConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "action_conflict"})
 	case errors.Is(err, pgx.ErrNoRows):
 		http.Error(w, "target not found", http.StatusNotFound)
 	case errors.Is(err, store.ErrInvalidCredentials):

@@ -1,4 +1,6 @@
-# 正式 Release 构建与发布
+# 正式 Release 构建与发布（v1.0.2 I3 候选）
+
+> I3 候选分支的 `release.publish` 是游戏内容/玩法正式组合的数据库事务，不是 Git tag、GitHub Release 或 Production deployment。当前 Production 仍为 v1.0.1；本轮只准备和验证候选，不发布生产版本。
 
 从目标源码 SHA 的**干净 checkout** 构建。需要 Go 1.27.1 或更新、Node.js 22/npm、Python 3.10 或更新。正式构建必须显式传入版本：`tools/release.py` 当前默认值仍是历史 RC 标签 `v1.0.0-rc1`，不能依赖默认值。
 
@@ -13,7 +15,7 @@ python tools/release_smoke.py dist/<OUTPUT>
 
 ## 产物与完整性
 
-`MANIFEST.json` 记录文件名、字节数、SHA256 和源码 SHA；`SHA256SUMS` 覆盖全部产物与 manifest。包内 `PLATFORM-BUILD.json` 还记录 Node API 1、最新 migration 19 和固定 d2core 依赖；`web/BUILD.json` 标识配套 Production bundle。`MIGRATIONS-SHA256SUMS` 记录内嵌 SQL 的字节校验，0001–0019 保持不可变。
+`MANIFEST.json` 记录文件名、字节数、SHA256 和源码 SHA；`SHA256SUMS` 覆盖全部产物与 manifest。I3 候选包内 `PLATFORM-BUILD.json` 记录 Node API 1、最新 migration 22 和固定 d2core 依赖；`web/BUILD.json` 标识配套 Production bundle。`MIGRATIONS-SHA256SUMS` 记录内嵌 SQL 的字节校验，0001–0021 保持不可变。Migration 22 只增加 Admin I3 request-id 成功账本，供 validation.start 与 release.publish 幂等使用；升级、重复执行和备份恢复须通过独立 PostgreSQL 验证。
 
 | 包 | 运行内容 |
 | --- | --- |

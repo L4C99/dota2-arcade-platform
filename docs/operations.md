@@ -1,6 +1,24 @@
-# V1/v1.0.1 Production 运维与恢复
+# V1 Production 运维与恢复；v1.0.2 I3 候选流程
 
 本文是当前 V1/v1.0.1 Production 的运维与恢复 runbook。正式版本状态见[根 README](../README.md)与 [v1.0.1 Release](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.1)。固定 d2core 为 **v0.1.1**，commit `988720ad85af1f0d97bfe98ec4da4fcbb070beea`；Platform Server 不直接调用它。实际维护、升级和故障恢复须有对应操作授权，并按本节的安全边界执行。
+
+## v1.0.2 I3 候选：Node × Game 日常内容/模板维护
+
+此节是 I3 候选源码的操作合同，**尚未部署 Production**。下面的旧 `content.validate/content.publish` 与整 Node Drain 步骤只适用于仍合格的 `legacy_v1` 游戏；已进入 v1.0.2 合同的游戏必须使用本节。Dota、d2core、Controller binary、OS 等整机维护仍走 Node Drain。
+
+1. Admin 选择目标 Node 和 ArcadeGame，提交 `maintenance.begin`，携 `expectedMaintenanceEpoch/requestId/reason`。Platform 在同一事务关闭该 Node × Game binding 并增加 epoch；不会 Drain 全节点、停止已有实例或操作其它游戏。检查 scoped status 的 `targetOccupied=0`、`targetUnresolvedJobs=0`，异常隔离仍计占用。不得在旧实例活动时切换目标游戏内容链接。
+2. 运维在节点本地显式执行 Content Tool 的 `prepare/switch/status` 或准备版本化模板与依赖。Web 不上传文件，也不远程执行命令。等待 Controller 报告目标 ContentVersion、真实 VPK SHA、模板 manifest 指纹及 binding generation；inventory 须完整、新鲜、`unaccounted=0`。Admin 的期望指纹与 Controller 事实分别记录，不能互相代填。`reconcileCompleted` 只说明完成核对循环，不能替代 machine proof。
+3. 每个拟开放的 Preset 分别 `validation.start`。Platform 按目标 Node、Preset、候选内容与模板、维护 epoch、容量、scoped drain 和当前机器事实原子建立 ValidationRun、Validation Allocation、create Job；重试同一 `requestId` 返回原 Run。等 Ready 与有效 JoinInfo，在 Admin 详情读取 connect，项目 Owner 用真人客户端进服验玩法，提交 `validation.confirm pass|fail`。确认 pass 只是人工声明；正式 stop Job、完整 reclaim、所有 Job 终结、事实继续有效后，服务端才可把 Run 终结为 PASS。启动失败但有可信 instance、无 JoinInfo 或中止时用 `validation.stop`；不输入任意 instance ID。未知且无可信 ID 时只对账或隔离，不猜测 stop。
+4. `release.publish` 提交 expected-old 内容指针与逐 Preset 旧/新模板、旧/新接受状态和当前 PASS Run ID。首次新合同发布以及任何内容指针变化必须列出全部现存 Preset；无证明的玩法保持暂停。成功一次事务写 immutable release、逐玩法记录、正式指针与 Audit。后续同内容的模板单独发布可只列目标 Preset。发布前证明 Node binding 保持关闭，发布后按当前证明分别重新开放 Node binding 和 Preset。waiting Request 在真正分配时读取正式组合；旧 Allocation 快照不改。
+5. 回退先在节点本地真实恢复旧 bytes，等 Controller 报告旧内容 SHA/模板指纹，在本次维护 epoch 重新逐玩法取得 PASS，再用新的 `release.publish` 和 `rollbackOfReleaseId`；旧 release 不改。不能用旧 epoch PASS 或直接改数据库指针。
+
+玩家调度对 `v1_0_2` Preset 每次在同一 Allocation 事务重新查 Node × Preset × 当前内容 × 当前模板的有效 PASS，以及 epoch、内容/模板事实代次、inventory、兼容性与心跳。绑定开放也不能绕过该硬门槛。漂移只阻止**新的** Allocation，不自动停止已有实例。普通路径只查 Platform PostgreSQL 持久事实，不同步等待 Controller RPC。
+
+### 无可信 ID 的 unknown create 与节点退出调度
+
+持久 operation-start marker 可能已提交，但真实 core call 未发生，随后固定 d2core 的 history 过期。此时空 `list`、等待、重启或重复拒绝均不能证明 no-effect；保留原 Job、Allocation、容量与端口。Admin 可用 `node.reconcile` 继续追原 key；必要时 `allocation.quarantine`，让 Owner/Party 按既有 escape 放弃异常请求并新建申请。**仅有可信 instance ID** 才可建立 formal stop，且须完整 reclaim 才释放。无法收敛时 Node Drain、desired capacity 0，按独立授权的节点退役流程处理；不得添加 force no-effect/force release 按钮，也不得换 Node ID 伪造空容量。
+
+部署前核对 `parent(d2coreDataDir)` 已存在、由 operator 控制、service account 可写；Linux 不得 world-writable。同一个实际 d2core data directory 只能由一个 NodeID/Controller 持有，不能以两个逻辑 Node 复用同一状态目录。此检查是部署门槛，不改变当前 ownership lock 代码。
 
 ## 操作前基线核对
 
@@ -30,9 +48,9 @@ V1 依赖固定为 d2core v0.1.1。未来升级 d2core 须单独授权：Drain N
 
 Dota/App570 更新也须单独授权并人工执行：Drain Node，等待实例结束，人工执行 SteamCMD 更新；仅在 Drain 期间用正式 TemplateRevision 创建本地验证实例，以真实客户端进服测试，显式 stop 并确认完整回收，再 Controller resync、Resume。Controller 和 Content Tool 都不会更新 Dota。
 
-## ContentVersion 与 VPK 滚动发布
+## legacy_v1 的 ContentVersion 与 VPK 滚动发布（历史旧合同）
 
-The Admin content page now starts with **接入新地图** and **更新现有地图 VPK**. These task views derive progress and the next action from the existing Admin overview; they do not add a ContentUpdateJob or create Node facts. **现有地图管理** shows published version and admission across Nodes. The former object-level controls remain under **高级管理 · 手动管理平台记录**, while Node-level admission and template mapping remain available on the Node page. Detailed semantics of those controls:
+以下步骤保留给仍合格的旧合同游戏。Admin 内容页把 **接入新地图** 与 **更新现有地图 VPK** 放在「旧合同 legacy_v1 内容流程与登记工具」折叠区；其节点级验收提示不构成 v1.0.2 ValidationRun。新合同的正式逐玩法流程在内容页主区域。旧页面的 **现有地图管理** 显示目标版本和 admission；其它对象控制仍在 **高级管理 · 手动管理平台记录**。旧控制含义：
 
 | Admin area | Use it for | What it actually changes |
 | --- | --- | --- |

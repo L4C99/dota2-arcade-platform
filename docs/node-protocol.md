@@ -1,6 +1,8 @@
-# Node API v1 协议（v1.0.2 I2 候选）
+# Node API v1 协议（v1.0.2 I3 候选）
 
-> I2 分支的增量合同；尚未部署 Production。旧 v1 请求形状保持合法，必须先升级 Platform 再升级 Controller。
+> I2 已实现的增量合同由 I3 的玩家调度正式使用；尚未部署 Production。旧 v1 请求形状保持合法，必须先升级 Platform 再升级 Controller。
+
+I3 中，`validation_contract=v1_0_2` 的**普通玩家** Allocation 只有在 Node × Preset × 当前正式内容 × 当前正式模板的有效 PASS、机器事实和 inventory 同事务复查后才建立；其 create Job 为 `required_capability=content_validation_v102`，冻结期望模板指纹、binding generation、Workshop ID、ContentVersion ID 与 VPK SHA。旧 `legacy_v1` 玩法仍产生 legacy Job。Node API 版本与固定 d2core v0.1.1 均不变；旧 Controller 无权执行新 Job。
 
 Node Controller 主动连接 Platform Server 的 `/api/node/v1`。正式环境经 Caddy 使用 HTTPS；Platform Server 只接收 Caddy 转发的本地 HTTP。开发模式只允许 Controller 访问 loopback HTTP。生产不关闭 TLS 证书校验。
 

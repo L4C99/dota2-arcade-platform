@@ -14,12 +14,12 @@ import (
 
 var ErrCASConflict = errors.New("CAS_CONFLICT")
 var ErrValidationIncomplete = errors.New("VALIDATION_INCOMPLETE")
-var ErrScopedResourcesActive = errors.New("SCOPED_RESOURCES_ACTIVE")
-var ErrCapacityFull = errors.New("CAPACITY_FULL")
-var ErrContentFactMismatch = errors.New("CONTENT_FACT_MISMATCH")
-var ErrTemplateFactMismatch = errors.New("TEMPLATE_FACT_MISMATCH")
-var ErrInventoryUnknown = errors.New("INVENTORY_UNKNOWN")
-var ErrUnaccountedInstance = errors.New("UNACCOUNTED_INSTANCE")
+var ErrScopedResourcesActive = fmt.Errorf("%w: SCOPED_RESOURCES_ACTIVE", ErrJobConflict)
+var ErrCapacityFull = fmt.Errorf("%w: CAPACITY_FULL", ErrJobConflict)
+var ErrContentFactMismatch = fmt.Errorf("%w: CONTENT_FACT_MISMATCH", ErrJobConflict)
+var ErrTemplateFactMismatch = fmt.Errorf("%w: TEMPLATE_FACT_MISMATCH", ErrJobConflict)
+var ErrInventoryUnknown = fmt.Errorf("%w: INVENTORY_UNKNOWN", ErrJobConflict)
+var ErrUnaccountedInstance = fmt.Errorf("%w: UNACCOUNTED_INSTANCE", ErrJobConflict)
 
 type ReleasePresetPlan struct {
 	PresetID                      string `json:"presetId"`

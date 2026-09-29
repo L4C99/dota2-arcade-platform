@@ -466,7 +466,7 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT a.id,a.server_request_id,a.node_id,a.content_version_id,a.template_revision_id,a.state,
+	rows, err = s.Pool.Query(ctx, `SELECT a.id,COALESCE(a.server_request_id::text,''),a.node_id,a.content_version_id,a.template_revision_id,a.state,
 		COALESCE(a.error_code,''),a.attempt_sequence,a.assigned_at,j.instance_id,d.local_port,d.status,d.checked_at
 		FROM allocations a
 		LEFT JOIN LATERAL (SELECT instance_id FROM node_jobs WHERE allocation_id=a.id AND kind='create' AND instance_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1) j ON true

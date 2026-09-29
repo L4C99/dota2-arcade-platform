@@ -349,7 +349,8 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 	if err := tx.QueryRow(ctx, `SELECT v.content_sha256 FROM arcade_games g
 		JOIN game_presets p ON p.arcade_game_id=g.id AND p.id=$2
 		JOIN content_versions v ON v.arcade_game_id=g.id AND v.id=$3
-		WHERE g.id=$1 FOR SHARE OF g,p`, c.GameID, c.PresetID, c.ContentVersionID).
+		JOIN template_revisions t ON t.arcade_game_id=g.id AND t.id=$4
+		WHERE g.id=$1 FOR SHARE OF g,p`, c.GameID, c.PresetID, c.ContentVersionID, c.TemplateRevisionID).
 		Scan(&contentSHA); err != nil {
 		return ValidationRun{}, err
 	}
