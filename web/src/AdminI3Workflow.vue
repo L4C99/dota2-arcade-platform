@@ -45,7 +45,8 @@ const needsAll = computed(() => !upgraded.value || candidateContent.value !== ga
 const planned = computed(() => presets.value.filter(x => plan[x.id]?.selected))
 const canPublish = computed(() => !!game.value && !!candidateContent.value && planned.value.length > 0 &&
   (!needsAll.value || planned.value.length === presets.value.length) &&
-  planned.value.some(x => plan[x.id]?.accepting && !!plan[x.id]?.runId))
+  (planned.value.some(x => plan[x.id]?.accepting && !!plan[x.id]?.runId) ||
+    (needsAll.value && !rollbackOf.value && planned.value.every(x => !plan[x.id]?.accepting))))
 
 function requestId(key: string): string { const existing = requestIds.get(key); if (existing) return existing; const next = crypto.randomUUID(); requestIds.set(key, next); return next }
 const hints: Record<string, string> = {

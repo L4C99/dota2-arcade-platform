@@ -110,6 +110,29 @@ func TestI3NoPassBlocksPlayerAndBindingReopen(t *testing.T) {
 	}
 }
 
+func TestI3FirstPublicationCanPauseEveryUnprovenPreset(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	ctx := context.Background()
+	var oldAccept bool
+	if err := s.Pool.QueryRow(ctx, `SELECT accepting_new_requests FROM game_presets WHERE id=$1`, c.PresetID).Scan(&oldAccept); err != nil {
+		t.Fatal(err)
+	}
+	request := ReleasePublishRequest{GameID: c.GameID, ExpectedOldContentVersionID: "test-v1", NewContentVersionID: "test-v1",
+		Presets: []ReleasePresetPlan{{PresetID: c.PresetID, ExpectedOldTemplateRevisionID: "test-template", NewTemplateRevisionID: "test-template",
+			ExpectedOldAccepting: oldAccept, NewAccepting: false}}, RequestID: "first-all-paused"}
+	if _, err := s.PublishRelease(ctx, c.AdminID, request); err != nil {
+		t.Fatal(err)
+	}
+	var contract string
+	var accepting bool
+	if err := s.Pool.QueryRow(ctx, `SELECT validation_contract,accepting_new_requests FROM game_presets WHERE id=$1`, c.PresetID).Scan(&contract, &accepting); err != nil || contract != "v1_0_2" || accepting {
+		t.Fatalf("paused first release %q accepting=%t: %v", contract, accepting, err)
+	}
+	if err := s.ApplyAdminAction(ctx, c.AdminID, AdminAction{Action: "preset.update", TargetID: c.PresetID, Accepting: boolPtr(true)}); !errors.Is(err, ErrValidationIncomplete) {
+		t.Fatalf("unproven preset reopened after paused release: %v", err)
+	}
+}
+
 func TestI3FirstReleasePerPresetAndPlayerCapability(t *testing.T) {
 	s, c := v102ValidationFixture(t, 2)
 	ctx := context.Background()

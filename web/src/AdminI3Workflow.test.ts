@@ -89,3 +89,14 @@ it('shows machine fact and inventory failures with typed binding reopen feedback
   expect(root!.textContent).toContain('缺少当前有效的逐玩法 PASS')
   expect(root!.textContent).toContain('VALIDATION_INCOMPLETE')
 })
+
+it('allows a complete first release that pauses every unproven Preset', async () => {
+  const view = data()
+  view.presets.forEach(p => { p.validationContract = 'legacy_v1' })
+  view.releases = []
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ maintenanceEpoch: 3, closed: true, targetOccupied: 0, targetUnresolvedJobs: 0, nodeOccupied: 0 }), { status: 200 })))
+  await mount(view)
+  const publish = [...root!.querySelectorAll('button')].find(x => x.textContent?.includes('发布正式组合'))!
+  expect(publish.disabled).toBe(false)
+  expect(root!.textContent).toContain('首次升级或内容指针变化：必须列出全部现存玩法')
+})
