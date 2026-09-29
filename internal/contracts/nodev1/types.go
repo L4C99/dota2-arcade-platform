@@ -183,6 +183,30 @@ type PrepareCreateRequest struct {
 	ObservedTemplateFingerprintSHA256 string `json:"observedTemplateFingerprintSha256,omitempty"`
 }
 
+// OperationStartRequest names the exact frozen execution that is about to
+// cross the local core boundary. The server durably marks it unknown first.
+type OperationStartRequest struct {
+	Kind         string        `json:"kind"`
+	FrozenCreate *FrozenCreate `json:"frozenCreate,omitempty"`
+	InstanceID   string        `json:"instanceId,omitempty"`
+}
+
+func (r OperationStartRequest) Validate() error {
+	switch r.Kind {
+	case "create":
+		if r.FrozenCreate == nil || r.InstanceID != "" {
+			return fmt.Errorf("invalid create operation start")
+		}
+	case "stop":
+		if r.FrozenCreate != nil || !coreTokenPattern.MatchString(r.InstanceID) {
+			return fmt.Errorf("invalid stop operation start")
+		}
+	default:
+		return fmt.Errorf("invalid operation kind")
+	}
+	return nil
+}
+
 type ReportRequest struct {
 	State             string    `json:"state"`
 	InstanceID        string    `json:"instanceId,omitempty"`

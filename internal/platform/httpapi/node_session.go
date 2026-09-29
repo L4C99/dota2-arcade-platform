@@ -74,9 +74,9 @@ func (l *capabilityLeases) validLocked(nodeID, token, capability string) bool {
 
 type leaseFenceContextKey struct{}
 
-// Session replacement waits for already authorized requests to finish. Once
-// the replacement response is sent, no request using the prior token can
-// still mutate an execution.
+// Session replacement waits for already authorized HTTP requests to finish.
+// This lock does not cover a later local core call. For v1.0.2, the durable
+// operation-start transition accounts for that possible in-flight effect.
 func (a *api) fencedNode(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		a.leases.mu.RLock()

@@ -22,6 +22,7 @@ func v102AwaitingHumanRun(t *testing.T) (*Store, ValidationCandidate, Validation
 		"template-manifest-sha256-v1", candidate.ExpectedTemplateFingerprintSHA256); err != nil {
 		t.Fatal(err)
 	}
+	beginV102TestOperation(t, s, candidate.NodeID, run.CreateJobID)
 	if _, err := s.ReportJob(ctx, candidate.NodeID, run.CreateJobID, nodev1.ReportRequest{
 		State: "accepted", InstanceID: "i_validation", OperationID: "o_create",
 	}); err != nil {
@@ -132,6 +133,7 @@ func TestV102HumanFailFormalStopAndReclaim(t *testing.T) {
 	if _, err := s.Pool.Exec(ctx, `UPDATE node_jobs SET state='claimed' WHERE id=$1`, run.StopJobID); err != nil {
 		t.Fatal(err)
 	}
+	beginV102TestOperation(t, s, candidate.NodeID, run.StopJobID)
 	if _, err := s.ReportJob(ctx, candidate.NodeID, run.StopJobID, nodev1.ReportRequest{
 		State: "accepted", InstanceID: "i_validation", OperationID: "o_stop",
 	}); err != nil {

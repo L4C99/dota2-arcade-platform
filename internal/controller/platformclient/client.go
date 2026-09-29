@@ -138,6 +138,12 @@ func (c *Client) CheckSession(ctx context.Context) error {
 	return err
 }
 
+func (c *Client) BeginOperation(ctx context.Context, jobID string, input nodev1.OperationStartRequest) (nodev1.Job, error) {
+	var job nodev1.Job
+	_, err := c.do(ctx, http.MethodPost, "/jobs/"+jobID+"/operation-start", input, &job)
+	return job, err
+}
+
 func (c *Client) Heartbeat(ctx context.Context, h nodev1.Heartbeat) (nodev1.HeartbeatResult, error) {
 	var result nodev1.HeartbeatResult
 	_, err := c.do(ctx, http.MethodPost, "/heartbeat", h, &result)

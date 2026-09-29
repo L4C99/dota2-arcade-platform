@@ -91,6 +91,7 @@ func NewHandler(s *store.Store, c Config) (http.Handler, error) {
 	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/claim", a.fencedNode(a.nodeClaimJob))
 	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/{id}", a.fencedNode(a.nodeGetJob))
 	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/prepare", a.fencedNode(a.nodePrepareJob))
+	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/operation-start", a.fencedNode(a.nodeOperationStart))
 	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/report", a.fencedNode(a.nodeReportJob))
 	if c.WebRoot != "" {
 		if !filepath.IsAbs(c.WebRoot) {

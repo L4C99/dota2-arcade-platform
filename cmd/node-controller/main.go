@@ -17,6 +17,7 @@ import (
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/config"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/core"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/network"
+	"github.com/L4C99/dota2-arcade-platform/internal/controller/ownership"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/platformclient"
 	"github.com/L4C99/dota2-arcade-platform/internal/controller/runner"
 )
@@ -47,6 +48,11 @@ func run(args []string) error {
 		fmt.Println("controller config and secret format valid; no service contacted")
 		return nil
 	}
+	owner, err := ownership.Acquire(conf.D2CoreDataDir, conf.NodeID)
+	if err != nil {
+		return fmt.Errorf("Controller ownership unavailable: %w", err)
+	}
+	defer owner.Close()
 	client := platformclient.New(conf.PlatformURL, conf.NodeID, secret)
 	coreClient, err := core.New(conf.D2CoreDataDir)
 	if err != nil {

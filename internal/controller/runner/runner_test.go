@@ -14,15 +14,35 @@ import (
 )
 
 type fakePlatform struct {
-	job          nodev1.Job
-	prepared     bool
-	reports      []nodev1.ReportRequest
-	events       *[]string
-	afterPrepare func()
-	sessionErr   error
+	job            nodev1.Job
+	prepared       bool
+	reports        []nodev1.ReportRequest
+	events         *[]string
+	afterPrepare   func()
+	sessionErr     error
+	startErr       error
+	starts         []nodev1.OperationStartRequest
+	afterStart     func()
+	reportErr      error
+	afterCommitErr error
 }
 
 func (p *fakePlatform) CheckSession(context.Context) error { return p.sessionErr }
+
+func (p *fakePlatform) BeginOperation(_ context.Context, _ string, in nodev1.OperationStartRequest) (nodev1.Job, error) {
+	if p.startErr != nil {
+		return nodev1.Job{}, p.startErr
+	}
+	p.starts = append(p.starts, in)
+	p.job.State = "unknown"
+	if p.afterStart != nil {
+		p.afterStart()
+	}
+	if p.afterCommitErr != nil {
+		return nodev1.Job{}, p.afterCommitErr
+	}
+	return p.job, nil
+}
 
 func (p *fakePlatform) OpenJobs(context.Context) ([]nodev1.Job, error) {
 	if p.events != nil {
@@ -56,6 +76,9 @@ func (p *fakePlatform) Prepare(_ context.Context, _ string, in nodev1.PrepareCre
 	return f, nil
 }
 func (p *fakePlatform) Report(_ context.Context, _ string, r nodev1.ReportRequest) (nodev1.Job, error) {
+	if p.reportErr != nil {
+		return nodev1.Job{}, p.reportErr
+	}
 	p.reports = append(p.reports, r)
 	p.job.State = r.State
 	if r.InstanceID != "" {
@@ -80,6 +103,7 @@ type fakeCore struct {
 	events      *[]string
 	keys        []nodev1.FrozenCreate
 	afterCreate func()
+	beforeStop  func()
 }
 
 func (c *fakeCore) Create(_ context.Context, frozen nodev1.FrozenCreate) (core.Accepted, error) {
@@ -91,6 +115,9 @@ func (c *fakeCore) Create(_ context.Context, frozen nodev1.FrozenCreate) (core.A
 	return c.result, c.err
 }
 func (c *fakeCore) Stop(context.Context, string) (core.Accepted, error) {
+	if c.beforeStop != nil {
+		c.beforeStop()
+	}
 	c.stops++
 	return c.result, c.err
 }

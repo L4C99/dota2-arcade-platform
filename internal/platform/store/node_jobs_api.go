@@ -175,6 +175,20 @@ func permittedTransition(old, next string) bool {
 }
 
 func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report nodev1.ReportRequest) (nodev1.Job, error) {
+	return s.reportJob(ctx, nodeID, jobID, report, nil)
+}
+
+// BeginOperation is the durable linearization point before a v1.0.2 local
+// core call. Unknown is intentionally retained even if the Controller dies
+// before calling core; it is not evidence of a no-effect create.
+func (s *Store) BeginOperation(ctx context.Context, nodeID, jobID string, input nodev1.OperationStartRequest) (nodev1.Job, error) {
+	if err := input.Validate(); err != nil {
+		return nodev1.Job{}, fmt.Errorf("%w: %v", ErrJobConflict, err)
+	}
+	return s.reportJob(ctx, nodeID, jobID, nodev1.ReportRequest{State: "unknown"}, &input)
+}
+
+func (s *Store) reportJob(ctx context.Context, nodeID, jobID string, report nodev1.ReportRequest, start *nodev1.OperationStartRequest) (nodev1.Job, error) {
 	if err := report.Validate(); err != nil {
 		return nodev1.Job{}, fmt.Errorf("%w: %v", ErrJobConflict, err)
 	}
@@ -203,13 +217,44 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 	if _, _, _, err = lockJobBusinessRows(ctx, tx, nodeID, jobID); err != nil {
 		return nodev1.Job{}, err
 	}
-	var oldState, kind, instanceID, operationID, errorCode, errorStage, allocationID string
+	var oldState, kind, instanceID, operationID, errorCode, errorStage, allocationID, requiredCapability string
 	err = tx.QueryRow(ctx, `SELECT state,kind,COALESCE(instance_id,''),COALESCE(operation_id,''),
-		COALESCE(error_code,''),COALESCE(error_stage,''),COALESCE(allocation_id::text,'')
+		COALESCE(error_code,''),COALESCE(error_stage,''),COALESCE(allocation_id::text,''),required_capability
 		FROM node_jobs WHERE id=$1 AND node_id=$2`, jobID, nodeID).
-		Scan(&oldState, &kind, &instanceID, &operationID, &errorCode, &errorStage, &allocationID)
+		Scan(&oldState, &kind, &instanceID, &operationID, &errorCode, &errorStage, &allocationID, &requiredCapability)
 	if err != nil {
 		return nodev1.Job{}, err
+	}
+	if start != nil {
+		if requiredCapability != nodev1.RequiredContentValidationV102 || kind != start.Kind ||
+			(oldState != "claimed" && oldState != "unknown") || operationID != "" {
+			return nodev1.Job{}, fmt.Errorf("%w: operation cannot start", ErrJobConflict)
+		}
+		if kind == "stop" {
+			if instanceID == "" || instanceID != start.InstanceID {
+				return nodev1.Job{}, fmt.Errorf("%w: stop instance changed", ErrJobConflict)
+			}
+		} else {
+			var frozen nodev1.FrozenCreate
+			err := tx.QueryRow(ctx, `SELECT core_idempotency_key,resolved_template_path,requested_port,
+				encode(request_fingerprint,'hex'),required_capability,COALESCE(template_manifest_algorithm,''),
+				COALESCE(template_fingerprint_sha256,'') FROM node_job_executions WHERE node_job_id=$1`, jobID).
+				Scan(&frozen.IdempotencyKey, &frozen.Template, &frozen.Port, &frozen.FingerprintSHA256,
+					&frozen.RequiredCapability, &frozen.TemplateManifestAlgorithm, &frozen.TemplateFingerprintSHA256)
+			if err != nil || frozen != *start.FrozenCreate || instanceID != "" {
+				return nodev1.Job{}, fmt.Errorf("%w: frozen create changed", ErrJobConflict)
+			}
+		}
+		if oldState == "unknown" {
+			if err := tx.Commit(ctx); err != nil {
+				return nodev1.Job{}, err
+			}
+			return s.JobForNode(ctx, nodeID, jobID)
+		}
+	}
+	if requiredCapability == nodev1.RequiredContentValidationV102 && oldState == "claimed" &&
+		(report.State == "accepted" || report.State == "succeeded") {
+		return nodev1.Job{}, fmt.Errorf("%w: missing durable operation start", ErrJobConflict)
 	}
 	if !permittedTransition(oldState, report.State) {
 		return nodev1.Job{}, fmt.Errorf("%w: invalid transition %s to %s", ErrJobConflict, oldState, report.State)

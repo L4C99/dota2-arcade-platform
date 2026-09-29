@@ -256,10 +256,13 @@ func (r *Runner) create(ctx context.Context, job nodev1.Job, fresh bool, history
 		if err := r.checkExecutionSession(ctx, job); err != nil {
 			return err
 		}
+		if err := r.beginExecution(ctx, job, frozen); err != nil {
+			return err
+		}
 	}
 	accepted, err := r.Core.Create(ctx, *frozen)
 	if err != nil {
-		if !retrying && core.ClearlyNoEffectCreateReject(err) {
+		if job.RequiredCapability != nodev1.RequiredContentValidationV102 && !retrying && core.ClearlyNoEffectCreateReject(err) {
 			var e *core.CoreError
 			_ = errors.As(err, &e)
 			return r.report(ctx, job, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: e.Code, ErrorStage: e.Stage})
@@ -336,6 +339,9 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 		}
 	}
 	if err := r.checkExecutionSession(ctx, job); err != nil {
+		return err
+	}
+	if err := r.beginExecution(ctx, job, nil); err != nil {
 		return err
 	}
 	accepted, err := r.Core.Stop(ctx, job.InstanceID)
@@ -547,6 +553,32 @@ func (r *Runner) checkExecutionSession(ctx context.Context, job nodev1.Job) erro
 		return errors.New("capability session checker unavailable")
 	}
 	return checker.CheckSession(ctx)
+}
+
+func (r *Runner) beginExecution(ctx context.Context, job nodev1.Job, frozen *nodev1.FrozenCreate) error {
+	if job.RequiredCapability != nodev1.RequiredContentValidationV102 {
+		return nil
+	}
+	platform, ok := r.Platform.(interface {
+		BeginOperation(context.Context, string, nodev1.OperationStartRequest) (nodev1.Job, error)
+	})
+	if !ok {
+		return errors.New("durable operation-start unavailable")
+	}
+	request := nodev1.OperationStartRequest{Kind: job.Kind, FrozenCreate: frozen}
+	if job.Kind == "stop" {
+		request.InstanceID = job.InstanceID
+	}
+	started, err := platform.BeginOperation(ctx, job.ID, request)
+	if err != nil {
+		return err
+	}
+	if started.ID != job.ID || started.Kind != job.Kind || started.State != "unknown" ||
+		(job.Kind == "create" && (started.FrozenCreate == nil || *started.FrozenCreate != *frozen)) ||
+		(job.Kind == "stop" && started.InstanceID != job.InstanceID) {
+		return errors.New("invalid durable operation-start response")
+	}
+	return nil
 }
 
 func validCorePath(path string) bool {

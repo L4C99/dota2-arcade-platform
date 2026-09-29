@@ -10,7 +10,7 @@ Node Controller 主动连接 Platform Server 的 `/api/node/v1`。正式环境�
 
 新 Controller 启动时生成仅存内存的 process ID，以 Node 凭据调用 `POST /api/node/v1/session`，提交 `processId` 和 `contentValidationV102`、`templateManifestSha256V1`、`coreInventoryV1` 三项能力。Platform 返回 90 秒有效的随机 opaque token；Controller 在后续请求的 `X-Controller-Session` header 提交它，并在接近过期时更新。服务端只存 token digest 和当前 Node 的 session；新 session 立即替换旧 session，Platform 重启后旧 token 全部失效。原始 token 不进入数据库、审计、普通日志、URL 或 Admin/Web 响应。
 
-Heartbeat 的 `capabilities` 是 Controller 声明的节点事实，**不是执行授权**。每次涉及 `content_validation_v102` Job/Allocation 的 HTTP 请求都核对当前 Node、token、能力和有效期。Controller 在本地 core create/stop 前还调用 `POST /session/check` 取得当前 token 的 204 确认；无效时为 403 且不调用 core。旧 Controller 无 session 时仍能处理 `legacy_v1`，但 open/claim/active 列表过滤新资源；按 ID 的 GET、prepare、report 和 instance fact 对新资源返回 404，且不写状态。普通 Node Secret 不能代替 session。session 丢失只让 durable 工作等待恢复，不释放容量。Node API path 与 `APIVersion=1` 不变。
+Heartbeat 的 `capabilities` 是 Controller 声明的节点机器事实，**不是执行授权**。每次涉及 `content_validation_v102` Job/Allocation 的 HTTP 请求都核对当前 Node、token、能力和有效期。新版正式 Controller 在取得 session 前持有 Node-local OS exclusive lock。Controller 在本地 core create/stop 前调用 `POST /session/check` 做预检，随后必须成功调用 `POST /jobs/{id}/operation-start`，让 Platform 在当前 session 下持久标记同一 Job 的 exact execution 为 `unknown` / MAY-HAVE-STARTED，才可调用 core。预检自身不能保证响应返回后的本地执行权；旧 token 的 HTTP 请求在 session 替换/过期后被拒，但此前已持久 operation-start 的同一 local call 可能稍后发生，容量与原 Job/key 始终保留并对账。旧 Controller 无 session 时仍能处理 `legacy_v1`，但 open/claim/active 列表过滤新资源；按 ID 的 GET、prepare、report、operation-start 和 instance fact 对新资源返回 404，且不写状态。普通 Node Secret 不能代替 session。Node Secret holder/Node host operator 是受信节点主体；旧正式 binary 不会调用新 endpoint，也不会自动取得 session，本版不做 binary attestation。Node API path 与 `APIVersion=1` 不变。详见 [Owner amendment](specs/v1.0.2-execution-fence-amendment.md)。
 
 ## v1.0.2 machine facts
 
@@ -43,6 +43,7 @@ P5 Controller 只对本地 `active/running/ready` 实例逐一发送 A2S_INFO UD
 - `POST /jobs/claim?independentStop=true`（A.4 FIX-02）：保留受限 stop 路径。只领取已关联 Allocation、与原终态 create 的实例身份一致的 stop；同 Allocation 或实例有其他 claimed/accepted/unknown 任务时不领取。不会领取 create 或 integration-only stop。
 - `GET /jobs/{id}`：查询本节点任务；其他节点的任务返回 404。
 - `POST /jobs/{id}/prepare`：create job 在首次 d2core 调用前提交已解析的本机模板绝对路径和请求 port。服务端从不可变 `node_job_id` 派生 d2core idempotencyKey，并将完整请求参数及 SHA-256 指纹持久化。相同 prepare 可重试；任何变化均拒绝。数据库触发器禁止修改或删除冻结记录。
+- `POST /jobs/{id}/operation-start`：仅 v1.0.2 当前 capability session 可调用；请求带 `kind=create` 与完整 `frozenCreate`，或 `kind=stop` 与 immutable `instanceId`。Platform 核对 Job 与冻结身份，在事务中推进 `claimed → unknown` 并更新 Allocation 占容状态；同一 `unknown` Job/身份可幂等重试。此 DB commit 先于本地 core call。响应丢失或拒绝时 Controller 不调用 core；已经提交的 marker 即使实际 core call 尚未发生也禁止 `rejected_no_effect`。
 - `POST /jobs/{id}/report`：幂等报告 `accepted`、`unknown`、`succeeded`、`rejected_no_effect` 或 `failed_with_effect`，并保存 instanceId/operationId 和结构化 core 错误。已知 ID 不允许换成另一个 ID；终态不能回退。
 
 P0 的任务明确标记 `integration_only=true`，由本地管理员流程创建；P1 才引入 ServerRequest / Allocation 关联、排队和容量业务。timeout 或响应丢失必须报告 unknown 并对账，不能把它当作无副作用失败。d2core `accepted` 不是完成；Controller 必须再查 operation 与 status。

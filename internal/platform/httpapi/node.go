@@ -252,6 +252,36 @@ func (a *api) nodeReportJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, job)
 }
 
+func (a *api) nodeOperationStart(w http.ResponseWriter, r *http.Request) {
+	nodeID, ok := a.authenticatedNode(w, r)
+	if !ok {
+		return
+	}
+	jobID := r.PathValue("id")
+	if !a.authorizeJob(w, r, nodeID, jobID) {
+		return
+	}
+	if !a.requestHasCapability(r, nodeID, nodev1.RequiredContentValidationV102) {
+		http.Error(w, "capability required", http.StatusForbidden)
+		return
+	}
+	var input nodev1.OperationStartRequest
+	if decodeNodeJSON(w, r, &input) != nil || input.Validate() != nil {
+		http.Error(w, "invalid operation start", http.StatusBadRequest)
+		return
+	}
+	job, err := a.store.BeginOperation(r.Context(), nodeID, jobID, input)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+	} else if errors.Is(err, store.ErrJobConflict) {
+		http.Error(w, "operation start conflict", http.StatusConflict)
+	} else if err != nil {
+		http.Error(w, "operation start unavailable", http.StatusServiceUnavailable)
+	} else {
+		writeJSON(w, http.StatusOK, job)
+	}
+}
+
 func (a *api) authorizeJob(w http.ResponseWriter, r *http.Request, nodeID, jobID string) bool {
 	capability, err := a.store.RequiredCapabilityForJob(r.Context(), nodeID, jobID)
 	if errors.Is(err, pgx.ErrNoRows) {

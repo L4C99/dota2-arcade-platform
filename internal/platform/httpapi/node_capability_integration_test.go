@@ -171,10 +171,40 @@ func TestNodeCapabilityMixedVersionRecovery(t *testing.T) {
 	if _, err := old.Report(ctx, createID, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "FAKE"}); !statusIs(err, http.StatusNotFound) {
 		t.Fatalf("old report v102: %v", err)
 	}
-	if _, err := capableA.Report(ctx, createID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_v102", OperationID: "o_v102"}); err != nil {
+	capablePre := platformclient.New(server.URL, nodeID, secret)
+	if err := capablePre.EnsureSession(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := capableA.ReportInventory(ctx, nodev1.InventoryReport{ScanID: "new-active", Complete: true, Instances: []nodev1.InventoryInstance{{InstanceID: "i_v102", Lifecycle: "active", Process: "running", Cleanup: "pending"}}}); err != nil {
+	if _, err := capableA.BeginOperation(ctx, createID, nodev1.OperationStartRequest{Kind: "create", FrozenCreate: &prepared}); !statusIs(err, http.StatusNotFound) {
+		t.Fatalf("replaced session started create: %v", err)
+	}
+	started, err := capablePre.BeginOperation(ctx, createID, nodev1.OperationStartRequest{Kind: "create", FrozenCreate: &prepared})
+	if err != nil || started.State != "unknown" || started.FrozenCreate == nil || *started.FrozenCreate != prepared {
+		t.Fatalf("durable create start: %+v %v", started, err)
+	}
+	if _, err := capablePre.Report(ctx, createID, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "LATE_REJECTION"}); !statusIs(err, http.StatusConflict) {
+		t.Fatalf("started create released as no effect: %v", err)
+	}
+	capablePost := platformclient.New(server.URL, nodeID, secret)
+	if err := capablePost.EnsureSession(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var beforeCoreState string
+	if err := pool.QueryRow(ctx, `SELECT state FROM node_jobs WHERE id=$1`, createID).Scan(&beforeCoreState); err != nil || beforeCoreState != "unknown" {
+		t.Fatalf("core create before durable unknown: %s %v", beforeCoreState, err)
+	}
+	coreCalls := 0 // fake local d2core call, deliberately after session replacement
+	coreCalls++
+	if _, err := capablePre.Report(ctx, createID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_v102", OperationID: "o_v102"}); !statusIs(err, http.StatusNotFound) {
+		t.Fatalf("replaced caller reported effect: %v", err)
+	}
+	if coreCalls != 1 {
+		t.Fatal("fake core create not exercised")
+	}
+	if _, err := capablePost.Report(ctx, createID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_v102", OperationID: "o_v102"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := capablePost.ReportInventory(ctx, nodev1.InventoryReport{ScanID: "new-active", Complete: true, Instances: []nodev1.InventoryInstance{{InstanceID: "i_v102", Lifecycle: "active", Process: "running", Cleanup: "pending"}}}); err != nil {
 		t.Fatal(err)
 	}
 	var unaccounted int
@@ -244,6 +274,24 @@ func TestNodeCapabilityMixedVersionRecovery(t *testing.T) {
 	}
 	if recoveredStop, err := capableD.GetJob(ctx, stopID); err != nil || recoveredStop.ID != stopID || recoveredStop.InstanceID != "i_v102" {
 		t.Fatalf("stop recovery changed durable job: %+v %v", recoveredStop, err)
+	}
+	startedStop, err := capableD.BeginOperation(ctx, stopID, nodev1.OperationStartRequest{Kind: "stop", InstanceID: "i_v102"})
+	if err != nil || startedStop.ID != stopID || startedStop.State != "unknown" {
+		t.Fatalf("durable stop start: %+v %v", startedStop, err)
+	}
+	capableE := platformclient.New(server.URL, nodeID, secret)
+	if err := capableE.EnsureSession(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT state FROM node_jobs WHERE id=$1`, stopID).Scan(&beforeCoreState); err != nil || beforeCoreState != "unknown" {
+		t.Fatalf("core stop before durable unknown: %s %v", beforeCoreState, err)
+	}
+	coreCalls++ // fake local d2core Stop after replacement
+	if _, err := capableD.Report(ctx, stopID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_v102", OperationID: "o_stop"}); !statusIs(err, http.StatusNotFound) {
+		t.Fatalf("replaced caller reported stop: %v", err)
+	}
+	if recoveredStop, err := capableE.GetJob(ctx, stopID); err != nil || recoveredStop.ID != stopID || recoveredStop.State != "unknown" || recoveredStop.InstanceID != "i_v102" || coreCalls != 2 {
+		t.Fatalf("stop effect recovery changed durable Job: %+v calls=%d %v", recoveredStop, coreCalls, err)
 	}
 	var occupied int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM allocations WHERE node_id=$1 AND state NOT IN ('reclaimed','released_no_effect')`, nodeID).Scan(&occupied); err != nil || occupied != 1 {

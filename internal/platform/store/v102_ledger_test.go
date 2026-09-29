@@ -17,6 +17,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func beginV102TestOperation(t *testing.T, s *Store, nodeID, jobID string) {
+	t.Helper()
+	ctx := context.Background()
+	job, err := s.JobForNode(ctx, nodeID, jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := nodev1.OperationStartRequest{Kind: job.Kind, FrozenCreate: job.FrozenCreate}
+	if job.Kind == "stop" {
+		request.InstanceID = job.InstanceID
+	}
+	started, err := s.BeginOperation(ctx, nodeID, jobID, request)
+	if err != nil || started.State != "unknown" {
+		t.Fatalf("durable operation start: %+v %v", started, err)
+	}
+}
+
 func TestV102MigrationFrom19(t *testing.T) {
 	dsn := os.Getenv("PLATFORM_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -384,6 +401,7 @@ func TestV102ValidationHumanPassRequiresFormalReclaim(t *testing.T) {
 		"template-manifest-sha256-v1", c.ExpectedTemplateFingerprintSHA256); err != nil {
 		t.Fatal(err)
 	}
+	beginV102TestOperation(t, s, c.NodeID, run.CreateJobID)
 	if _, err := s.ReportJob(ctx, c.NodeID, run.CreateJobID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_validation", OperationID: "o_create"}); err != nil {
 		t.Fatal(err)
 	}
@@ -409,6 +427,7 @@ func TestV102ValidationHumanPassRequiresFormalReclaim(t *testing.T) {
 	if _, err := s.Pool.Exec(ctx, `UPDATE node_jobs SET state='claimed' WHERE id=$1`, run.StopJobID); err != nil {
 		t.Fatal(err)
 	}
+	beginV102TestOperation(t, s, c.NodeID, run.StopJobID)
 	if _, err := s.ReportJob(ctx, c.NodeID, run.StopJobID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_validation", OperationID: "o_stop"}); err != nil {
 		t.Fatal(err)
 	}
@@ -483,6 +502,7 @@ func TestV102EffectfulFailureNeedsStopBeforeFail(t *testing.T) {
 		"template-manifest-sha256-v1", c.ExpectedTemplateFingerprintSHA256); err != nil {
 		t.Fatal(err)
 	}
+	beginV102TestOperation(t, s, c.NodeID, run.CreateJobID)
 	if _, err := s.ReportJob(ctx, c.NodeID, run.CreateJobID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_failed", OperationID: "o_create"}); err != nil {
 		t.Fatal(err)
 	}
@@ -499,6 +519,7 @@ func TestV102EffectfulFailureNeedsStopBeforeFail(t *testing.T) {
 	if _, err := s.Pool.Exec(ctx, `UPDATE node_jobs SET state='claimed' WHERE id=$1`, run.StopJobID); err != nil {
 		t.Fatal(err)
 	}
+	beginV102TestOperation(t, s, c.NodeID, run.StopJobID)
 	if _, err := s.ReportJob(ctx, c.NodeID, run.StopJobID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_failed", OperationID: "o_stop"}); err != nil {
 		t.Fatal(err)
 	}

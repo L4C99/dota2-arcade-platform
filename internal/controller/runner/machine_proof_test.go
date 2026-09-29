@@ -67,6 +67,126 @@ func TestCapabilityLossBlocksLocalCoreCreateAndStop(t *testing.T) {
 	}
 }
 
+func TestOperationStartResponseLostBeforeCoreRecoversSameCreate(t *testing.T) {
+	p := &fakePlatform{job: machineJob(), afterCommitErr: errors.New("operation-start response lost")}
+	c := &fakeCore{result: core.Accepted{Accepted: true, InstanceID: "i_1", OperationID: "o_1"},
+		op: core.Operation{OperationID: "o_1", Kind: "create", InstanceID: "i_1", Status: "running"}}
+	digest := strings.Repeat("f", 64)
+	content := nodev1.ContentFact{WorkshopID: "123", ContentVersionID: "candidate-v1", VPKSHA256: strings.Repeat("a", 64), State: "confirmed"}
+	r := machineRunner(t, p, c, &digest, &content)
+	if err := r.Step(context.Background()); err == nil || p.job.State != "unknown" || c.creates != 0 || p.job.FrozenCreate == nil {
+		t.Fatalf("uncertain start response called core or lost durable Job: %+v %+v %v", p, c, err)
+	}
+	key := p.job.FrozenCreate.IdempotencyKey
+	p.afterCommitErr = nil
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.creates != 1 || c.keys[0].IdempotencyKey != key || p.job.State != "accepted" || len(p.starts) != 2 {
+		t.Fatalf("recovery changed Job/key: %+v %+v", p, c)
+	}
+}
+
+func TestStopOperationStartResponseLostBeforeCoreRecoversSameJob(t *testing.T) {
+	job := machineJob()
+	job.Kind, job.InstanceID = "stop", "i_1"
+	p := &fakePlatform{job: job, afterCommitErr: errors.New("operation-start response lost")}
+	c := &fakeCore{result: core.Accepted{Accepted: true, InstanceID: "i_1", OperationID: "o_stop"},
+		op:       core.Operation{OperationID: "o_stop", Kind: "stop", InstanceID: "i_1", Status: "running"},
+		instance: core.Instance{InstanceID: "i_1", Lifecycle: "active", Process: "running", Cleanup: "pending"}}
+	digest := strings.Repeat("f", 64)
+	content := nodev1.ContentFact{WorkshopID: "123", ContentVersionID: "candidate-v1", VPKSHA256: strings.Repeat("a", 64), State: "confirmed"}
+	r := machineRunner(t, p, c, &digest, &content)
+	if err := r.Step(context.Background()); err == nil || p.job.State != "unknown" || c.stops != 0 {
+		t.Fatalf("uncertain stop start response called core: %+v %+v %v", p, c, err)
+	}
+	p.afterCommitErr = nil
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.stops != 1 || len(p.starts) != 2 || p.starts[0] != p.starts[1] || p.job.InstanceID != "i_1" {
+		t.Fatalf("stop recovery changed formal Job/instance: %+v %+v", p, c)
+	}
+}
+
+func TestV102CoreNoEffectRejectionAfterMarkerRemainsUnknown(t *testing.T) {
+	p := &fakePlatform{job: machineJob()}
+	c := &fakeCore{err: &core.CoreError{Code: "INVALID_ARGUMENT", Stage: "validate"}}
+	digest := strings.Repeat("f", 64)
+	content := nodev1.ContentFact{WorkshopID: "123", ContentVersionID: "candidate-v1", VPKSHA256: strings.Repeat("a", 64), State: "confirmed"}
+	r := machineRunner(t, p, c, &digest, &content)
+	if err := r.Step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.creates != 1 || len(p.starts) != 1 || p.job.State != "unknown" {
+		t.Fatalf("core rejection released post-marker create: %+v %+v", p, c)
+	}
+	for _, report := range p.reports {
+		if report.State == "rejected_no_effect" {
+			t.Fatalf("no-effect report after marker: %+v", report)
+		}
+	}
+}
+
+func TestOperationStartDeniedAfterReplacementBeforeCore(t *testing.T) {
+	p := &fakePlatform{job: machineJob()}
+	p.afterPrepare = func() { p.startErr = errors.New("session replaced before operation-start") }
+	c := &fakeCore{}
+	digest := strings.Repeat("f", 64)
+	content := nodev1.ContentFact{WorkshopID: "123", ContentVersionID: "candidate-v1", VPKSHA256: strings.Repeat("a", 64), State: "confirmed"}
+	r := machineRunner(t, p, c, &digest, &content)
+	if err := r.Step(context.Background()); err == nil || c.creates != 0 || p.job.State != "claimed" {
+		t.Fatalf("replacement before start called core: %+v %+v %v", p, c, err)
+	}
+}
+
+func TestOperationStartThenSessionTransitionAllowsOnlyAccountedEffect(t *testing.T) {
+	for _, kind := range []string{"create", "stop"} {
+		for _, transition := range []string{"replacement", "expiry"} {
+			t.Run(kind+"/"+transition, func(t *testing.T) {
+				job := machineJob()
+				job.Kind = kind
+				if kind == "stop" {
+					job.InstanceID = "i_1"
+				}
+				p := &fakePlatform{job: job}
+				c := &fakeCore{result: core.Accepted{Accepted: true, InstanceID: "i_1", OperationID: "o_1"},
+					op:       core.Operation{OperationID: "o_1", Kind: kind, InstanceID: "i_1", Status: "running"},
+					instance: core.Instance{InstanceID: "i_1", Lifecycle: "active", Process: "running", Cleanup: "pending"}}
+				digest := strings.Repeat("f", 64)
+				content := nodev1.ContentFact{WorkshopID: "123", ContentVersionID: "candidate-v1", VPKSHA256: strings.Repeat("a", 64), State: "confirmed"}
+				p.afterStart = func() { p.reportErr = errors.New("session " + transition) }
+				c.afterCreate = func() {
+					if p.job.State != "unknown" {
+						t.Fatal("create reached core before durable may-have-started")
+					}
+				}
+				c.beforeStop = func() {
+					if p.job.State != "unknown" {
+						t.Fatal("stop reached core before durable may-have-started")
+					}
+				}
+				r := machineRunner(t, p, c, &digest, &content)
+				if err := r.Step(context.Background()); err == nil || p.job.State != "unknown" || len(p.starts) != 1 ||
+					(kind == "create" && c.creates != 1) || (kind == "stop" && c.stops != 1) {
+					t.Fatalf("post-start transition lost accounted effect: %+v %+v %v", p, c, err)
+				}
+				frozen := p.job.FrozenCreate
+				p.reportErr, p.afterStart = nil, nil
+				if err := r.Step(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+				if kind == "create" && (c.creates != 2 || c.keys[0] != c.keys[1] || p.job.FrozenCreate != frozen) {
+					t.Fatalf("create retry changed frozen identity: %+v %+v", p, c)
+				}
+				if kind == "stop" && (c.stops != 2 || p.job.InstanceID != "i_1") {
+					t.Fatalf("stop retry changed formal target: %+v %+v", p, c)
+				}
+			})
+		}
+	}
+}
+
 func machineRunner(t *testing.T, p *fakePlatform, c *fakeCore, digest *string, content *nodev1.ContentFact) Runner {
 	t.Helper()
 	path := testTemplate(t)
