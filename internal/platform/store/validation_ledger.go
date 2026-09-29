@@ -588,8 +588,9 @@ func advanceValidationFromFact(ctx context.Context, tx pgx.Tx, runID, outcome st
 			}
 		}
 	case "reclaimed":
-		// A status fact cannot close an unresolved formal stop Job.
-		next = "reclaim_observing"
+		// ReportInstanceFact has already persisted the Allocation's reclaim proof.
+		// Only a formal stop Job report advances the Run into reclaim observation;
+		// a resource fact cannot bypass human confirmation or leave quarantine.
 	case "quarantined":
 		next = "quarantined"
 	}

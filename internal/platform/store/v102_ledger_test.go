@@ -406,8 +406,16 @@ func TestV102ValidationHumanPassRequiresFormalReclaim(t *testing.T) {
 	if _, err := s.ReportJob(ctx, c.NodeID, run.StopJobID, nodev1.ReportRequest{State: "accepted", InstanceID: "i_validation", OperationID: "o_stop"}); err != nil {
 		t.Fatal(err)
 	}
+	run, err = s.ValidationRun(ctx, run.ID)
+	if err != nil || run.State != "reclaim_observing" {
+		t.Fatalf("formal stop did not start reclaim observation %+v %v", run, err)
+	}
+	if err := s.ReportInstanceFact(ctx, c.NodeID, run.AllocationID, v102ReclaimedFact()); err != nil {
+		t.Fatal(err)
+	}
+	assertV102ReclaimedAllocation(t, s, run)
 	if _, err := s.FinalizeValidationRun(ctx, run.ID); err == nil {
-		t.Fatal("PASS before stop completion")
+		t.Fatal("PASS before stop Job completion")
 	}
 	if _, err := s.ReportJob(ctx, c.NodeID, run.StopJobID, nodev1.ReportRequest{State: "succeeded", InstanceID: "i_validation", OperationID: "o_stop"}); err != nil {
 		t.Fatal(err)
