@@ -569,12 +569,12 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 	}
 	rows.Close()
 	games := make(map[string]string, len(o.Games))
-	presets := make(map[string]string, len(o.Presets))
+	presets := make(map[string]AdminPreset, len(o.Presets))
 	for _, g := range o.Games {
 		games[g.ID] = g.CurrentContentVersionID
 	}
 	for _, p := range o.Presets {
-		presets[p.ID] = p.TemplateRevisionID
+		presets[p.ID] = p
 	}
 	if len(o.ValidationRuns) > 0 {
 		tx, err := s.Pool.Begin(ctx)
@@ -588,7 +588,8 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 				x.InvalidReason = "VALIDATION_INCOMPLETE"
 				continue
 			}
-			x.Formal = games[x.GameID] == x.ContentVersionID && presets[x.PresetID] == x.TemplateRevisionID
+			p := presets[x.PresetID]
+			x.Formal = p.ValidationContract == "v1_0_2" && games[x.GameID] == x.ContentVersionID && p.TemplateRevisionID == x.TemplateRevisionID
 			id, err := effectiveValidationProof(ctx, tx, x.NodeID, x.GameID, x.PresetID, x.ContentVersionID, x.TemplateRevisionID, x.ID)
 			if err != nil {
 				return AdminOverview{}, err

@@ -33,3 +33,14 @@ it('retains authenticated UI when logout fails',async()=>{
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>new Response(JSON.stringify(url.endsWith('/overview')?overview():{}),{status:url.endsWith('/logout')?503:200})))
  await mount();click('退出');await settle();expect(root.textContent).toContain('退出失败');expect(root.textContent).not.toContain('登录管理后台')
 })
+it('shows the manual content publish control only for legacy games',async()=>{
+ const game=(id:string)=>({id,displayName:id,workshopId:'123456',currentContentVersionId:'v1',maintenanceMessage:'',enabled:true,acceptingNewRequests:true})
+ const preset=(id:string,gameId:string,contract:string)=>({id,arcadeGameId:gameId,displayName:id,templateRevisionId:'t1',maintenanceMessage:'',enabled:true,acceptingNewRequests:true,maxPlayers:10,validationContract:contract})
+ const data={...overview(),games:[game('upgraded'),game('legacy')],presets:[preset('p1','upgraded','v1_0_2'),preset('p2','legacy','legacy_v1')],releases:[],inventories:[]}
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>new Response(JSON.stringify(url.endsWith('/overview')?data:{}),{status:200})))
+ await mount();click('内容与维护');await settle()
+ expect(root.textContent).not.toContain('旧合同手动发布')
+ const selector=[...root.querySelectorAll('select')].find(s=>s.closest('.admin-catalog-create'))!
+ selector.value='legacy';selector.dispatchEvent(new Event('change',{bubbles:true}));await settle()
+ expect(root.textContent).toContain('旧合同手动发布')
+})

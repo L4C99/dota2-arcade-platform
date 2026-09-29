@@ -340,8 +340,10 @@ func TestV102PlayerVsValidationLastSlot(t *testing.T) {
 	if _, err := s.Pool.Exec(ctx, `INSERT INTO template_revisions(id,arcade_game_id) VALUES('other-template',$1)`, otherGame); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Pool.Exec(ctx, `INSERT INTO game_presets(id,arcade_game_id,display_name,max_players,template_revision_id)
-		VALUES($1,$2,'Other preset',1,'other-template')`, otherPreset, otherGame); err != nil {
+	// This race exercises a legacy player reservation against a validation
+	// reservation. New Presets default to the v1.0.2 contract and need PASS.
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO game_presets(id,arcade_game_id,display_name,max_players,template_revision_id,validation_contract)
+		VALUES($1,$2,'Other preset',1,'other-template','legacy_v1')`, otherPreset, otherGame); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Pool.Exec(ctx, `INSERT INTO node_template_bindings(node_id,template_revision_id,binding_key)

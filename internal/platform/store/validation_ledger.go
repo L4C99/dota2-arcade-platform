@@ -561,14 +561,14 @@ func (s *Store) ValidationDetail(ctx context.Context, runID string) (ValidationD
 		out.InvalidReason = "VALIDATION_INCOMPLETE"
 		return out, nil
 	}
-	var formalContent, formalTemplate string
-	err = s.Pool.QueryRow(ctx, `SELECT COALESCE(g.current_content_version_id,''),p.template_revision_id
+	var formalContent, formalTemplate, contract string
+	err = s.Pool.QueryRow(ctx, `SELECT COALESCE(g.current_content_version_id,''),p.template_revision_id,p.validation_contract
 		FROM arcade_games g JOIN game_presets p ON p.arcade_game_id=g.id AND p.id=$2 WHERE g.id=$1`, run.GameID, run.PresetID).
-		Scan(&formalContent, &formalTemplate)
+		Scan(&formalContent, &formalTemplate, &contract)
 	if err != nil {
 		return ValidationDetail{}, err
 	}
-	out.Formal = formalContent == run.ContentVersionID && formalTemplate == run.TemplateRevisionID
+	out.Formal = contract == "v1_0_2" && formalContent == run.ContentVersionID && formalTemplate == run.TemplateRevisionID
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return ValidationDetail{}, err

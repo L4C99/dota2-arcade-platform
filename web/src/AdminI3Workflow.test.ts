@@ -25,9 +25,9 @@ const data = () => ({
   inventories: [{ nodeId: 'n', state: 'confirmed', unaccountedCount: 0, current: true, receivedAt: '2026-09-29T00:00:00Z' }],
 })
 async function settle() { for (let i = 0; i < 12; i++) { await Promise.resolve(); await nextTick() } }
-async function mount() {
+async function mount(overview = data()) {
   root = document.createElement('div'); document.body.append(root)
-  app = createApp(AdminI3Workflow, { overview: data(), busy: false }); app.mount(root)
+  app = createApp(AdminI3Workflow, { overview, busy: false }); app.mount(root)
   const selectors = root.querySelectorAll('select')
   ;(selectors[0] as HTMLSelectElement).value = 'g'; selectors[0].dispatchEvent(new Event('change', { bubbles: true }))
   await settle()
@@ -67,4 +67,25 @@ it('keeps human pass separate from final PASS and uses scoped maintenance', asyn
   const runLookup = [...root!.querySelectorAll('button')].find(x => x.textContent?.includes('Run r1'))!
   runLookup.click(); await settle()
   expect(root!.textContent).toContain('真人确认 pass；最终 PASS：否')
+})
+
+it('shows machine fact and inventory failures with typed binding reopen feedback', async () => {
+  const view = data()
+  view.bindings[0].reportedState = 'unknown'
+  view.bindings[0].reportedContentVersionId = ''
+  view.templateBindings[0].factState = 'unknown'
+  view.inventories[0].state = 'unknown'
+  view.inventories[0].unaccountedCount = 1
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/actions')
+    ? new Response(JSON.stringify({ code: 'VALIDATION_INCOMPLETE' }), { status: 409 })
+    : new Response(JSON.stringify({ maintenanceEpoch: 3, closed: true, targetOccupied: 0, targetUnresolvedJobs: 0, nodeOccupied: 0 }), { status: 200 })))
+  await mount(view)
+  expect(root!.textContent).toContain('内容：unknown')
+  expect(root!.textContent).toContain('Controller fact unknown')
+  expect(root!.textContent).toContain('Inventory：unknown')
+  expect(root!.textContent).toContain('未入账 1')
+  const reopen = [...root!.querySelectorAll('button')].find(x => x.textContent?.includes('开放此节点此图'))!
+  reopen.click(); await settle()
+  expect(root!.textContent).toContain('缺少当前有效的逐玩法 PASS')
+  expect(root!.textContent).toContain('VALIDATION_INCOMPLETE')
 })

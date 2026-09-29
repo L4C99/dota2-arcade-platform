@@ -104,6 +104,30 @@ func TestP4DAdminHTTPAuthorizationSessionAndCSRF(t *testing.T) {
 	if got := call("POST", "/api/v1/admin/actions", action, "https://example.org", cookie).Code; got != http.StatusOK {
 		t.Fatalf("authorized action: %d", got)
 	}
+	i3Path := "/api/v1/admin/maintenance/begin"
+	i3Body := `{"nodeId":"00000000-0000-0000-0000-000000000001","gameId":"00000000-0000-0000-0000-000000000002","expectedMaintenanceEpoch":0,"requestId":"i3-http","reason":"test"}`
+	for _, test := range []struct {
+		name, path, body, origin string
+		cookie                   *http.Cookie
+		want                     int
+	}{
+		{"anonymous detail", "/api/v1/admin/validation/00000000-0000-0000-0000-000000000001", "", "", nil, http.StatusUnauthorized},
+		{"anonymous mutation", i3Path, i3Body, "https://example.org", nil, http.StatusUnauthorized},
+		{"missing origin", i3Path, i3Body, "", cookie, http.StatusForbidden},
+		{"foreign origin", i3Path, i3Body, "https://other.example", cookie, http.StatusForbidden},
+		{"unknown field", i3Path, strings.TrimSuffix(i3Body, "}") + `,"shell":"x"}`, "https://example.org", cookie, http.StatusBadRequest},
+		{"wrong logical ID", i3Path, `{"nodeId":"../bad","gameId":"00000000-0000-0000-0000-000000000002","requestId":"x","reason":"test"}`, "https://example.org", cookie, http.StatusBadRequest},
+	} {
+		t.Run("I3 "+test.name, func(t *testing.T) {
+			method := "POST"
+			if test.body == "" {
+				method = "GET"
+			}
+			if got := call(method, test.path, test.body, test.origin, test.cookie).Code; got != test.want {
+				t.Fatalf("status %d, want %d", got, test.want)
+			}
+		})
+	}
 	var actor string
 	if err := pool.QueryRow(ctx, `SELECT actor_admin_user_id FROM audit_events WHERE action='global.update'`).Scan(&actor); err != nil || actor != adminID {
 		t.Fatalf("audit actor=%s: %v", actor, err)

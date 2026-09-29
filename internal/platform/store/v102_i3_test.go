@@ -225,3 +225,225 @@ func TestI3ValidationStartRequestDurabilityAndProofDrift(t *testing.T) {
 		t.Fatalf("stale release: %v", err)
 	}
 }
+
+func TestI3TemplateOnlyPublicationUsesNewPresetProof(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	ctx := context.Background()
+	firstRun := i3PassRun(t, s, c)
+	_ = i3Publish(t, s, c, firstRun)
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO template_revisions(id,arcade_game_id) VALUES('test-template-2',$1)`, c.GameID); err != nil {
+		t.Fatal(err)
+	}
+	if generation, err := s.UpsertTemplateBinding(ctx, c.NodeID, "test-template-2", "binding-2", c.ExpectedTemplateFingerprintSHA256, 0); err != nil || generation != 1 {
+		t.Fatalf("new template binding %d %v", generation, err)
+	}
+	if _, err := s.RecordTemplateFact(ctx, c.NodeID, "test-template-2", "binding-2", "confirmed", "template-manifest-sha256-v1", c.ExpectedTemplateFingerprintSHA256); err != nil {
+		t.Fatal(err)
+	}
+	if epoch, err := s.BeginScopedMaintenance(ctx, c.NodeID, c.GameID, c.AdminID, "template-maintenance", "template-only", 1); err != nil || epoch != 2 {
+		t.Fatalf("maintenance epoch %d %v", epoch, err)
+	}
+	newCandidate := c
+	newCandidate.TemplateRevisionID = "test-template-2"
+	newCandidate.ExpectedMaintenanceEpoch = 2
+	newRun := i3PassRun(t, s, newCandidate)
+	request := ReleasePublishRequest{GameID: c.GameID, ExpectedOldContentVersionID: "test-v1", NewContentVersionID: "test-v1",
+		Presets: []ReleasePresetPlan{{PresetID: c.PresetID, ExpectedOldTemplateRevisionID: "test-template", NewTemplateRevisionID: "test-template-2",
+			ExpectedOldAccepting: true, NewAccepting: true, ValidationRunID: firstRun.ID}}, RequestID: "template-only"}
+	if _, err := s.PublishRelease(ctx, c.AdminID, request); !errors.Is(err, ErrValidationIncomplete) {
+		t.Fatalf("old combo proof accepted: %v", err)
+	}
+	request.Presets[0].ValidationRunID = newRun.ID
+	if _, err := s.PublishRelease(ctx, c.AdminID, request); err != nil {
+		t.Fatal(err)
+	}
+	var revision string
+	if err := s.Pool.QueryRow(ctx, `SELECT template_revision_id FROM game_presets WHERE id=$1`, c.PresetID).Scan(&revision); err != nil || revision != "test-template-2" {
+		t.Fatalf("published template %q %v", revision, err)
+	}
+}
+
+func TestI3ContentChangeAndRollbackNeedAllPresetsAndNewEpochProof(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	ctx := context.Background()
+	p2, _ := NewID()
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO game_presets(id,arcade_game_id,display_name,max_players,template_revision_id,validation_contract,enabled,accepting_new_requests)
+		VALUES($1,$2,'P2',10,'test-template','legacy_v1',true,false)`, p2, c.GameID); err != nil {
+		t.Fatal(err)
+	}
+	firstRun := i3PassRun(t, s, c)
+	firstID := i3Publish(t, s, c, firstRun, ReleasePresetPlan{PresetID: p2, ExpectedOldTemplateRevisionID: "test-template",
+		NewTemplateRevisionID: "test-template", ExpectedOldAccepting: false, NewAccepting: false})
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO content_versions(id,arcade_game_id,content_sha256) VALUES('test-v2',$1,$2)`, c.GameID, strings.Repeat("b", 64)); err != nil {
+		t.Fatal(err)
+	}
+	advance := func(requestID, version, sha string, oldEpoch int64) ValidationRun {
+		t.Helper()
+		if epoch, err := s.BeginScopedMaintenance(ctx, c.NodeID, c.GameID, c.AdminID, requestID, "content switch", oldEpoch); err != nil || epoch != oldEpoch+1 {
+			t.Fatalf("maintenance epoch %d %v", epoch, err)
+		}
+		h := p1TestHeartbeat(version)
+		h.HardMaxInstances = 2
+		h.Network.LocalPortMax = h.Network.LocalPortMin + 1
+		h.Content[0].VPKSHA256 = sha
+		h.InventoryScanID, h.InventoryState = "second-scan", "confirmed"
+		h.TemplateFacts = []nodev1.TemplateFact{{BindingKey: "test-binding", State: "confirmed", ManifestAlgorithm: nodev1.TemplateManifestAlgorithmV1,
+			FingerprintSHA256: c.ExpectedTemplateFingerprintSHA256}}
+		h.Capabilities = []string{nodev1.CapabilityContentValidationV102, nodev1.CapabilityTemplateManifestV1, nodev1.CapabilityCoreInventoryV1}
+		if _, err := s.RecordHeartbeat(ctx, c.NodeID, h); err != nil {
+			t.Fatal(err)
+		}
+		candidate := c
+		candidate.ContentVersionID = version
+		candidate.ExpectedMaintenanceEpoch = oldEpoch + 1
+		return i3PassRun(t, s, candidate)
+	}
+	v2Run := advance("v2-maintenance", "test-v2", strings.Repeat("b", 64), 1)
+	change := ReleasePublishRequest{GameID: c.GameID, ExpectedOldContentVersionID: "test-v1", NewContentVersionID: "test-v2",
+		Presets: []ReleasePresetPlan{{PresetID: c.PresetID, ExpectedOldTemplateRevisionID: "test-template", NewTemplateRevisionID: "test-template",
+			ExpectedOldAccepting: true, NewAccepting: true, ValidationRunID: v2Run.ID}}, RequestID: "content-change"}
+	if _, err := s.PublishRelease(ctx, c.AdminID, change); !errors.Is(err, ErrCASConflict) {
+		t.Fatalf("omitted P2 on content change: %v", err)
+	}
+	change.Presets = append(change.Presets, ReleasePresetPlan{PresetID: p2, ExpectedOldTemplateRevisionID: "test-template",
+		NewTemplateRevisionID: "test-template", ExpectedOldAccepting: false, NewAccepting: false})
+	v2Release, err := s.PublishRelease(ctx, c.AdminID, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollback := change
+	rollback.ExpectedOldContentVersionID, rollback.NewContentVersionID = "test-v2", "test-v1"
+	rollback.RollbackOfReleaseID, rollback.RequestID = v2Release, "rollback"
+	rollback.Presets[0].ValidationRunID = firstRun.ID
+	if _, err := s.PublishRelease(ctx, c.AdminID, rollback); !errors.Is(err, ErrValidationIncomplete) {
+		t.Fatalf("old epoch rollback proof accepted: %v", err)
+	}
+	v1Run := advance("v1-maintenance", "test-v1", strings.Repeat("a", 64), 2)
+	rollback.Presets[0].ValidationRunID = v1Run.ID
+	rollbackID, err := s.PublishRelease(ctx, c.AdminID, rollback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := s.ReleaseDetail(ctx, rollbackID)
+	if err != nil || row.RollbackOfReleaseID != v2Release || row.NewContentVersionID != "test-v1" {
+		t.Fatalf("rollback record %+v %v", row, err)
+	}
+	first, err := s.ReleaseDetail(ctx, firstID)
+	if err != nil || first.NewContentVersionID != "test-v1" || first.RollbackOfReleaseID != "" {
+		t.Fatalf("original release was changed %+v %v", first, err)
+	}
+}
+
+func TestI3ProofDriftClosesEveryAdmissionPath(t *testing.T) {
+	for _, drift := range []struct {
+		name string
+		make func(*testing.T, *Store, ValidationCandidate)
+	}{
+		{"maintenance epoch", func(t *testing.T, s *Store, c ValidationCandidate) {
+			_, err := s.Pool.Exec(context.Background(), `UPDATE node_content_bindings SET maintenance_epoch=maintenance_epoch+1 WHERE node_id=$1 AND arcade_game_id=$2`, c.NodeID, c.GameID)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"content fact revision", func(t *testing.T, s *Store, c ValidationCandidate) {
+			_, err := s.Pool.Exec(context.Background(), `UPDATE node_content_bindings SET content_fact_revision=content_fact_revision+1 WHERE node_id=$1 AND arcade_game_id=$2`, c.NodeID, c.GameID)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"template binding generation", func(t *testing.T, s *Store, c ValidationCandidate) {
+			if _, err := s.UpsertTemplateBinding(context.Background(), c.NodeID, c.TemplateRevisionID, "new-binding-key", c.ExpectedTemplateFingerprintSHA256, 2); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"template fact revision", func(t *testing.T, s *Store, c ValidationCandidate) {
+			if _, err := s.RecordTemplateFact(context.Background(), c.NodeID, c.TemplateRevisionID, "test-binding", "confirmed", "template-manifest-sha256-v1", strings.Repeat("e", 64)); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"unaccounted inventory", func(t *testing.T, s *Store, c ValidationCandidate) {
+			ctx := context.Background()
+			if _, err := s.RecordInventory(ctx, c.NodeID, "unaccounted-scan", true, "", []InventoryInstance{{InstanceID: "stray", Lifecycle: "active", Process: "running", Cleanup: "incomplete"}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Pool.Exec(ctx, `UPDATE node_reports SET inventory_scan_id='unaccounted-scan',inventory_state='confirmed' WHERE node_id=$1`, c.NodeID); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(drift.name, func(t *testing.T) {
+			s, c := v102ValidationFixture(t, 2)
+			ctx := context.Background()
+			run := i3PassRun(t, s, c)
+			_ = i3Publish(t, s, c, run)
+			if err := s.ApplyAdminAction(ctx, c.AdminID, AdminAction{Action: "binding.update", TargetID: c.NodeID, GameID: c.GameID, Accepting: boolPtr(true)}); err != nil {
+				t.Fatal(err)
+			}
+			user, _, err := s.CreateUserSession(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := s.CreateUserRequest(ctx, user, c.GameID, c.PresetID); err != nil {
+				t.Fatal(err)
+			}
+			drift.make(t, s, c)
+			if changed, err := s.TryAllocateOne(ctx); err != nil || changed {
+				t.Fatalf("scheduler used stale proof: %t %v", changed, err)
+			}
+			if err := s.ApplyAdminAction(ctx, c.AdminID, AdminAction{Action: "binding.update", TargetID: c.NodeID, GameID: c.GameID, Accepting: boolPtr(true)}); !errors.Is(err, ErrValidationIncomplete) {
+				t.Fatalf("binding reopened on stale proof: %v", err)
+			}
+			if err := s.ApplyAdminAction(ctx, c.AdminID, AdminAction{Action: "preset.update", TargetID: c.PresetID, Accepting: boolPtr(true)}); !errors.Is(err, ErrValidationIncomplete) {
+				t.Fatalf("preset reopened on stale proof: %v", err)
+			}
+			if err := s.ApplyAdminAction(ctx, c.AdminID, AdminAction{Action: "binding.update", TargetID: c.NodeID, GameID: c.GameID, Accepting: boolPtr(false)}); err != nil {
+				t.Fatal(err)
+			}
+			_, err = s.PublishRelease(ctx, c.AdminID, ReleasePublishRequest{GameID: c.GameID, ExpectedOldContentVersionID: "test-v1", NewContentVersionID: "test-v1",
+				Presets: []ReleasePresetPlan{{PresetID: c.PresetID, ExpectedOldTemplateRevisionID: "test-template", NewTemplateRevisionID: "test-template", ExpectedOldAccepting: true, NewAccepting: true, ValidationRunID: run.ID}}, RequestID: "stale-proof"})
+			if !errors.Is(err, ErrValidationIncomplete) {
+				t.Fatalf("release used stale proof: %v", err)
+			}
+		})
+	}
+}
+
+func TestI3ValidationRejectsCrossGameCandidateAndPrematureHumanActions(t *testing.T) {
+	s, c := v102ValidationFixture(t, 2)
+	ctx := context.Background()
+	otherGame, _ := NewID()
+	otherPreset, _ := NewID()
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO arcade_games(id,workshop_id,display_name) VALUES($1,'99999999','Other')`, otherGame); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO content_versions(id,arcade_game_id,content_sha256) VALUES('other-content',$1,$2)`, otherGame, strings.Repeat("b", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO template_revisions(id,arcade_game_id) VALUES('other-template',$1)`, otherGame); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO game_presets(id,arcade_game_id,display_name,max_players,template_revision_id) VALUES($1,$2,'Other preset',10,'other-template')`, otherPreset, otherGame); err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []func(*ValidationCandidate){
+		func(x *ValidationCandidate) { x.PresetID = otherPreset },
+		func(x *ValidationCandidate) { x.ContentVersionID = "other-content" },
+		func(x *ValidationCandidate) { x.TemplateRevisionID = "other-template" },
+	} {
+		wrong := c
+		change(&wrong)
+		if run, err := s.ReserveValidation(ctx, wrong); err == nil {
+			t.Fatalf("cross-game candidate created Run %+v", run)
+		}
+	}
+	run, err := s.ReserveValidation(ctx, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ConfirmValidationHuman(ctx, run.ID, c.AdminID, "pass", "awaiting_human"); !errors.Is(err, ErrCASConflict) {
+		t.Fatalf("premature human pass: %v", err)
+	}
+	if _, err := s.StopValidation(ctx, run.ID, c.AdminID, "create_pending"); !errors.Is(err, ErrCASConflict) {
+		t.Fatalf("stop guessed instance: %v", err)
+	}
+}
