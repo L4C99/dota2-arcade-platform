@@ -39,6 +39,7 @@ type AdminPreset struct {
 	Enabled              bool   `json:"enabled"`
 	AcceptingNewRequests bool   `json:"acceptingNewRequests"`
 	MaxPlayers           int    `json:"maxPlayers"`
+	ValidationContract   string `json:"validationContract"`
 }
 
 type AdminContentVersion struct {
@@ -55,9 +56,15 @@ type AdminTemplateRevision struct {
 }
 
 type AdminTemplateBinding struct {
-	NodeID             string `json:"nodeId"`
-	TemplateRevisionID string `json:"templateRevisionId"`
-	BindingKey         string `json:"bindingKey"`
+	NodeID                    string     `json:"nodeId"`
+	TemplateRevisionID        string     `json:"templateRevisionId"`
+	BindingKey                string     `json:"bindingKey"`
+	ExpectedFingerprintSHA256 string     `json:"expectedFingerprintSha256"`
+	BindingGeneration         int64      `json:"bindingGeneration"`
+	FactState                 string     `json:"factState"`
+	FactFingerprintSHA256     string     `json:"factFingerprintSha256"`
+	TemplateFactRevision      int64      `json:"templateFactRevision"`
+	FactReceivedAt            *time.Time `json:"factReceivedAt,omitempty"`
 }
 
 type AdminContentValidation struct {
@@ -88,6 +95,7 @@ type AdminNode struct {
 	LastHeartbeat        *time.Time `json:"lastHeartbeat"`
 	ReconcileRequested   int64      `json:"reconcileRequested"`
 	ReconcileCompleted   int64      `json:"reconcileCompleted"`
+	Capabilities         []string   `json:"capabilities"`
 	A2SEnabled           *bool      `json:"a2sEnabled,omitempty"`
 }
 
@@ -99,6 +107,42 @@ type AdminBinding struct {
 	ReportedState            string     `json:"reportedState"`
 	ReportedAt               *time.Time `json:"reportedAt"`
 	AcceptingNewAllocations  bool       `json:"acceptingNewAllocations"`
+	MaintenanceEpoch         int64      `json:"maintenanceEpoch"`
+	ContentFactRevision      int64      `json:"contentFactRevision"`
+}
+
+type AdminInventory struct {
+	NodeID           string    `json:"nodeId"`
+	State            string    `json:"state"`
+	Complete         bool      `json:"complete"`
+	UnaccountedCount int       `json:"unaccountedCount"`
+	ReceivedAt       time.Time `json:"receivedAt"`
+	Current          bool      `json:"current"`
+}
+
+type AdminValidationSummary struct {
+	ID                 string    `json:"id"`
+	NodeID             string    `json:"nodeId"`
+	GameID             string    `json:"gameId"`
+	PresetID           string    `json:"presetId"`
+	ContentVersionID   string    `json:"contentVersionId"`
+	TemplateRevisionID string    `json:"templateRevisionId"`
+	State              string    `json:"state"`
+	HumanResult        string    `json:"humanResult"`
+	AllocationID       string    `json:"allocationId"`
+	Effective          bool      `json:"effective"`
+	Formal             bool      `json:"formal"`
+	InvalidReason      string    `json:"invalidReason,omitempty"`
+	CreatedAt          time.Time `json:"createdAt"`
+}
+
+type AdminReleaseSummary struct {
+	ID                  string    `json:"id"`
+	GameID              string    `json:"gameId"`
+	OldContentVersionID string    `json:"oldContentVersionId"`
+	NewContentVersionID string    `json:"newContentVersionId"`
+	RollbackOfReleaseID string    `json:"rollbackOfReleaseId,omitempty"`
+	PublishedAt         time.Time `json:"publishedAt"`
 }
 
 type AdminEntry struct {
@@ -185,6 +229,9 @@ type AdminOverview struct {
 	Allocations        []AdminAllocation        `json:"allocations"`
 	Jobs               []AdminJob               `json:"jobs"`
 	Audit              []AuditEvent             `json:"audit"`
+	Inventories        []AdminInventory         `json:"inventories"`
+	ValidationRuns     []AdminValidationSummary `json:"validationRuns"`
+	Releases           []AdminReleaseSummary    `json:"releases"`
 }
 
 // AdminOverview deliberately omits node secrets, private network facts,
@@ -193,7 +240,8 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 	o := AdminOverview{Games: []AdminGame{}, Presets: []AdminPreset{}, ContentVersions: []AdminContentVersion{},
 		TemplateRevisions: []AdminTemplateRevision{}, TemplateBindings: []AdminTemplateBinding{}, ContentValidations: []AdminContentValidation{}, Nodes: []AdminNode{},
 		Bindings: []AdminBinding{}, Entries: []AdminEntry{}, Requests: []AdminRequest{}, Parties: []AdminParty{},
-		Allocations: []AdminAllocation{}, Jobs: []AdminJob{}, Audit: []AuditEvent{}}
+		Allocations: []AdminAllocation{}, Jobs: []AdminJob{}, Audit: []AuditEvent{},
+		Inventories: []AdminInventory{}, ValidationRuns: []AdminValidationSummary{}, Releases: []AdminReleaseSummary{}}
 	if err := s.Pool.QueryRow(ctx, `SELECT p.accepting_new_requests,p.maintenance_message,a.message
 		FROM platform_settings p CROSS JOIN site_announcements a WHERE p.singleton AND a.singleton`).
 		Scan(&o.Settings.AcceptingNewRequests, &o.Settings.MaintenanceMessage, &o.Settings.SiteAnnouncement); err != nil {
@@ -261,13 +309,18 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT node_id,template_revision_id,binding_key FROM node_template_bindings ORDER BY node_id,template_revision_id`)
+	rows, err = s.Pool.Query(ctx, `SELECT b.node_id,b.template_revision_id,b.binding_key,
+		COALESCE(b.expected_template_fingerprint_sha256,''),b.binding_generation,
+		COALESCE(f.reported_state,'unknown'),COALESCE(f.reported_fingerprint_sha256,''),COALESCE(f.template_fact_revision,0),f.received_at
+		FROM node_template_bindings b LEFT JOIN node_template_facts f ON f.node_id=b.node_id AND f.template_revision_id=b.template_revision_id
+		ORDER BY b.node_id,b.template_revision_id`)
 	if err != nil {
 		return AdminOverview{}, err
 	}
 	for rows.Next() {
 		var x AdminTemplateBinding
-		if err := rows.Scan(&x.NodeID, &x.TemplateRevisionID, &x.BindingKey); err != nil {
+		if err := rows.Scan(&x.NodeID, &x.TemplateRevisionID, &x.BindingKey, &x.ExpectedFingerprintSHA256,
+			&x.BindingGeneration, &x.FactState, &x.FactFingerprintSHA256, &x.TemplateFactRevision, &x.FactReceivedAt); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
@@ -314,14 +367,14 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT id,arcade_game_id,display_name,template_revision_id,maintenance_message,enabled,accepting_new_requests,max_players
+	rows, err = s.Pool.Query(ctx, `SELECT id,arcade_game_id,display_name,template_revision_id,maintenance_message,enabled,accepting_new_requests,max_players,validation_contract
 		FROM game_presets ORDER BY display_name,id`)
 	if err != nil {
 		return AdminOverview{}, err
 	}
 	for rows.Next() {
 		var x AdminPreset
-		if err := rows.Scan(&x.ID, &x.ArcadeGameID, &x.DisplayName, &x.TemplateRevisionID, &x.MaintenanceMessage, &x.Enabled, &x.AcceptingNewRequests, &x.MaxPlayers); err != nil {
+		if err := rows.Scan(&x.ID, &x.ArcadeGameID, &x.DisplayName, &x.TemplateRevisionID, &x.MaintenanceMessage, &x.Enabled, &x.AcceptingNewRequests, &x.MaxPlayers, &x.ValidationContract); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
@@ -336,7 +389,8 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		COALESCE(r.hard_max_instances,0),COALESCE(r.controller_version,''),COALESCE(r.d2core_version,''),COALESCE(r.d2core_commit,''),COALESCE(r.compatibility_status,''),
 		(SELECT count(*) FROM allocations a WHERE a.node_id=n.id AND a.state NOT IN ('reclaimed','released_no_effect')),
 		COALESCE((SELECT COALESCE(j.error_code,'') FROM node_jobs j WHERE j.node_id=n.id AND j.error_code IS NOT NULL ORDER BY j.updated_at DESC LIMIT 1),''),
-		COALESCE(q.requested_generation,0),COALESCE(q.completed_generation,0),c.a2s_enabled
+		COALESCE(q.requested_generation,0),COALESCE(q.completed_generation,0),c.a2s_enabled,
+		COALESCE(r.capabilities,'{}')
 		FROM nodes n LEFT JOIN node_reports r ON r.node_id=n.id LEFT JOIN node_reconcile_requests q ON q.node_id=n.id
 		LEFT JOIN node_entry_capabilities c ON c.node_id=n.id ORDER BY n.display_name,n.id`)
 	if err != nil {
@@ -344,7 +398,7 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 	}
 	for rows.Next() {
 		var x AdminNode
-		if err := rows.Scan(&x.ID, &x.DisplayName, &x.OS, &x.Enabled, &x.AcceptingNewRequests, &x.Draining, &x.Priority, &x.Desired, &x.LastHeartbeat, &x.Hard, &x.ControllerVersion, &x.D2CoreVersion, &x.D2CoreCommit, &x.Compatibility, &x.Occupied, &x.RecentErrorCode, &x.ReconcileRequested, &x.ReconcileCompleted, &x.A2SEnabled); err != nil {
+		if err := rows.Scan(&x.ID, &x.DisplayName, &x.OS, &x.Enabled, &x.AcceptingNewRequests, &x.Draining, &x.Priority, &x.Desired, &x.LastHeartbeat, &x.Hard, &x.ControllerVersion, &x.D2CoreVersion, &x.D2CoreCommit, &x.Compatibility, &x.Occupied, &x.RecentErrorCode, &x.ReconcileRequested, &x.ReconcileCompleted, &x.A2SEnabled, &x.Capabilities); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
@@ -356,14 +410,14 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		return AdminOverview{}, err
 	}
 	rows.Close()
-	rows, err = s.Pool.Query(ctx, `SELECT node_id,arcade_game_id,COALESCE(reported_content_version_id,''),COALESCE(reported_content_sha256,''),reported_state,reported_at,accepting_new_allocations
+	rows, err = s.Pool.Query(ctx, `SELECT node_id,arcade_game_id,COALESCE(reported_content_version_id,''),COALESCE(reported_content_sha256,''),reported_state,reported_at,accepting_new_allocations,maintenance_epoch,content_fact_revision
 		FROM node_content_bindings ORDER BY node_id,arcade_game_id`)
 	if err != nil {
 		return AdminOverview{}, err
 	}
 	for rows.Next() {
 		var x AdminBinding
-		if err := rows.Scan(&x.NodeID, &x.ArcadeGameID, &x.ReportedContentVersionID, &x.ReportedContentSHA256, &x.ReportedState, &x.ReportedAt, &x.AcceptingNewAllocations); err != nil {
+		if err := rows.Scan(&x.NodeID, &x.ArcadeGameID, &x.ReportedContentVersionID, &x.ReportedContentSHA256, &x.ReportedState, &x.ReportedAt, &x.AcceptingNewAllocations, &x.MaintenanceEpoch, &x.ContentFactRevision); err != nil {
 			rows.Close()
 			return AdminOverview{}, err
 		}
@@ -466,6 +520,101 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 			return AdminOverview{}, err
 		}
 		o.Audit = append(o.Audit, x)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return AdminOverview{}, err
+	}
+	rows.Close()
+	rows, err = s.Pool.Query(ctx, `SELECT i.node_id,i.state,i.complete,i.unaccounted_count,i.received_at,
+		COALESCE(r.inventory_scan_id=i.scan_id AND r.inventory_state='confirmed',false)
+		FROM node_inventory_snapshots i LEFT JOIN node_reports r ON r.node_id=i.node_id
+		WHERE i.scan_id=(SELECT latest.scan_id FROM node_inventory_snapshots latest
+			WHERE latest.node_id=i.node_id ORDER BY latest.received_at DESC,latest.scan_id DESC LIMIT 1)
+		ORDER BY i.node_id`)
+	if err != nil {
+		return AdminOverview{}, err
+	}
+	for rows.Next() {
+		var x AdminInventory
+		if err := rows.Scan(&x.NodeID, &x.State, &x.Complete, &x.UnaccountedCount, &x.ReceivedAt, &x.Current); err != nil {
+			rows.Close()
+			return AdminOverview{}, err
+		}
+		o.Inventories = append(o.Inventories, x)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return AdminOverview{}, err
+	}
+	rows.Close()
+	rows, err = s.Pool.Query(ctx, `SELECT v.id,v.node_id,v.arcade_game_id,v.game_preset_id,v.content_version_id,v.template_revision_id,
+		v.state,v.human_result,COALESCE(a.id::text,''),v.created_at
+		FROM validation_runs v LEFT JOIN allocations a ON a.validation_run_id=v.id
+		ORDER BY v.created_at DESC,v.id DESC LIMIT 100`)
+	if err != nil {
+		return AdminOverview{}, err
+	}
+	for rows.Next() {
+		var x AdminValidationSummary
+		if err := rows.Scan(&x.ID, &x.NodeID, &x.GameID, &x.PresetID, &x.ContentVersionID, &x.TemplateRevisionID, &x.State, &x.HumanResult, &x.AllocationID, &x.CreatedAt); err != nil {
+			rows.Close()
+			return AdminOverview{}, err
+		}
+		o.ValidationRuns = append(o.ValidationRuns, x)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return AdminOverview{}, err
+	}
+	rows.Close()
+	games := make(map[string]string, len(o.Games))
+	presets := make(map[string]string, len(o.Presets))
+	for _, g := range o.Games {
+		games[g.ID] = g.CurrentContentVersionID
+	}
+	for _, p := range o.Presets {
+		presets[p.ID] = p.TemplateRevisionID
+	}
+	if len(o.ValidationRuns) > 0 {
+		tx, err := s.Pool.Begin(ctx)
+		if err != nil {
+			return AdminOverview{}, err
+		}
+		defer tx.Rollback(ctx)
+		for i := range o.ValidationRuns {
+			x := &o.ValidationRuns[i]
+			if x.State != "passed" {
+				x.InvalidReason = "VALIDATION_INCOMPLETE"
+				continue
+			}
+			x.Formal = games[x.GameID] == x.ContentVersionID && presets[x.PresetID] == x.TemplateRevisionID
+			id, err := effectiveValidationProof(ctx, tx, x.NodeID, x.GameID, x.PresetID, x.ContentVersionID, x.TemplateRevisionID, x.ID)
+			if err != nil {
+				return AdminOverview{}, err
+			}
+			x.Effective = id != ""
+			if !x.Effective {
+				x.InvalidReason = "MACHINE_PROOF_STALE"
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return AdminOverview{}, err
+		}
+	}
+	rows, err = s.Pool.Query(ctx, `SELECT id,arcade_game_id,COALESCE(old_content_version_id,''),new_content_version_id,
+		COALESCE(rollback_of_release_id::text,''),published_at FROM content_releases
+		ORDER BY published_at DESC,id DESC LIMIT 100`)
+	if err != nil {
+		return AdminOverview{}, err
+	}
+	for rows.Next() {
+		var x AdminReleaseSummary
+		if err := rows.Scan(&x.ID, &x.GameID, &x.OldContentVersionID, &x.NewContentVersionID, &x.RollbackOfReleaseID, &x.PublishedAt); err != nil {
+			rows.Close()
+			return AdminOverview{}, err
+		}
+		o.Releases = append(o.Releases, x)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()

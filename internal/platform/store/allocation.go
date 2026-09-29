@@ -46,18 +46,21 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 	}
 	rows.Close()
 	for _, requestID := range requestIDs {
-		var gameID, contentID, revisionID string
+		var gameID, presetID, contentID, revisionID, contract, workshopID, contentSHA string
 		var mode string
 		var manualNodeID *string
 		var globalAccept, gameEnabled, gameAccept, presetEnabled, presetAccept bool
-		err = tx.QueryRow(ctx, `SELECT r.arcade_game_id,COALESCE(g.current_content_version_id,''),p.template_revision_id,
+		err = tx.QueryRow(ctx, `SELECT r.arcade_game_id,r.game_preset_id,COALESCE(g.current_content_version_id,''),p.template_revision_id,
 		r.node_selection_mode,r.manual_node_id,
-		s.accepting_new_requests,g.enabled,g.accepting_new_requests,p.enabled,p.accepting_new_requests
+		s.accepting_new_requests,g.enabled,g.accepting_new_requests,p.enabled,p.accepting_new_requests,
+		p.validation_contract,g.workshop_id,COALESCE(cv.content_sha256,'')
 		FROM server_requests r JOIN arcade_games g ON g.id=r.arcade_game_id
 		JOIN game_presets p ON p.id=r.game_preset_id
+		LEFT JOIN content_versions cv ON cv.arcade_game_id=g.id AND cv.id=g.current_content_version_id
 		JOIN platform_settings s ON s.singleton=true WHERE r.id=$1 FOR SHARE OF s,g,p`, requestID).
-			Scan(&gameID, &contentID, &revisionID, &mode, &manualNodeID,
-				&globalAccept, &gameEnabled, &gameAccept, &presetEnabled, &presetAccept)
+			Scan(&gameID, &presetID, &contentID, &revisionID, &mode, &manualNodeID,
+				&globalAccept, &gameEnabled, &gameAccept, &presetEnabled, &presetAccept,
+				&contract, &workshopID, &contentSHA)
 		if err != nil {
 			return false, err
 		}
@@ -114,6 +117,8 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 			}
 		}
 		var selected *NodeEligibility
+		var selectedFingerprint string
+		var selectedGeneration int64
 		for _, nodeID := range nodeIDs {
 			// Read after acquiring the node lock so concurrent heartbeat and
 			// desired-capacity updates cannot leave stale facts in the decision.
@@ -122,6 +127,29 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 				return false, err
 			}
 			if n.Reason(contentID, time.Now().UTC()) == "available" {
+				if contract == "v1_0_2" {
+					var bindingLocked, templateLocked string
+					if err := tx.QueryRow(ctx, `SELECT arcade_game_id::text FROM node_content_bindings
+						WHERE node_id=$1 AND arcade_game_id=$2 AND accepting_new_allocations FOR SHARE`, nodeID, gameID).Scan(&bindingLocked); errors.Is(err, pgx.ErrNoRows) {
+						continue
+					} else if err != nil {
+						return false, err
+					}
+					if err := tx.QueryRow(ctx, `SELECT template_revision_id,COALESCE(expected_template_fingerprint_sha256,''),binding_generation
+						FROM node_template_bindings WHERE node_id=$1 AND template_revision_id=$2 FOR SHARE`, nodeID, revisionID).
+						Scan(&templateLocked, &selectedFingerprint, &selectedGeneration); errors.Is(err, pgx.ErrNoRows) {
+						continue
+					} else if err != nil {
+						return false, err
+					}
+					proofID, err := effectiveValidationProof(ctx, tx, nodeID, gameID, presetID, contentID, revisionID, "")
+					if err != nil {
+						return false, err
+					}
+					if proofID == "" || contentSHA == "" || selectedFingerprint == "" || selectedGeneration == 0 {
+						continue
+					}
+				}
 				selected = &n
 				break
 			}
@@ -150,8 +178,18 @@ func (s *Store) TryAllocateOne(ctx context.Context) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,template_binding_key,requested_port)
-		VALUES($1,$2,'create',false,$3,$4,0)`, jobID, n.ID, allocationID, n.BindingKey)
+		capability := "legacy_v1"
+		expectedWorkshop, expectedContent, expectedSHA := "", "", ""
+		if contract == "v1_0_2" {
+			capability = "content_validation_v102"
+			expectedWorkshop, expectedContent, expectedSHA = workshopID, contentID, contentSHA
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,template_binding_key,requested_port,
+		required_capability,expected_template_fingerprint_sha256,template_binding_generation,expected_workshop_id,
+		expected_content_version_id,expected_vpk_sha256)
+		VALUES($1,$2,'create',false,$3,$4,0,$5,NULLIF($6,''),NULLIF($7,0),NULLIF($8,''),NULLIF($9,''),NULLIF($10,''))`,
+			jobID, n.ID, allocationID, n.BindingKey, capability, selectedFingerprint, selectedGeneration,
+			expectedWorkshop, expectedContent, expectedSHA)
 		if err != nil {
 			return false, err
 		}

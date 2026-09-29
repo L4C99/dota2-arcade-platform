@@ -269,6 +269,12 @@ func serve(s *store.Store) error {
 			if err != nil && stop.Err() == nil {
 				log.Printf("quarantine cycle: %v", err)
 			}
+			cycle, done = context.WithTimeout(stop, 5*time.Second)
+			err = s.FinalizeReadyValidations(cycle)
+			done()
+			if err != nil && stop.Err() == nil {
+				log.Printf("validation finalization cycle: %v", err)
+			}
 			select {
 			case <-stop.Done():
 				return

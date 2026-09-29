@@ -19,7 +19,7 @@ def main():
     args = parser.parse_args()
     root = args.directory.resolve()
     manifest = json.loads((root / "MANIFEST.json").read_text())
-    assert manifest["gitDirty"] is False and manifest["migrationVersion"] == 21
+    assert manifest["gitDirty"] is False and manifest["migrationVersion"] == 22
     for line in (root / "SHA256SUMS").read_text().splitlines():
         expected, name = line.split("  ", 1)
         assert Path(name).name == name

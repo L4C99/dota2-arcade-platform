@@ -17,7 +17,7 @@ import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_MIGRATION_VERSION = 21
+EXPECTED_MIGRATION_VERSION = 22
 
 
 def run(args, cwd=ROOT, env=None):

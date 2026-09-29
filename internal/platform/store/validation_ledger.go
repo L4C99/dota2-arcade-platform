@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,28 +15,50 @@ import (
 // ValidationRun is an immutable candidate identity with monotonic lifecycle evidence.
 // The Allocation and NodeJobs are read by relation, never copied into mutable IDs here.
 type ValidationRun struct {
-	ID, NodeID, GameID, PresetID, ContentVersionID, ContentSHA256                          string
-	TemplateRevisionID, TemplateBindingKey, TemplateFingerprintSHA256                      string
-	StartedBy                                                                              string
-	TemplateBindingGeneration, MaintenanceEpoch, ContentFactRevision, TemplateFactRevision int64
-	State, FailureCode, ResultCode, HumanResult                                            string
-	HumanConfirmedBy                                                                       *string
-	HumanConfirmedAt, ReadyAt, JoinInfoAvailableAt, PassedAt                               *time.Time
-	CreatedAt                                                                              time.Time
-	AllocationID, CreateJobID, StopJobID                                                   string
+	ID                        string     `json:"id"`
+	NodeID                    string     `json:"nodeId"`
+	GameID                    string     `json:"gameId"`
+	PresetID                  string     `json:"presetId"`
+	ContentVersionID          string     `json:"contentVersionId"`
+	ContentSHA256             string     `json:"contentSha256"`
+	TemplateRevisionID        string     `json:"templateRevisionId"`
+	TemplateBindingKey        string     `json:"templateBindingKey"`
+	TemplateFingerprintSHA256 string     `json:"templateFingerprintSha256"`
+	StartedBy                 string     `json:"startedBy"`
+	TemplateBindingGeneration int64      `json:"templateBindingGeneration"`
+	MaintenanceEpoch          int64      `json:"maintenanceEpoch"`
+	ContentFactRevision       int64      `json:"contentFactRevision"`
+	TemplateFactRevision      int64      `json:"templateFactRevision"`
+	State                     string     `json:"state"`
+	FailureCode               string     `json:"failureCode,omitempty"`
+	ResultCode                string     `json:"resultCode,omitempty"`
+	HumanResult               string     `json:"humanResult"`
+	HumanConfirmedBy          *string    `json:"humanConfirmedBy,omitempty"`
+	HumanConfirmedAt          *time.Time `json:"humanConfirmedAt,omitempty"`
+	ReadyAt                   *time.Time `json:"readyAt,omitempty"`
+	JoinInfoAvailableAt       *time.Time `json:"joinInfoAvailableAt,omitempty"`
+	PassedAt                  *time.Time `json:"passedAt,omitempty"`
+	CreatedAt                 time.Time  `json:"createdAt"`
+	AllocationID              string     `json:"allocationId"`
+	CreateJobID               string     `json:"createJobId"`
+	StopJobID                 string     `json:"stopJobId,omitempty"`
 }
 
 type ValidationCandidate struct {
 	NodeID, GameID, PresetID, ContentVersionID, TemplateRevisionID, AdminID string
 	ExpectedMaintenanceEpoch                                                int64
 	ExpectedTemplateFingerprintSHA256                                       string
+	RequestID                                                               string
 }
 
 type ScopedMaintenanceStatus struct {
-	NodeID, GameID                                     string
-	MaintenanceEpoch                                   int64
-	Closed                                             bool
-	TargetOccupied, TargetUnresolvedJobs, NodeOccupied int
+	NodeID               string `json:"nodeId"`
+	GameID               string `json:"gameId"`
+	MaintenanceEpoch     int64  `json:"maintenanceEpoch"`
+	Closed               bool   `json:"closed"`
+	TargetOccupied       int    `json:"targetOccupied"`
+	TargetUnresolvedJobs int    `json:"targetUnresolvedJobs"`
+	NodeOccupied         int    `json:"nodeOccupied"`
 }
 
 // ScopedMaintenanceStatus is an observation for Admin/I2/I3. A consuming
@@ -294,11 +318,33 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 	if c.ExpectedMaintenanceEpoch <= 0 || !contentSHA256Pattern.MatchString(c.ExpectedTemplateFingerprintSHA256) {
 		return ValidationRun{}, ErrJobConflict
 	}
+	if len(c.RequestID) > 128 {
+		return ValidationRun{}, ErrInvalidAdminAction
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return ValidationRun{}, err
 	}
 	defer tx.Rollback(ctx)
+	var requestHash string
+	if c.RequestID != "" {
+		requestHash, err = i3PayloadHash(c)
+		if err != nil {
+			return ValidationRun{}, err
+		}
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(6056625,hashtext($1))`, "validation.start:"+c.RequestID); err != nil {
+			return ValidationRun{}, err
+		}
+		if id, err := priorI3Request(ctx, tx, "validation.start", c.RequestID, requestHash, c.AdminID); err != nil || id != "" {
+			if err != nil {
+				return ValidationRun{}, err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return ValidationRun{}, err
+			}
+			return s.ValidationRun(ctx, id)
+		}
+	}
 	var contentSHA string
 	if err := tx.QueryRow(ctx, `SELECT v.content_sha256 FROM arcade_games g
 		JOIN game_presets p ON p.arcade_game_id=g.id AND p.id=$2
@@ -337,7 +383,7 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 		return ValidationRun{}, err
 	}
 	if !closed || epoch != c.ExpectedMaintenanceEpoch || contentRevision == 0 || contentState != "confirmed" || reportedVersion != c.ContentVersionID || reportedSHA != contentSHA {
-		return ValidationRun{}, fmt.Errorf("%w: content gate", ErrJobConflict)
+		return ValidationRun{}, ErrContentFactMismatch
 	}
 	var key, expectedFingerprint string
 	var generation int64
@@ -356,7 +402,7 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 		return ValidationRun{}, err
 	}
 	if generation == 0 || expectedFingerprint != c.ExpectedTemplateFingerprintSHA256 || factState != "confirmed" || factAlgorithm != "template-manifest-sha256-v1" || factKey != key || factFingerprint != expectedFingerprint || templateRevision == 0 || templateReceived == nil || time.Since(*templateReceived) >= nodeOnlineWindow {
-		return ValidationRun{}, fmt.Errorf("%w: template gate", ErrJobConflict)
+		return ValidationRun{}, ErrTemplateFactMismatch
 	}
 	var inventoryComplete bool
 	var inventoryState string
@@ -366,10 +412,16 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 		JOIN node_reports r ON r.node_id=i.node_id AND r.inventory_state='confirmed' AND r.inventory_scan_id=i.scan_id
 		WHERE i.node_id=$1 ORDER BY i.received_at DESC,i.scan_id DESC LIMIT 1`, c.NodeID).
 		Scan(&inventoryComplete, &inventoryState, &inventoryReceived, &unaccounted); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ValidationRun{}, ErrInventoryUnknown
+		}
 		return ValidationRun{}, err
 	}
-	if !inventoryComplete || inventoryState != "confirmed" || time.Since(inventoryReceived) >= nodeOnlineWindow || unaccounted != 0 {
-		return ValidationRun{}, fmt.Errorf("%w: inventory gate", ErrJobConflict)
+	if !inventoryComplete || inventoryState != "confirmed" || time.Since(inventoryReceived) >= nodeOnlineWindow {
+		return ValidationRun{}, ErrInventoryUnknown
+	}
+	if unaccounted != 0 {
+		return ValidationRun{}, ErrUnaccountedInstance
 	}
 	var oldResources, openJobs, occupied int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM allocations WHERE node_id=$1 AND arcade_game_id=$2
@@ -384,8 +436,11 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 		AND state NOT IN ('reclaimed','released_no_effect')`, c.NodeID).Scan(&occupied); err != nil {
 		return ValidationRun{}, err
 	}
-	if oldResources != 0 || openJobs != 0 || occupied >= min(hard, desired) {
-		return ValidationRun{}, fmt.Errorf("%w: resources or capacity", ErrJobConflict)
+	if oldResources != 0 || openJobs != 0 {
+		return ValidationRun{}, ErrScopedResourcesActive
+	}
+	if occupied >= min(hard, desired) {
+		return ValidationRun{}, ErrCapacityFull
 	}
 	var integrationJobs int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM node_jobs WHERE node_id=$1 AND integration_only
@@ -432,6 +487,18 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 	if err != nil {
 		return ValidationRun{}, err
 	}
+	if c.RequestID != "" {
+		if _, err := tx.Exec(ctx, `INSERT INTO admin_i3_requests(action,request_id,payload_sha256,result_id,actor_admin_user_id)
+			VALUES('validation.start',$1,$2,$3,$4)`, c.RequestID, requestHash, runID, c.AdminID); err != nil {
+			return ValidationRun{}, err
+		}
+		if err := auditAdmin(ctx, tx, c.AdminID, "validation.start", "validation_run", runID,
+			map[string]any{"allocationId": allocationID, "createJobId": jobID, "nodeId": c.NodeID,
+				"gameId": c.GameID, "presetId": c.PresetID, "contentVersionId": c.ContentVersionID,
+				"templateRevisionId": c.TemplateRevisionID, "requestId": c.RequestID}); err != nil {
+			return ValidationRun{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return ValidationRun{}, err
 	}
@@ -455,6 +522,66 @@ func (s *Store) ValidationRun(ctx context.Context, runID string) (ValidationRun,
 		&r.State, &r.FailureCode, &r.ResultCode, &r.HumanResult, &r.HumanConfirmedBy, &r.HumanConfirmedAt,
 		&r.ReadyAt, &r.JoinInfoAvailableAt, &r.PassedAt, &r.CreatedAt, &r.AllocationID, &r.CreateJobID, &r.StopJobID)
 	return r, err
+}
+
+type ValidationDetail struct {
+	ValidationRun
+	AllocationState string `json:"allocationState"`
+	CreateJobState  string `json:"createJobState"`
+	StopJobState    string `json:"stopJobState"`
+	InstanceID      string `json:"instanceId,omitempty"`
+	ConnectCommand  string `json:"connectCommand,omitempty"`
+	Effective       bool   `json:"effective"`
+	Formal          bool   `json:"formal"`
+	InvalidReason   string `json:"invalidReason,omitempty"`
+}
+
+func (s *Store) ValidationDetail(ctx context.Context, runID string) (ValidationDetail, error) {
+	run, err := s.ValidationRun(ctx, runID)
+	if err != nil {
+		return ValidationDetail{}, err
+	}
+	out := ValidationDetail{ValidationRun: run}
+	var host string
+	var publicPort *int
+	err = s.Pool.QueryRow(ctx, `SELECT a.state,c.state,COALESCE(st.state,''),COALESCE(c.instance_id,''),
+		COALESCE(a.join_connect_host,''),a.join_public_port FROM allocations a
+		JOIN node_jobs c ON c.allocation_id=a.id AND c.kind='create'
+		LEFT JOIN LATERAL (SELECT state FROM node_jobs WHERE allocation_id=a.id AND kind='stop'
+			ORDER BY created_at DESC,id DESC LIMIT 1) st ON true
+		WHERE a.validation_run_id=$1`, runID).Scan(&out.AllocationState, &out.CreateJobState, &out.StopJobState, &out.InstanceID, &host, &publicPort)
+	if err != nil {
+		return ValidationDetail{}, err
+	}
+	if run.ReadyAt != nil && run.JoinInfoAvailableAt != nil && host != "" && publicPort != nil {
+		out.ConnectCommand = "connect " + net.JoinHostPort(host, strconv.Itoa(*publicPort))
+	}
+	if run.State != "passed" {
+		out.InvalidReason = "VALIDATION_INCOMPLETE"
+		return out, nil
+	}
+	var formalContent, formalTemplate string
+	err = s.Pool.QueryRow(ctx, `SELECT COALESCE(g.current_content_version_id,''),p.template_revision_id
+		FROM arcade_games g JOIN game_presets p ON p.arcade_game_id=g.id AND p.id=$2 WHERE g.id=$1`, run.GameID, run.PresetID).
+		Scan(&formalContent, &formalTemplate)
+	if err != nil {
+		return ValidationDetail{}, err
+	}
+	out.Formal = formalContent == run.ContentVersionID && formalTemplate == run.TemplateRevisionID
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return ValidationDetail{}, err
+	}
+	defer tx.Rollback(ctx)
+	id, err := effectiveValidationProof(ctx, tx, run.NodeID, run.GameID, run.PresetID, run.ContentVersionID, run.TemplateRevisionID, run.ID)
+	if err != nil {
+		return ValidationDetail{}, err
+	}
+	out.Effective = id != ""
+	if !out.Effective {
+		out.InvalidReason = "MACHINE_PROOF_STALE"
+	}
+	return out, tx.Commit(ctx)
 }
 
 func advanceValidationFromJob(ctx context.Context, tx pgx.Tx, runID, kind, jobState, allocationState, errorCode string, hasJoin bool) error {
@@ -611,7 +738,7 @@ func advanceValidationFromFact(ctx context.Context, tx pgx.Tx, runID, outcome st
 
 // ConfirmValidationHuman stores an audited claim and queues a formal stop.
 // It cannot turn a human pass into final PASS before full reclaim.
-func (s *Store) ConfirmValidationHuman(ctx context.Context, runID, adminID, result string) (ValidationRun, error) {
+func (s *Store) ConfirmValidationHuman(ctx context.Context, runID, adminID, result string, expectedState ...string) (ValidationRun, error) {
 	if result != "pass" && result != "fail" {
 		return ValidationRun{}, ErrJobConflict
 	}
@@ -628,16 +755,26 @@ func (s *Store) ConfirmValidationHuman(ctx context.Context, runID, adminID, resu
 		return ValidationRun{}, err
 	}
 	var runState, human, allocationState, instanceID, createState string
+	var joinHost, joinRevision, currentRevision string
+	var joinLocalPort, joinPublicPort *int
 	var readyAt, joinAt *time.Time
-	err = tx.QueryRow(ctx, `SELECT v.state,v.human_result,a.state,j.state,COALESCE(j.instance_id,''),v.ready_at,v.join_info_available_at
+	err = tx.QueryRow(ctx, `SELECT v.state,v.human_result,a.state,j.state,COALESCE(j.instance_id,''),v.ready_at,v.join_info_available_at,
+		COALESCE(a.join_connect_host,''),a.join_local_port,a.join_public_port,COALESCE(a.join_entry_config_revision,''),
+		COALESCE(ec.entry_config_revision,'')
 		FROM validation_runs v JOIN allocations a ON a.validation_run_id=v.id
-		JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create' WHERE v.id=$1`, runID).
-		Scan(&runState, &human, &allocationState, &createState, &instanceID, &readyAt, &joinAt)
+		JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create'
+		LEFT JOIN node_entry_capabilities ec ON ec.node_id=a.node_id WHERE v.id=$1`, runID).
+		Scan(&runState, &human, &allocationState, &createState, &instanceID, &readyAt, &joinAt,
+			&joinHost, &joinLocalPort, &joinPublicPort, &joinRevision, &currentRevision)
 	if err != nil {
 		return ValidationRun{}, err
 	}
+	if len(expectedState) > 0 && runState != expectedState[0] {
+		return ValidationRun{}, ErrCASConflict
+	}
 	if human != "pending" || instanceID == "" || createState != "succeeded" || allocationState != "running" ||
-		(result == "pass" && (runState != "awaiting_human" || readyAt == nil || joinAt == nil)) {
+		(result == "pass" && (runState != "awaiting_human" || readyAt == nil || joinAt == nil ||
+			joinHost == "" || joinLocalPort == nil || joinPublicPort == nil || joinRevision == "" || joinRevision != currentRevision)) {
 		return ValidationRun{}, ErrJobConflict
 	}
 	stopID, err := NewID()
@@ -657,6 +794,66 @@ func (s *Store) ConfirmValidationHuman(ctx context.Context, runID, adminID, resu
 		return ValidationRun{}, err
 	}
 	if err := auditAdmin(ctx, tx, adminID, "validation.confirm", "validation_run", runID, map[string]any{"humanResult": result, "stopJobId": stopID}); err != nil {
+		return ValidationRun{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ValidationRun{}, err
+	}
+	return s.ValidationRun(ctx, runID)
+}
+
+// StopValidation queues a formal stop only for the trusted instance attached
+// to this Run's create Job. A caller cannot name an arbitrary core instance.
+func (s *Store) StopValidation(ctx context.Context, runID, adminID, expectedState string) (ValidationRun, error) {
+	if expectedState == "" {
+		return ValidationRun{}, ErrInvalidAdminAction
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return ValidationRun{}, err
+	}
+	defer tx.Rollback(ctx)
+	var allocationID, nodeID string
+	if err := tx.QueryRow(ctx, `SELECT id,node_id FROM allocations WHERE validation_run_id=$1`, runID).Scan(&allocationID, &nodeID); err != nil {
+		return ValidationRun{}, err
+	}
+	if _, _, err := lockBusinessAllocation(ctx, tx, allocationID, nodeID); err != nil {
+		return ValidationRun{}, err
+	}
+	var state, allocationState, instanceID string
+	if err := tx.QueryRow(ctx, `SELECT v.state,a.state,COALESCE(j.instance_id,'') FROM validation_runs v
+		JOIN allocations a ON a.validation_run_id=v.id
+		JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create' WHERE v.id=$1`, runID).
+		Scan(&state, &allocationState, &instanceID); err != nil {
+		return ValidationRun{}, err
+	}
+	if state != expectedState || state == "passed" || state == "failed" || instanceID == "" ||
+		allocationState == "reclaimed" || allocationState == "released_no_effect" {
+		return ValidationRun{}, ErrCASConflict
+	}
+	var existing bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM node_jobs WHERE allocation_id=$1 AND kind='stop')`, allocationID).Scan(&existing); err != nil {
+		return ValidationRun{}, err
+	}
+	if existing {
+		return ValidationRun{}, ErrCASConflict
+	}
+	stopID, err := NewID()
+	if err != nil {
+		return ValidationRun{}, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO node_jobs(id,node_id,kind,integration_only,allocation_id,instance_id,required_capability)
+		VALUES($1,$2,'stop',false,$3,$4,'content_validation_v102')`, stopID, nodeID, allocationID, instanceID); err != nil {
+		return ValidationRun{}, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE allocations SET state='stopping' WHERE id=$1`, allocationID); err != nil {
+		return ValidationRun{}, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE validation_runs SET state='stop_pending',updated_at=now() WHERE id=$1`, runID); err != nil {
+		return ValidationRun{}, err
+	}
+	if err := auditAdmin(ctx, tx, adminID, "validation.stop", "validation_run", runID,
+		map[string]any{"allocationId": allocationID, "stopJobId": stopID, "instanceId": instanceID}); err != nil {
 		return ValidationRun{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -776,4 +973,44 @@ func (s *Store) FinalizeValidationRun(ctx context.Context, runID string) (Valida
 		return ValidationRun{}, err
 	}
 	return s.ValidationRun(ctx, runID)
+}
+
+// FinalizeReadyValidations is a server-side convergence step. Reads in Admin
+// never mutate Runs, and a human confirmation never directly grants PASS.
+func (s *Store) FinalizeReadyValidations(ctx context.Context) error {
+	rows, err := s.Pool.Query(ctx, `SELECT v.id,v.human_result,v.state FROM validation_runs v
+		JOIN allocations a ON a.validation_run_id=v.id
+		WHERE v.state NOT IN ('passed','failed') AND a.state IN ('reclaimed','released_no_effect')
+		ORDER BY v.created_at,v.id LIMIT 100`)
+	if err != nil {
+		return err
+	}
+	type pending struct{ id, human, state string }
+	var runs []pending
+	for rows.Next() {
+		var r pending
+		if err := rows.Scan(&r.id, &r.human, &r.state); err != nil {
+			rows.Close()
+			return err
+		}
+		runs = append(runs, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, r := range runs {
+		if r.human == "pass" && r.state == "reclaim_observing" {
+			_, err = s.FinalizeValidationRun(ctx, r.id)
+		} else if r.human != "pass" || r.state == "quarantined" {
+			_, err = s.FinalizeValidationFailure(ctx, r.id, "VALIDATION_NOT_PASSED")
+		} else {
+			continue
+		}
+		if err != nil && !errors.Is(err, ErrJobConflict) {
+			return err
+		}
+	}
+	return nil
 }

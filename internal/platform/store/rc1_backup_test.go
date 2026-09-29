@@ -159,7 +159,7 @@ func TestRC1BackupRestore(t *testing.T) {
 		t.Fatal("restore row history mismatch")
 	}
 	var latest, count int
-	if err := pool.QueryRow(ctx, `SELECT max(version),count(*) FROM schema_migrations`).Scan(&latest, &count); err != nil || latest != 21 || count != 21 {
+	if err := pool.QueryRow(ctx, `SELECT max(version),count(*) FROM schema_migrations`).Scan(&latest, &count); err != nil || latest != 22 || count != 22 {
 		t.Fatalf("restored migrations %d/%d: %v", latest, count, err)
 	}
 	// No process or resource operation follows restore. Database recovery is not reclaim.

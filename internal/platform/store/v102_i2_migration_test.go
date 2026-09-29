@@ -112,7 +112,7 @@ func TestI2Migration20To21AndRerun(t *testing.T) {
 		t.Fatalf("rerun: %v", err)
 	}
 	var latest, count int
-	if err := pool.QueryRow(ctx, `SELECT max(version),count(*) FROM schema_migrations`).Scan(&latest, &count); err != nil || latest != 21 || count != 21 {
+	if err := pool.QueryRow(ctx, `SELECT max(version),count(*) FROM schema_migrations`).Scan(&latest, &count); err != nil || latest != 22 || count != 22 {
 		t.Fatalf("migration ledger %d/%d: %v", latest, count, err)
 	}
 	var columns int

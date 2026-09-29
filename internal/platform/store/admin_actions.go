@@ -17,27 +17,29 @@ var ErrInvalidAdminAction = errors.New("invalid administrator action")
 var contentSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type AdminAction struct {
-	Action                      string  `json:"action"`
-	TargetID                    string  `json:"targetId"`
-	GameID                      string  `json:"gameId,omitempty"`
-	Accepting                   *bool   `json:"accepting,omitempty"`
-	Enabled                     *bool   `json:"enabled,omitempty"`
-	Draining                    *bool   `json:"draining,omitempty"`
-	Priority                    *int    `json:"priority,omitempty"`
-	Desired                     *int    `json:"desired,omitempty"`
-	Message                     *string `json:"message,omitempty"`
-	Entry                       string  `json:"entry,omitempty"`
-	ExpectedEntryConfigRevision string  `json:"expectedEntryConfigRevision,omitempty"`
-	Verified                    *bool   `json:"verified,omitempty"`
-	Confirmed                   bool    `json:"confirmed,omitempty"`
-	WorkshopID                  string  `json:"workshopId,omitempty"`
-	DisplayName                 string  `json:"displayName,omitempty"`
-	ContentVersionID            string  `json:"contentVersionId,omitempty"`
-	ContentSHA256               string  `json:"contentSha256,omitempty"`
-	TemplateRevisionID          string  `json:"templateRevisionId,omitempty"`
-	BindingKey                  string  `json:"bindingKey,omitempty"`
-	Description                 string  `json:"description,omitempty"`
-	MaxPlayers                  int     `json:"maxPlayers,omitempty"`
+	Action                            string  `json:"action"`
+	TargetID                          string  `json:"targetId"`
+	GameID                            string  `json:"gameId,omitempty"`
+	Accepting                         *bool   `json:"accepting,omitempty"`
+	Enabled                           *bool   `json:"enabled,omitempty"`
+	Draining                          *bool   `json:"draining,omitempty"`
+	Priority                          *int    `json:"priority,omitempty"`
+	Desired                           *int    `json:"desired,omitempty"`
+	Message                           *string `json:"message,omitempty"`
+	Entry                             string  `json:"entry,omitempty"`
+	ExpectedEntryConfigRevision       string  `json:"expectedEntryConfigRevision,omitempty"`
+	Verified                          *bool   `json:"verified,omitempty"`
+	Confirmed                         bool    `json:"confirmed,omitempty"`
+	WorkshopID                        string  `json:"workshopId,omitempty"`
+	DisplayName                       string  `json:"displayName,omitempty"`
+	ContentVersionID                  string  `json:"contentVersionId,omitempty"`
+	ContentSHA256                     string  `json:"contentSha256,omitempty"`
+	TemplateRevisionID                string  `json:"templateRevisionId,omitempty"`
+	BindingKey                        string  `json:"bindingKey,omitempty"`
+	ExpectedTemplateFingerprintSHA256 string  `json:"expectedTemplateFingerprintSha256,omitempty"`
+	ExpectedOldBindingGeneration      *int64  `json:"expectedOldBindingGeneration,omitempty"`
+	Description                       string  `json:"description,omitempty"`
+	MaxPlayers                        int     `json:"maxPlayers,omitempty"`
 }
 
 func auditAdmin(ctx context.Context, tx pgx.Tx, adminID, action, targetType, targetID string, change map[string]any) error {
@@ -158,24 +160,49 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if a.TargetID == "" || a.TemplateRevisionID == "" || strings.TrimSpace(a.BindingKey) == "" {
 			return ErrInvalidAdminAction
 		}
+		if (a.ExpectedTemplateFingerprintSHA256 != "" || a.ExpectedOldBindingGeneration != nil) &&
+			(a.ExpectedOldBindingGeneration == nil || !contentSHA256Pattern.MatchString(a.ExpectedTemplateFingerprintSHA256)) {
+			return ErrInvalidAdminAction
+		}
 		var old string
+		var oldFingerprint *string
+		var oldGeneration int64
 		var lockedNode string
 		if err := tx.QueryRow(ctx, `SELECT id FROM nodes WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&lockedNode); err != nil {
 			return err
 		}
-		err := tx.QueryRow(ctx, `SELECT binding_key FROM node_template_bindings WHERE node_id=$1 AND template_revision_id=$2 FOR UPDATE`, a.TargetID, a.TemplateRevisionID).Scan(&old)
+		err := tx.QueryRow(ctx, `SELECT binding_key,expected_template_fingerprint_sha256,binding_generation
+			FROM node_template_bindings WHERE node_id=$1 AND template_revision_id=$2 FOR UPDATE`, a.TargetID, a.TemplateRevisionID).
+			Scan(&old, &oldFingerprint, &oldGeneration)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO node_template_bindings(node_id,template_revision_id,binding_key) VALUES($1,$2,$3)
-			ON CONFLICT(node_id,template_revision_id) DO UPDATE SET
-			binding_generation=node_template_bindings.binding_generation+CASE WHEN node_template_bindings.binding_key IS DISTINCT FROM EXCLUDED.binding_key THEN 1 ELSE 0 END,
-			binding_key=EXCLUDED.binding_key`,
-			a.TargetID, a.TemplateRevisionID, strings.TrimSpace(a.BindingKey)); err != nil {
+		if a.ExpectedOldBindingGeneration != nil && oldGeneration != *a.ExpectedOldBindingGeneration {
+			return ErrCASConflict
+		}
+		newFingerprint := a.ExpectedTemplateFingerprintSHA256
+		if a.ExpectedOldBindingGeneration == nil {
+			newFingerprint = "" // A legacy key change invalidates any newer proof.
+			if old == strings.TrimSpace(a.BindingKey) && oldFingerprint != nil {
+				newFingerprint = *oldFingerprint
+			}
+		}
+		changed := err == pgx.ErrNoRows || old != strings.TrimSpace(a.BindingKey) ||
+			(oldFingerprint == nil && newFingerprint != "") || (oldFingerprint != nil && *oldFingerprint != newFingerprint)
+		if errors.Is(err, pgx.ErrNoRows) {
+			_, err = tx.Exec(ctx, `INSERT INTO node_template_bindings(node_id,template_revision_id,binding_key,expected_template_fingerprint_sha256,binding_generation)
+				VALUES($1,$2,$3,NULLIF($4,''),1)`, a.TargetID, a.TemplateRevisionID, strings.TrimSpace(a.BindingKey), newFingerprint)
+		} else if changed {
+			_, err = tx.Exec(ctx, `UPDATE node_template_bindings SET binding_key=$3,expected_template_fingerprint_sha256=NULLIF($4,''),
+				binding_generation=binding_generation+1 WHERE node_id=$1 AND template_revision_id=$2`,
+				a.TargetID, a.TemplateRevisionID, strings.TrimSpace(a.BindingKey), newFingerprint)
+		}
+		if err != nil {
 			return err
 		}
 		targetType, targetID = "node_template_binding", a.TargetID+":"+a.TemplateRevisionID
-		change = map[string]any{"before": old, "after": strings.TrimSpace(a.BindingKey)}
+		change = map[string]any{"before": old, "after": strings.TrimSpace(a.BindingKey), "fingerprintBefore": oldFingerprint,
+			"fingerprintAfter": newFingerprint, "generationBefore": oldGeneration, "identityChanged": changed}
 	case "content.validate":
 		if a.TargetID == "" || a.GameID == "" || a.ContentVersionID == "" || !a.Confirmed {
 			return ErrInvalidAdminAction
@@ -277,11 +304,21 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if a.TargetID == "" || a.Accepting == nil && a.Enabled == nil && a.Message == nil {
 			return ErrInvalidAdminAction
 		}
+		if a.Action == "preset.update" && a.TemplateRevisionID != "" {
+			return ErrInvalidAdminAction
+		}
 		table := "arcade_games"
 		targetType = "arcade_game"
 		if a.Action == "preset.update" {
 			table = "game_presets"
 			targetType = "game_preset"
+			var gameID, lockedGame string
+			if err := tx.QueryRow(ctx, `SELECT arcade_game_id FROM game_presets WHERE id=$1`, a.TargetID).Scan(&gameID); err != nil {
+				return err
+			}
+			if err := tx.QueryRow(ctx, `SELECT id FROM arcade_games WHERE id=$1 FOR SHARE`, gameID).Scan(&lockedGame); err != nil {
+				return err
+			}
 		}
 		var oldEnabled, oldAccept bool
 		var oldMessage string
@@ -297,6 +334,53 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		}
 		if a.Message != nil {
 			message = strings.TrimSpace(*a.Message)
+		}
+		if a.Action == "preset.update" && a.Accepting != nil && *a.Accepting {
+			var gameID, contentID, revisionID, contract string
+			if err := tx.QueryRow(ctx, `SELECT p.arcade_game_id,COALESCE(g.current_content_version_id,''),
+				p.template_revision_id,p.validation_contract FROM game_presets p JOIN arcade_games g ON g.id=p.arcade_game_id
+				WHERE p.id=$1`, a.TargetID).Scan(&gameID, &contentID, &revisionID, &contract); err != nil {
+				return err
+			}
+			if contract == "v1_0_2" {
+				var found bool
+				rows, err := tx.Query(ctx, `SELECT n.id FROM nodes n JOIN node_content_bindings b ON b.node_id=n.id
+					AND b.arcade_game_id=$1 WHERE b.accepting_new_allocations ORDER BY n.id`, gameID)
+				if err != nil {
+					return err
+				}
+				var ids []string
+				for rows.Next() {
+					var id string
+					if err := rows.Scan(&id); err != nil {
+						rows.Close()
+						return err
+					}
+					ids = append(ids, id)
+				}
+				if err := rows.Err(); err != nil {
+					rows.Close()
+					return err
+				}
+				rows.Close()
+				for _, nodeID := range ids {
+					var locked string
+					if err := tx.QueryRow(ctx, `SELECT id FROM nodes WHERE id=$1 FOR UPDATE`, nodeID).Scan(&locked); err != nil {
+						return err
+					}
+					id, err := effectiveValidationProof(ctx, tx, nodeID, gameID, a.TargetID, contentID, revisionID, "")
+					if err != nil {
+						return err
+					}
+					if id != "" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return ErrValidationIncomplete
+				}
+			}
 		}
 		if _, err := tx.Exec(ctx, `UPDATE `+table+` SET enabled=$2,accepting_new_requests=$3,maintenance_message=$4 WHERE id=$1`, a.TargetID, enabled, accept, message); err != nil {
 			return err
@@ -353,6 +437,35 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		if a.TargetID == "" || a.GameID == "" || a.Accepting == nil {
 			return ErrInvalidAdminAction
 		}
+		type formalPreset struct {
+			id, revision        string
+			accepting, upgraded bool
+		}
+		var formalContent string
+		var presets []formalPreset
+		if *a.Accepting {
+			if err := tx.QueryRow(ctx, `SELECT COALESCE(current_content_version_id,'') FROM arcade_games WHERE id=$1 FOR SHARE`, a.GameID).Scan(&formalContent); err != nil {
+				return err
+			}
+			rows, err := tx.Query(ctx, `SELECT id,template_revision_id,accepting_new_requests,validation_contract='v1_0_2'
+				FROM game_presets WHERE arcade_game_id=$1 ORDER BY id FOR SHARE`, a.GameID)
+			if err != nil {
+				return err
+			}
+			for rows.Next() {
+				var p formalPreset
+				if err := rows.Scan(&p.id, &p.revision, &p.accepting, &p.upgraded); err != nil {
+					rows.Close()
+					return err
+				}
+				presets = append(presets, p)
+			}
+			if err := rows.Err(); err != nil {
+				rows.Close()
+				return err
+			}
+			rows.Close()
+		}
 		var lockedNode string
 		if err := tx.QueryRow(ctx, `SELECT id FROM nodes WHERE id=$1 FOR UPDATE`, a.TargetID).Scan(&lockedNode); err != nil {
 			return err
@@ -360,6 +473,29 @@ func (s *Store) ApplyAdminAction(ctx context.Context, adminID string, a AdminAct
 		var old bool
 		if err := tx.QueryRow(ctx, `SELECT accepting_new_allocations FROM node_content_bindings WHERE node_id=$1 AND arcade_game_id=$2 FOR UPDATE`, a.TargetID, a.GameID).Scan(&old); err != nil {
 			return err
+		}
+		if *a.Accepting {
+			var upgraded, found bool
+			for _, p := range presets {
+				if !p.upgraded {
+					continue
+				}
+				upgraded = true
+				if !p.accepting {
+					continue
+				}
+				id, err := effectiveValidationProof(ctx, tx, a.TargetID, a.GameID, p.id, formalContent, p.revision, "")
+				if err != nil {
+					return err
+				}
+				if id != "" {
+					found = true
+					break
+				}
+			}
+			if upgraded && !found {
+				return ErrValidationIncomplete
+			}
 		}
 		if _, err := tx.Exec(ctx, `UPDATE node_content_bindings SET accepting_new_allocations=$3 WHERE node_id=$1 AND arcade_game_id=$2`, a.TargetID, a.GameID, *a.Accepting); err != nil {
 			return err

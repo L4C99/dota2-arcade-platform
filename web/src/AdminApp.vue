@@ -2,16 +2,17 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { instanceA2SLabel } from './adminEntry'
 import AdminContentWorkflow from './AdminContentWorkflow.vue'
+import AdminI3Workflow from './AdminI3Workflow.vue'
 
 interface Settings { acceptingNewRequests: boolean; maintenanceMessage: string; siteAnnouncement: string }
 interface Game { id: string; displayName: string; workshopId: string; currentContentVersionId: string; maintenanceMessage: string; enabled: boolean; acceptingNewRequests: boolean }
-interface Preset { id: string; arcadeGameId: string; displayName: string; templateRevisionId: string; maintenanceMessage: string; enabled: boolean; acceptingNewRequests: boolean; maxPlayers: number }
+interface Preset { id: string; arcadeGameId: string; displayName: string; templateRevisionId: string; maintenanceMessage: string; enabled: boolean; acceptingNewRequests: boolean; maxPlayers: number; validationContract: string }
 interface ContentVersion { id: string; arcadeGameId: string; contentSha256: string; createdAt: string }
 interface TemplateRevision { id: string; arcadeGameId: string; description: string }
-interface TemplateBinding { nodeId: string; templateRevisionId: string; bindingKey: string }
+interface TemplateBinding { nodeId: string; templateRevisionId: string; bindingKey: string; expectedFingerprintSha256: string; bindingGeneration: number; factState: string; factFingerprintSha256: string; templateFactRevision: number }
 interface ContentValidation { nodeId: string; arcadeGameId: string; contentVersionId: string; verifiedAt: string; verifiedBy: string }
-interface Node { id: string; displayName: string; os: string; connectivity: string; controllerVersion: string; d2coreVersion: string; d2coreCommit: string; compatibility: string; recentErrorCode: string; enabled: boolean; acceptingNewRequests: boolean; draining: boolean; priority: number; hard: number; desired: number; occupied: number; lastHeartbeat?: string; reconcileRequested: number; reconcileCompleted: number; a2sEnabled?: boolean }
-interface Binding { nodeId: string; arcadeGameId: string; reportedContentVersionId: string; reportedContentSha256: string; reportedState: string; reportedAt?: string; acceptingNewAllocations: boolean }
+interface Node { id: string; displayName: string; os: string; connectivity: string; controllerVersion: string; d2coreVersion: string; d2coreCommit: string; compatibility: string; recentErrorCode: string; enabled: boolean; acceptingNewRequests: boolean; draining: boolean; priority: number; hard: number; desired: number; occupied: number; lastHeartbeat?: string; reconcileRequested: number; reconcileCompleted: number; a2sEnabled?: boolean; capabilities: string[] }
+interface Binding { nodeId: string; arcadeGameId: string; reportedContentVersionId: string; reportedContentSha256: string; reportedState: string; reportedAt?: string; acceptingNewAllocations: boolean; maintenanceEpoch: number; contentFactRevision: number }
 interface Entry { nodeId: string; entryConfigRevision: string; steamVerified: boolean; steamEnabled: boolean; steamChinaVerified: boolean; steamChinaEnabled: boolean; steamVerifiedAt?: string; steamChinaVerifiedAt?: string }
 interface ServerRequest { id: string; arcadeGameId: string; gamePresetId: string; state: string; ownerPartyId?: string; nodeSelectionMode: string; manualNodeId?: string; requestedAt: string }
 interface Party { id: string; leaderDisplayName: string; memberCount: number; dissolvedAt?: string }
@@ -19,7 +20,7 @@ interface Allocation { id: string; serverRequestId: string; nodeId: string; cont
 interface Job { id: string; nodeId: string; allocationId: string; kind: string; state: string; errorCode: string; updatedAt: string }
 interface Audit { id: string; actorUsername: string; actorKind: string; action: string; targetType: string; targetId: string; result: string; stateChange: Record<string, unknown>; createdAt: string }
 interface Counts { waiting: number; creating: number; running: number; stopping: number; quarantined: number; failedUnreclaimed: number }
-interface Overview { settings: Settings; counts: Counts; games: Game[]; presets: Preset[]; contentVersions: ContentVersion[]; templateRevisions: TemplateRevision[]; templateBindings: TemplateBinding[]; contentValidations: ContentValidation[]; nodes: Node[]; bindings: Binding[]; entries: Entry[]; requests: ServerRequest[]; parties: Party[]; allocations: Allocation[]; jobs: Job[]; audit: Audit[] }
+interface Overview { settings: Settings; counts: Counts; games: Game[]; presets: Preset[]; contentVersions: ContentVersion[]; templateRevisions: TemplateRevision[]; templateBindings: TemplateBinding[]; contentValidations: ContentValidation[]; nodes: Node[]; bindings: Binding[]; entries: Entry[]; requests: ServerRequest[]; parties: Party[]; allocations: Allocation[]; jobs: Job[]; audit: Audit[]; validationRuns: { id: string; nodeId: string; gameId: string; presetId: string; contentVersionId: string; templateRevisionId: string; state: string; humanResult: string; effective: boolean; formal: boolean; invalidReason?: string }[]; releases: { id: string; gameId: string; oldContentVersionId: string; newContentVersionId: string; rollbackOfReleaseId?: string; publishedAt: string }[]; inventories: { nodeId: string; state: string; unaccountedCount: number; current: boolean; receivedAt: string }[] }
 interface Action { action: string; targetId?: string; gameId?: string; accepting?: boolean; enabled?: boolean; draining?: boolean; priority?: number; desired?: number; message?: string; entry?: string; expectedEntryConfigRevision?: string; verified?: boolean; confirmed?: boolean; workshopId?: string; displayName?: string; contentVersionId?: string; contentSha256?: string; templateRevisionId?: string; bindingKey?: string; description?: string; maxPlayers?: number }
 
 const username = ref('')
@@ -30,6 +31,15 @@ const busy = ref(false)
 const error = ref('')
 const notice = ref('')
 const overview = ref<Overview | null>(null)
+const legacyOverview = computed(() => {
+  if (!overview.value) return null
+  const legacy = new Set(overview.value.games.filter(g => !overview.value!.releases.some(r => r.gameId === g.id) &&
+    !overview.value!.presets.some(p => p.arcadeGameId === g.id && p.validationContract === 'v1_0_2')).map(g => g.id))
+  return { ...overview.value, games: overview.value.games.filter(g => legacy.has(g.id)),
+    presets: overview.value.presets.filter(p => legacy.has(p.arcadeGameId)),
+    bindings: overview.value.bindings.filter(b => legacy.has(b.arcadeGameId)),
+    contentValidations: overview.value.contentValidations.filter(v => legacy.has(v.arcadeGameId)) }
+})
 const tab = ref<'overview' | 'content' | 'nodes' | 'instances' | 'audit'>('overview')
 const globalDraft = reactive({ accepting: true, maintenance: '', announcement: '' })
 const nodeDraft = reactive<Record<string, { priority: number; desired: number }>>({})
@@ -219,7 +229,11 @@ function entryAction(node: Node, kind: 'steam' | 'steamchina', field: 'verified'
       </template>
       <template v-else-if="tab === 'content'">
         <div class="admin-section-heading"><div><span class="eyebrow">内容与维护</span><h2>地图、玩法与版本</h2><p>选择要完成的事，页面会按现有状态提示下一步。</p></div></div>
-        <AdminContentWorkflow :overview="overview" :busy="busy" @action="act" @refresh="refresh" />
+        <AdminI3Workflow :overview="overview" :busy="busy" @refresh="refresh" />
+        <details v-if="legacyOverview" class="admin-content-task"><summary>旧合同 legacy_v1 内容流程与登记工具</summary>
+          <p>以下仅对未进入 v1.0.2 合同且无新发布历史的游戏可用。v1.0.2 使用上方逐玩法流程。</p>
+          <AdminContentWorkflow :overview="legacyOverview" :busy="busy" @action="act" @refresh="refresh" />
+        </details>
         <details class="admin-advanced"><summary>高级管理 · 手动管理平台记录</summary><p>以下保留原有登记、发布、地图与玩法控制，供需要直接管理内部记录时使用。</p>
         <section class="panel admin-card"><h2>建立地图、版本和玩法记录</h2><p>已登记的地图或玩法不需要重复创建。新地图和新玩法默认停用、暂停玩家申请。</p>
           <details class="admin-content-task"><summary>新增一张游廊地图</summary><p>只在接入新的 Workshop ID 时使用。这里填写玩家看到的名称，不会下载或上传地图。</p><form class="admin-form-row" @submit.prevent="createGame"><label>Workshop ID<input v-model.trim="catalogDraft.workshopId" required pattern="[0-9]+" maxlength="32" /></label><label>游戏名称<input v-model.trim="catalogDraft.gameName" required maxlength="128" /></label><button class="secondary-button" type="submit" :disabled="busy">登记地图</button></form></details>
