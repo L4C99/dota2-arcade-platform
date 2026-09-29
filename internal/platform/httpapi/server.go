@@ -43,13 +43,14 @@ type api struct {
 	store  *store.Store
 	config Config
 	gate   *loginGate
+	leases *capabilityLeases
 }
 
 func NewHandler(s *store.Store, c Config) (http.Handler, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
-	a := &api{store: s, config: c, gate: newLoginGate()}
+	a := &api{store: s, config: c, gate: newLoginGate(), leases: newCapabilityLeases()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.health)
 	mux.HandleFunc("POST /api/v1/session", a.createSession)
@@ -80,14 +81,17 @@ func NewHandler(s *store.Store, c Config) (http.Handler, error) {
 	mux.HandleFunc("GET /api/v1/admin/overview", a.adminOverview)
 	mux.HandleFunc("POST /api/v1/admin/actions", a.adminAction)
 	mux.HandleFunc("POST "+nodev1.APIPath+"/heartbeat", a.nodeHeartbeat)
+	mux.HandleFunc("POST "+nodev1.APIPath+"/session", a.nodeCapabilitySession)
+	mux.HandleFunc("POST "+nodev1.APIPath+"/session/check", a.fencedNode(a.nodeCheckSession))
+	mux.HandleFunc("POST "+nodev1.APIPath+"/inventory", a.fencedNode(a.nodeInventory))
 	mux.HandleFunc("POST "+nodev1.APIPath+"/reconcile/complete", a.nodeReconcileComplete)
-	mux.HandleFunc("GET "+nodev1.APIPath+"/allocations/active", a.nodeActiveAllocations)
-	mux.HandleFunc("POST "+nodev1.APIPath+"/allocations/{id}/fact", a.nodeInstanceFact)
-	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/open", a.nodeOpenJobs)
-	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/claim", a.nodeClaimJob)
-	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/{id}", a.nodeGetJob)
-	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/prepare", a.nodePrepareJob)
-	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/report", a.nodeReportJob)
+	mux.HandleFunc("GET "+nodev1.APIPath+"/allocations/active", a.fencedNode(a.nodeActiveAllocations))
+	mux.HandleFunc("POST "+nodev1.APIPath+"/allocations/{id}/fact", a.fencedNode(a.nodeInstanceFact))
+	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/open", a.fencedNode(a.nodeOpenJobs))
+	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/claim", a.fencedNode(a.nodeClaimJob))
+	mux.HandleFunc("GET "+nodev1.APIPath+"/jobs/{id}", a.fencedNode(a.nodeGetJob))
+	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/prepare", a.fencedNode(a.nodePrepareJob))
+	mux.HandleFunc("POST "+nodev1.APIPath+"/jobs/{id}/report", a.fencedNode(a.nodeReportJob))
 	if c.WebRoot != "" {
 		if !filepath.IsAbs(c.WebRoot) {
 			return nil, errors.New("PLATFORM_WEB_ROOT must be absolute")

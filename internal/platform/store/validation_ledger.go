@@ -362,8 +362,9 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 	var inventoryState string
 	var inventoryReceived time.Time
 	var unaccounted int
-	if err := tx.QueryRow(ctx, `SELECT complete,state,received_at,unaccounted_count FROM node_inventory_snapshots
-		WHERE node_id=$1 ORDER BY received_at DESC,scan_id DESC LIMIT 1`, c.NodeID).
+	if err := tx.QueryRow(ctx, `SELECT i.complete,i.state,i.received_at,i.unaccounted_count FROM node_inventory_snapshots i
+		JOIN node_reports r ON r.node_id=i.node_id AND r.inventory_state='confirmed' AND r.inventory_scan_id=i.scan_id
+		WHERE i.node_id=$1 ORDER BY i.received_at DESC,i.scan_id DESC LIMIT 1`, c.NodeID).
 		Scan(&inventoryComplete, &inventoryState, &inventoryReceived, &unaccounted); err != nil {
 		return ValidationRun{}, err
 	}
@@ -422,8 +423,12 @@ func (s *Store) ReserveValidation(ctx context.Context, c ValidationCandidate) (V
 		return ValidationRun{}, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO node_jobs
-		(id,node_id,kind,integration_only,allocation_id,template_binding_key,requested_port,required_capability)
-		VALUES($1,$2,'create',false,$3,$4,0,'content_validation_v102')`, jobID, c.NodeID, allocationID, key)
+		(id,node_id,kind,integration_only,allocation_id,template_binding_key,requested_port,required_capability,
+		expected_template_fingerprint_sha256,template_binding_generation,expected_workshop_id,
+		expected_content_version_id,expected_vpk_sha256)
+		SELECT $1,$2,'create',false,$3,$4,0,'content_validation_v102',$5,$6,g.workshop_id,$7,$8
+		FROM arcade_games g WHERE g.id=$9`, jobID, c.NodeID, allocationID, key,
+		expectedFingerprint, generation, c.ContentVersionID, contentSHA, c.GameID)
 	if err != nil {
 		return ValidationRun{}, err
 	}
@@ -755,8 +760,9 @@ func (s *Store) FinalizeValidationRun(ctx context.Context, runID string) (Valida
 	var inventoryState string
 	var inventoryReceived time.Time
 	var unaccounted int
-	if err := tx.QueryRow(ctx, `SELECT complete,state,received_at,unaccounted_count FROM node_inventory_snapshots
-		WHERE node_id=$1 ORDER BY received_at DESC,scan_id DESC LIMIT 1`, nodeID).
+	if err := tx.QueryRow(ctx, `SELECT i.complete,i.state,i.received_at,i.unaccounted_count FROM node_inventory_snapshots i
+		JOIN node_reports r ON r.node_id=i.node_id AND r.inventory_state='confirmed' AND r.inventory_scan_id=i.scan_id
+		WHERE i.node_id=$1 ORDER BY i.received_at DESC,i.scan_id DESC LIMIT 1`, nodeID).
 		Scan(&inventoryComplete, &inventoryState, &inventoryReceived, &unaccounted); err != nil {
 		return ValidationRun{}, err
 	}

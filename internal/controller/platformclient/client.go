@@ -3,21 +3,29 @@ package platformclient
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 )
 
 type Client struct {
-	baseURL string
-	nodeID  string
-	secret  string
-	http    *http.Client
+	baseURL        string
+	nodeID         string
+	secret         string
+	http           *http.Client
+	mu             sync.Mutex
+	renewMu        sync.Mutex
+	processID      string
+	sessionToken   string
+	sessionExpires time.Time
 }
 
 type StatusError struct {
@@ -30,7 +38,12 @@ func (e *StatusError) Error() string {
 }
 
 func New(baseURL, nodeID, secret string) *Client {
-	return &Client{baseURL: strings.TrimRight(baseURL, "/"), nodeID: nodeID, secret: secret,
+	var nonce [16]byte
+	processID := ""
+	if _, err := rand.Read(nonce[:]); err == nil {
+		processID = hex.EncodeToString(nonce[:])
+	}
+	return &Client{baseURL: strings.TrimRight(baseURL, "/"), nodeID: nodeID, secret: secret, processID: processID,
 		http: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 
@@ -49,6 +62,12 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 	}
 	request.Header.Set("X-Node-ID", c.nodeID)
 	request.Header.Set("Authorization", "Bearer "+c.secret)
+	c.mu.Lock()
+	token := c.sessionToken
+	c.mu.Unlock()
+	if token != "" {
+		request.Header.Set("X-Controller-Session", token)
+	}
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -68,6 +87,55 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 		return response.StatusCode, err
 	}
 	return response.StatusCode, nil
+}
+
+// EnsureSession renews a short-lived, process-local capability lease. The
+// Node credential alone never authorizes v1.0.2 execution routes.
+func (c *Client) EnsureSession(ctx context.Context) error {
+	c.renewMu.Lock()
+	defer c.renewMu.Unlock()
+	c.mu.Lock()
+	if c.sessionToken != "" && time.Until(c.sessionExpires) > 45*time.Second {
+		c.mu.Unlock()
+		return nil
+	}
+	c.mu.Unlock()
+	if c.processID == "" {
+		return fmt.Errorf("cannot generate Controller process identity")
+	}
+	var session nodev1.CapabilitySession
+	_, err := c.do(ctx, http.MethodPost, "/session", nodev1.CapabilitySessionRequest{ProcessID: c.processID,
+		Capabilities: []string{nodev1.CapabilityContentValidationV102, nodev1.CapabilityTemplateManifestV1, nodev1.CapabilityCoreInventoryV1}}, &session)
+	if err != nil {
+		return err
+	}
+	expires, err := time.Parse(time.RFC3339Nano, session.ExpiresAt)
+	if err != nil || session.Token == "" || time.Until(expires) < 30*time.Second {
+		return fmt.Errorf("invalid capability session response")
+	}
+	c.mu.Lock()
+	c.sessionToken, c.sessionExpires = session.Token, expires
+	c.mu.Unlock()
+	return nil
+}
+
+func (c *Client) ReportInventory(ctx context.Context, report nodev1.InventoryReport) error {
+	_, err := c.do(ctx, http.MethodPost, "/inventory", report, nil)
+	return err
+}
+
+func (c *Client) DropSession() {
+	c.mu.Lock()
+	c.sessionToken, c.sessionExpires = "", time.Time{}
+	c.mu.Unlock()
+}
+
+func (c *Client) CheckSession(ctx context.Context) error {
+	if err := c.EnsureSession(ctx); err != nil {
+		return err
+	}
+	_, err := c.do(ctx, http.MethodPost, "/session/check", nil, nil)
+	return err
 }
 
 func (c *Client) Heartbeat(ctx context.Context, h nodev1.Heartbeat) (nodev1.HeartbeatResult, error) {

@@ -12,15 +12,23 @@ import (
 )
 
 func (s *Store) ClaimNextJob(ctx context.Context, nodeID string) (*nodev1.Job, error) {
-	return s.claimNextJob(ctx, nodeID, false)
+	return s.claimNextJob(ctx, nodeID, false, nodev1.RequiredContentValidationV102)
+}
+
+func (s *Store) ClaimNextJobWithCapability(ctx context.Context, nodeID, capability string) (*nodev1.Job, error) {
+	return s.claimNextJob(ctx, nodeID, false, capability)
 }
 
 // ClaimIndependentStop retains the restricted A.4 stop route.
 func (s *Store) ClaimIndependentStop(ctx context.Context, nodeID string) (*nodev1.Job, error) {
-	return s.claimNextJob(ctx, nodeID, true)
+	return s.claimNextJob(ctx, nodeID, true, nodev1.RequiredContentValidationV102)
 }
 
-func (s *Store) claimNextJob(ctx context.Context, nodeID string, independentStop bool) (*nodev1.Job, error) {
+func (s *Store) ClaimIndependentStopWithCapability(ctx context.Context, nodeID, capability string) (*nodev1.Job, error) {
+	return s.claimNextJob(ctx, nodeID, true, capability)
+}
+
+func (s *Store) claimNextJob(ctx context.Context, nodeID string, independentStop bool, capability string) (*nodev1.Job, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -36,6 +44,7 @@ func (s *Store) claimNextJob(ctx context.Context, nodeID string, independentStop
 	err = tx.QueryRow(ctx, `SELECT j.id FROM node_jobs j
         JOIN nodes n ON n.id=j.node_id JOIN node_reports r ON r.node_id=n.id
         WHERE j.node_id=$1 AND j.state='pending' AND n.enabled AND r.compatibility_status='compatible'
+		AND j.required_capability IN ('legacy_v1',$4)
         AND n.last_heartbeat > $2
 		AND NOT EXISTS(SELECT 1 FROM node_jobs other WHERE other.node_id=j.node_id AND other.id<>j.id
 		  AND other.state IN ('claimed','accepted','unknown')
@@ -50,7 +59,7 @@ func (s *Store) claimNextJob(ctx context.Context, nodeID string, independentStop
           AND NOT EXISTS(SELECT 1 FROM node_jobs other WHERE other.node_id=j.node_id AND other.id<>j.id
             AND other.state IN ('claimed','accepted','unknown')
             AND (other.allocation_id=j.allocation_id OR other.instance_id=j.instance_id))))
-        ORDER BY j.created_at,j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1`, nodeID, time.Now().UTC().Add(-nodeOnlineWindow), independentStop).Scan(&jobID)
+        ORDER BY j.created_at,j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1`, nodeID, time.Now().UTC().Add(-nodeOnlineWindow), independentStop, capability).Scan(&jobID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -63,7 +72,7 @@ func (s *Store) claimNextJob(ctx context.Context, nodeID string, independentStop
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	job, err := s.JobForNode(ctx, nodeID, jobID)
+	job, err := s.JobForNodeWithCapability(ctx, nodeID, jobID, capability)
 	if err != nil {
 		return nil, err
 	}
@@ -71,15 +80,23 @@ func (s *Store) claimNextJob(ctx context.Context, nodeID string, independentStop
 }
 
 func (s *Store) OpenJobsForNode(ctx context.Context, nodeID string) ([]nodev1.Job, error) {
+	return s.OpenJobsForNodeWithCapability(ctx, nodeID, nodev1.RequiredContentValidationV102)
+}
+
+func (s *Store) OpenJobsForNodeWithCapability(ctx context.Context, nodeID, capability string) ([]nodev1.Job, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT j.id,j.kind,j.state,j.integration_only,
 		COALESCE(j.template_binding_key,''),j.requested_port,
         COALESCE(j.instance_id,''),COALESCE(j.operation_id,''),
         COALESCE(e.core_idempotency_key,''),COALESCE(e.resolved_template_path,''),
         COALESCE(e.requested_port,0),COALESCE(encode(e.request_fingerprint,'hex'),''),
-        COALESCE(EXTRACT(EPOCH FROM e.prepared_at)::bigint,0)
+		COALESCE(EXTRACT(EPOCH FROM e.prepared_at)::bigint,0),j.required_capability,
+		COALESCE(j.expected_template_fingerprint_sha256,''),COALESCE(j.template_binding_generation,0),
+		COALESCE(j.expected_workshop_id,''),COALESCE(j.expected_content_version_id,''),
+		COALESCE(j.expected_vpk_sha256,''),
+		COALESCE(e.template_manifest_algorithm,''),COALESCE(e.template_fingerprint_sha256,'')
         FROM node_jobs j LEFT JOIN node_job_executions e ON e.node_job_id=j.id
-        WHERE j.node_id=$1 AND j.state IN ('pending','claimed','accepted','unknown')
-        ORDER BY j.created_at,j.id`, nodeID)
+        WHERE j.node_id=$1 AND j.required_capability IN ('legacy_v1',$2) AND j.state IN ('pending','claimed','accepted','unknown')
+        ORDER BY j.created_at,j.id`, nodeID, capability)
 	if err != nil {
 		return nil, err
 	}
@@ -96,14 +113,22 @@ func (s *Store) OpenJobsForNode(ctx context.Context, nodeID string) ([]nodev1.Jo
 }
 
 func (s *Store) JobForNode(ctx context.Context, nodeID, jobID string) (nodev1.Job, error) {
+	return s.JobForNodeWithCapability(ctx, nodeID, jobID, nodev1.RequiredContentValidationV102)
+}
+
+func (s *Store) JobForNodeWithCapability(ctx context.Context, nodeID, jobID, capability string) (nodev1.Job, error) {
 	row := s.Pool.QueryRow(ctx, `SELECT j.id,j.kind,j.state,j.integration_only,
 		COALESCE(j.template_binding_key,''),j.requested_port,
         COALESCE(j.instance_id,''),COALESCE(j.operation_id,''),
         COALESCE(e.core_idempotency_key,''),COALESCE(e.resolved_template_path,''),
         COALESCE(e.requested_port,0),COALESCE(encode(e.request_fingerprint,'hex'),''),
-        COALESCE(EXTRACT(EPOCH FROM e.prepared_at)::bigint,0)
+		COALESCE(EXTRACT(EPOCH FROM e.prepared_at)::bigint,0),j.required_capability,
+		COALESCE(j.expected_template_fingerprint_sha256,''),COALESCE(j.template_binding_generation,0),
+		COALESCE(j.expected_workshop_id,''),COALESCE(j.expected_content_version_id,''),
+		COALESCE(j.expected_vpk_sha256,''),
+		COALESCE(e.template_manifest_algorithm,''),COALESCE(e.template_fingerprint_sha256,'')
         FROM node_jobs j LEFT JOIN node_job_executions e ON e.node_job_id=j.id
-        WHERE j.node_id=$1 AND j.id=$2`, nodeID, jobID)
+        WHERE j.node_id=$1 AND j.id=$2 AND j.required_capability IN ('legacy_v1',$3)`, nodeID, jobID, capability)
 	return scanJob(row)
 }
 
@@ -113,14 +138,22 @@ func scanJob(row jobScanner) (nodev1.Job, error) {
 	var job nodev1.Job
 	var key, template, fingerprint string
 	var port int
+	var manifestAlgorithm, manifestSHA, requiredCapability string
 	err := row.Scan(&job.ID, &job.Kind, &job.State, &job.IntegrationOnly,
 		&job.TemplateBindingKey, &job.RequestedPort,
-		&job.InstanceID, &job.OperationID, &key, &template, &port, &fingerprint, &job.PreparedAtUnix)
+		&job.InstanceID, &job.OperationID, &key, &template, &port, &fingerprint, &job.PreparedAtUnix,
+		&requiredCapability, &job.ExpectedTemplateFingerprintSHA256, &job.TemplateBindingGeneration,
+		&job.ExpectedWorkshopID, &job.ExpectedContentVersionID, &job.ExpectedVPKSHA256,
+		&manifestAlgorithm, &manifestSHA)
 	if err != nil {
 		return nodev1.Job{}, err
 	}
+	if requiredCapability != "legacy_v1" {
+		job.RequiredCapability = requiredCapability
+	}
 	if key != "" {
-		job.FrozenCreate = &nodev1.FrozenCreate{IdempotencyKey: key, Template: template, Port: port, FingerprintSHA256: fingerprint}
+		job.FrozenCreate = &nodev1.FrozenCreate{IdempotencyKey: key, Template: template, Port: port, FingerprintSHA256: fingerprint,
+			RequiredCapability: job.RequiredCapability, TemplateManifestAlgorithm: manifestAlgorithm, TemplateFingerprintSHA256: manifestSHA}
 	}
 	return job, nil
 }
@@ -260,8 +293,13 @@ func (s *Store) ReportJob(ctx context.Context, nodeID, jobID string, report node
 }
 
 func (f FrozenCreate) Contract() nodev1.FrozenCreate {
+	capability := f.RequiredCapability
+	if capability == "legacy_v1" {
+		capability = ""
+	}
 	return nodev1.FrozenCreate{IdempotencyKey: f.IdempotencyKey, Template: f.TemplatePath,
-		Port: f.Port, FingerprintSHA256: hex.EncodeToString(f.FingerprintSHA)}
+		Port: f.Port, FingerprintSHA256: hex.EncodeToString(f.FingerprintSHA), RequiredCapability: capability,
+		TemplateManifestAlgorithm: f.TemplateManifestAlgorithm, TemplateFingerprintSHA256: f.TemplateFingerprintSHA256}
 }
 
 func applyAllocationJobReport(ctx context.Context, tx pgx.Tx, allocationID, nodeID, kind, state, instanceID, errorCode string,

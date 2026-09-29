@@ -52,3 +52,14 @@ func TestNoEffectRejectionIsNarrow(t *testing.T) {
 		}
 	}
 }
+
+func TestListRequiresCompleteInstances(t *testing.T) {
+	for _, raw := range []string{`{}`, `{"instances":null}`, `{"instances":[{}]}`, `{"instances":[{"instanceId":"i","lifecycle":"active","process":"running","cleanup":"pending"},{"instanceId":"i","lifecycle":"active","process":"running","cleanup":"pending"}]}`} {
+		if _, err := NewWithCaller(&fakeCaller{result: raw}).List(context.Background()); err == nil {
+			t.Fatalf("incomplete list accepted: %s", raw)
+		}
+	}
+	if list, err := NewWithCaller(&fakeCaller{result: `{"instances":[]}`}).List(context.Background()); err != nil || list.Instances == nil || len(list.Instances) != 0 {
+		t.Fatalf("complete empty list rejected: %+v %v", list, err)
+	}
+}

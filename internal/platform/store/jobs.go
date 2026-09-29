@@ -98,9 +98,8 @@ func (s *Store) prepareCreate(ctx context.Context, nodeID, jobID, template strin
 	}
 	if requiredCapability == "content_validation_v102" {
 		var expected string
-		if err := tx.QueryRow(ctx, `SELECT v.template_fingerprint_sha256 FROM node_jobs j
-			JOIN allocations a ON a.id=j.allocation_id JOIN validation_runs v ON v.id=a.validation_run_id
-			WHERE j.id=$1`, jobID).Scan(&expected); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT expected_template_fingerprint_sha256 FROM node_jobs
+			WHERE id=$1 AND node_id=$2`, jobID, nodeID).Scan(&expected); err != nil {
 			return FrozenCreate{}, err
 		}
 		if algorithm != "template-manifest-sha256-v1" || manifestSHA != expected {

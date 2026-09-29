@@ -14,11 +14,15 @@ import (
 )
 
 type fakePlatform struct {
-	job      nodev1.Job
-	prepared bool
-	reports  []nodev1.ReportRequest
-	events   *[]string
+	job          nodev1.Job
+	prepared     bool
+	reports      []nodev1.ReportRequest
+	events       *[]string
+	afterPrepare func()
+	sessionErr   error
 }
+
+func (p *fakePlatform) CheckSession(context.Context) error { return p.sessionErr }
 
 func (p *fakePlatform) OpenJobs(context.Context) ([]nodev1.Job, error) {
 	if p.events != nil {
@@ -41,9 +45,14 @@ func (p *fakePlatform) Prepare(_ context.Context, _ string, in nodev1.PrepareCre
 	p.prepared = true
 	key := "nodejob-" + "123456781234123412341234567890ab"
 	digest := nodev1.CreateFingerprint(key, in.Template, in.Port)
-	f := nodev1.FrozenCreate{IdempotencyKey: key, Template: in.Template, Port: in.Port, FingerprintSHA256: hex.EncodeToString(digest[:])}
+	f := nodev1.FrozenCreate{IdempotencyKey: key, Template: in.Template, Port: in.Port, FingerprintSHA256: hex.EncodeToString(digest[:]),
+		RequiredCapability: p.job.RequiredCapability, TemplateManifestAlgorithm: in.TemplateManifestAlgorithm,
+		TemplateFingerprintSHA256: in.ObservedTemplateFingerprintSHA256}
 	p.job.FrozenCreate = &f
 	p.job.PreparedAtUnix = time.Now().Unix()
+	if p.afterPrepare != nil {
+		p.afterPrepare()
+	}
 	return f, nil
 }
 func (p *fakePlatform) Report(_ context.Context, _ string, r nodev1.ReportRequest) (nodev1.Job, error) {
@@ -70,11 +79,15 @@ type fakeCore struct {
 	historyDays int
 	events      *[]string
 	keys        []nodev1.FrozenCreate
+	afterCreate func()
 }
 
 func (c *fakeCore) Create(_ context.Context, frozen nodev1.FrozenCreate) (core.Accepted, error) {
 	c.creates++
 	c.keys = append(c.keys, frozen)
+	if c.afterCreate != nil {
+		c.afterCreate()
+	}
 	return c.result, c.err
 }
 func (c *fakeCore) Stop(context.Context, string) (core.Accepted, error) {

@@ -76,6 +76,23 @@ func TestFactsReadback(t *testing.T) {
 	if h.Content[0].State != "confirmed" || h.Content[0].ContentVersionID != "v1" {
 		t.Fatalf("content readback failed: %+v", h.Content[0])
 	}
+	otherRelease := filepath.Join(root, "other-release")
+	if err := os.Mkdir(otherRelease, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(otherRelease, "pak01_dir.vpk"), []byte("test"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	staleMetadata, _ := json.Marshal(contentMetadata{WorkshopID: "123", ContentVersionID: "v1", ReleasePath: otherRelease, VPKSHA256: hex.EncodeToString(digest[:])})
+	if err := os.WriteFile(config.ContentBindings[0].MetadataPath, staleMetadata, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if fact := config.ContentFact("123"); fact.State != "unknown" {
+		t.Fatalf("metadata target mismatch was confirmed: %+v", fact)
+	}
+	if err := os.WriteFile(config.ContentBindings[0].MetadataPath, metadata, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(release, "pak01_dir.vpk"), []byte("changed"), 0600); err != nil {
 		t.Fatal(err)
 	}

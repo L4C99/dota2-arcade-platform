@@ -18,6 +18,13 @@
   "templateBindings": {
     "example-template-key": "/var/lib/dota-arcade-node/templates/example.json"
   },
+  "templateManifests": {
+    "example-template-key": {
+      "versionRoot": "/var/lib/dota-arcade-node/templates/versions/example-v1",
+      "templatePath": "/var/lib/dota-arcade-node/templates/versions/example-v1/template.json",
+      "dependencies": []
+    }
+  },
   "contentBindings": [
     {
       "workshopId": "1234567890",

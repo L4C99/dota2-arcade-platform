@@ -8,10 +8,15 @@ import (
 )
 
 func (s *Store) ActiveAllocationsForNode(ctx context.Context, nodeID string) ([]nodev1.ActiveAllocation, error) {
+	return s.ActiveAllocationsForNodeWithCapability(ctx, nodeID, nodev1.RequiredContentValidationV102)
+}
+
+func (s *Store) ActiveAllocationsForNodeWithCapability(ctx context.Context, nodeID, capability string) ([]nodev1.ActiveAllocation, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT a.id,j.instance_id,a.state,
 		EXISTS(SELECT 1 FROM node_jobs active WHERE active.allocation_id=a.id AND active.state IN ('pending','claimed','accepted','unknown'))
 		FROM allocations a JOIN node_jobs j ON j.allocation_id=a.id AND j.kind='create' AND j.instance_id IS NOT NULL
-		WHERE a.node_id=$1 AND a.state NOT IN ('reclaimed','released_no_effect') ORDER BY a.assigned_at,a.id`, nodeID)
+		WHERE a.node_id=$1 AND j.required_capability IN ('legacy_v1',$2)
+		AND a.state NOT IN ('reclaimed','released_no_effect') ORDER BY a.assigned_at,a.id`, nodeID, capability)
 	if err != nil {
 		return nil, err
 	}

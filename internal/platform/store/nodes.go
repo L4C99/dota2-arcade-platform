@@ -117,6 +117,9 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 	if h.Content == nil {
 		h.Content = []nodev1.ContentFact{}
 	}
+	if h.Capabilities == nil {
+		h.Capabilities = []string{}
+	}
 	network, err := json.Marshal(h.Network)
 	if err != nil {
 		return nodev1.HeartbeatResult{}, err
@@ -192,15 +195,66 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, h nodev1.Hea
 		return nodev1.HeartbeatResult{}, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO node_reports(node_id,controller_version,node_api_version,d2core_version,d2core_commit,
-        d2core_protocol_version,compatibility_status,hard_max_instances,network_facts,content_facts,reported_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-        ON CONFLICT (node_id) DO UPDATE SET
+	        d2core_protocol_version,compatibility_status,hard_max_instances,network_facts,content_facts,reported_at,
+		capabilities,inventory_scan_id,inventory_state)
+	        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,''),NULLIF($14,''))
+	        ON CONFLICT (node_id) DO UPDATE SET
         controller_version=EXCLUDED.controller_version,node_api_version=EXCLUDED.node_api_version,d2core_version=EXCLUDED.d2core_version,
         d2core_commit=EXCLUDED.d2core_commit,d2core_protocol_version=EXCLUDED.d2core_protocol_version,
         compatibility_status=EXCLUDED.compatibility_status,hard_max_instances=EXCLUDED.hard_max_instances,
-        network_facts=EXCLUDED.network_facts,content_facts=EXCLUDED.content_facts,reported_at=EXCLUDED.reported_at`,
+	        network_facts=EXCLUDED.network_facts,content_facts=EXCLUDED.content_facts,reported_at=EXCLUDED.reported_at,
+		capabilities=EXCLUDED.capabilities,inventory_scan_id=EXCLUDED.inventory_scan_id,inventory_state=EXCLUDED.inventory_state`,
 		nodeID, h.ControllerVersion, h.NodeAPIVersion, h.D2CoreVersion, h.D2CoreCommit, h.D2CoreProtocolVersion,
-		status, h.HardMaxInstances, network, content, reportedAt)
+		status, h.HardMaxInstances, network, content, reportedAt, h.Capabilities, h.InventoryScanID, h.InventoryState)
+	if err != nil {
+		return nodev1.HeartbeatResult{}, err
+	}
+	seenTemplateRevisions := make([]string, 0)
+	for _, fact := range h.TemplateFacts {
+		rows, err := tx.Query(ctx, `SELECT template_revision_id FROM node_template_bindings WHERE node_id=$1 AND binding_key=$2`, nodeID, fact.BindingKey)
+		if err != nil {
+			return nodev1.HeartbeatResult{}, err
+		}
+		var revisions []string
+		for rows.Next() {
+			var revision string
+			if err := rows.Scan(&revision); err != nil {
+				rows.Close()
+				return nodev1.HeartbeatResult{}, err
+			}
+			revisions = append(revisions, revision)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nodev1.HeartbeatResult{}, err
+		}
+		rows.Close()
+		for _, revision := range revisions {
+			seenTemplateRevisions = append(seenTemplateRevisions, revision)
+			key, algorithm, fingerprint := fact.BindingKey, fact.ManifestAlgorithm, fact.FingerprintSHA256
+			if fact.State == "unknown" {
+				key, algorithm, fingerprint = "", "", ""
+			}
+			_, err = tx.Exec(ctx, `INSERT INTO node_template_facts
+				(node_id,template_revision_id,binding_key,reported_state,manifest_algorithm,reported_fingerprint_sha256,template_fact_revision,received_at)
+				VALUES($1,$2,NULLIF($3,''),$4,NULLIF($5,''),NULLIF($6,''),CASE WHEN $4='confirmed' THEN 1 ELSE 0 END,$7)
+				ON CONFLICT(node_id,template_revision_id) DO UPDATE SET
+				template_fact_revision=node_template_facts.template_fact_revision+CASE WHEN
+				(node_template_facts.binding_key,node_template_facts.reported_state,node_template_facts.manifest_algorithm,node_template_facts.reported_fingerprint_sha256)
+				IS DISTINCT FROM (EXCLUDED.binding_key,EXCLUDED.reported_state,EXCLUDED.manifest_algorithm,EXCLUDED.reported_fingerprint_sha256)
+				THEN 1 ELSE 0 END,
+				binding_key=EXCLUDED.binding_key,reported_state=EXCLUDED.reported_state,
+				manifest_algorithm=EXCLUDED.manifest_algorithm,reported_fingerprint_sha256=EXCLUDED.reported_fingerprint_sha256,
+				received_at=EXCLUDED.received_at`, nodeID, revision, key, fact.State, algorithm, fingerprint, reportedAt)
+			if err != nil {
+				return nodev1.HeartbeatResult{}, err
+			}
+		}
+	}
+	_, err = tx.Exec(ctx, `UPDATE node_template_facts SET
+		template_fact_revision=template_fact_revision+CASE WHEN reported_state<>'unknown' OR binding_key IS NOT NULL OR manifest_algorithm IS NOT NULL OR reported_fingerprint_sha256 IS NOT NULL THEN 1 ELSE 0 END,
+		binding_key=NULL,reported_state='unknown',manifest_algorithm=NULL,reported_fingerprint_sha256=NULL,received_at=$2
+		WHERE node_id=$1 AND NOT (template_revision_id=ANY($3::text[]))`, nodeID, reportedAt, seenTemplateRevisions)
 	if err != nil {
 		return nodev1.HeartbeatResult{}, err
 	}

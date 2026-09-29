@@ -23,17 +23,24 @@ type ContentBinding struct {
 	MetadataPath    string `json:"metadataPath"`
 }
 
+type TemplateManifestBinding struct {
+	VersionRoot  string   `json:"versionRoot"`
+	TemplatePath string   `json:"templatePath"`
+	Dependencies []string `json:"dependencies"`
+}
+
 type Config struct {
-	PlatformURL      string              `json:"platformUrl"`
-	Development      bool                `json:"development"`
-	NodeID           string              `json:"nodeId"`
-	NodeSecretFile   string              `json:"nodeSecretFile"`
-	D2CoreBuildFile  string              `json:"d2coreBuildFile"`
-	D2CoreDataDir    string              `json:"d2coreDataDir"`
-	HardMaxInstances int                 `json:"hardMaxInstances"`
-	Network          nodev1.NetworkFacts `json:"network"`
-	TemplateBindings map[string]string   `json:"templateBindings"`
-	ContentBindings  []ContentBinding    `json:"contentBindings"`
+	PlatformURL       string                             `json:"platformUrl"`
+	Development       bool                               `json:"development"`
+	NodeID            string                             `json:"nodeId"`
+	NodeSecretFile    string                             `json:"nodeSecretFile"`
+	D2CoreBuildFile   string                             `json:"d2coreBuildFile"`
+	D2CoreDataDir     string                             `json:"d2coreDataDir"`
+	HardMaxInstances  int                                `json:"hardMaxInstances"`
+	Network           nodev1.NetworkFacts                `json:"network"`
+	TemplateBindings  map[string]string                  `json:"templateBindings"`
+	TemplateManifests map[string]TemplateManifestBinding `json:"templateManifests,omitempty"`
+	ContentBindings   []ContentBinding                   `json:"contentBindings"`
 }
 
 var nodeIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

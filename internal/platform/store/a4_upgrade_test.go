@@ -157,7 +157,7 @@ func TestA4UpgradeFromMigration18PreservesCatalog(t *testing.T) {
 		t.Fatalf("legacy intent failure reason: %v", err)
 	}
 	var version int
-	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 20 {
+	if err := pool.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version != 21 {
 		t.Fatalf("migration version %d: %v", version, err)
 	}
 	var current, workshop string

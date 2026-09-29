@@ -1,8 +1,26 @@
-# Node API v1 当前协议
+# Node API v1 协议（v1.0.2 I2 候选）
+
+> I2 分支的增量合同；尚未部署 Production。旧 v1 请求形状保持合法，必须先升级 Platform 再升级 Controller。
 
 Node Controller 主动连接 Platform Server 的 `/api/node/v1`。正式环境经 Caddy 使用 HTTPS；Platform Server 只接收 Caddy 转发的本地 HTTP。开发模式只允许 Controller 访问 loopback HTTP。生产不关闭 TLS 证书校验。
 
 每个请求携带 `X-Node-ID: <uuid>` 和 `Authorization: Bearer <node-secret>`。节点由 `platform-server node register <display-name> <windows|linux>` 显式登记。原始高熵 Secret 只在登记时输出一次；数据库保存 SHA-256 verifier。Controller 从独立的本机 Secret 文件读取原值，配置文件和日志不包含 Secret。
+
+## v1.0.2 capability session
+
+新 Controller 启动时生成仅存内存的 process ID，以 Node 凭据调用 `POST /api/node/v1/session`，提交 `processId` 和 `contentValidationV102`、`templateManifestSha256V1`、`coreInventoryV1` 三项能力。Platform 返回 90 秒有效的随机 opaque token；Controller 在后续请求的 `X-Controller-Session` header 提交它，并在接近过期时更新。服务端只存 token digest 和当前 Node 的 session；新 session 立即替换旧 session，Platform 重启后旧 token 全部失效。原始 token 不进入数据库、审计、普通日志、URL 或 Admin/Web 响应。
+
+Heartbeat 的 `capabilities` 是 Controller 声明的节点事实，**不是执行授权**。每次涉及 `content_validation_v102` Job/Allocation 的 HTTP 请求都核对当前 Node、token、能力和有效期。Controller 在本地 core create/stop 前还调用 `POST /session/check` 取得当前 token 的 204 确认；无效时为 403 且不调用 core。旧 Controller 无 session 时仍能处理 `legacy_v1`，但 open/claim/active 列表过滤新资源；按 ID 的 GET、prepare、report 和 instance fact 对新资源返回 404，且不写状态。普通 Node Secret 不能代替 session。session 丢失只让 durable 工作等待恢复，不释放容量。Node API path 与 `APIVersion=1` 不变。
+
+## v1.0.2 machine facts
+
+新心跳可带 `capabilities[]`、`inventoryScanId`、`inventoryState=confirmed|unknown` 和 `templateFacts[]`。模板事实逐 `bindingKey` 表达 `state`、`manifestAlgorithm` 与 `fingerprintSha256`；只有 `confirmed` 可以携 `template-manifest-sha256-v1` 与 64 位小写十六进制 digest。缺失事实与旧心跳使已知模板事实变为 unknown；重复相同最终事实只刷新服务端 receipt time，不增加 revision。能力和 binding key 不允许重复。旧心跳缺这些字段仍合法。
+
+`POST /inventory` 需要当前 session 的 `coreInventoryV1`。每次真实 d2core `List` 产生新 `scanId`。完整成功只报告仍未确认 `reclaimed/stopped/complete` 的实例，字段为 `instanceId/lifecycle/process/cleanup/currentOperationId`；完整空数组只来自成功的空 List。失败报告 `complete=false, instances=[], errorCode`。Platform 对重复 scanId 返回 409，核对正式非终态 Allocation 的 immutable create instance ID，将无归属、integration-only 或资源终态的活跃实例计为 unaccounted。准入只接受心跳引用的、已持久化、完整且新鲜的同 scanId 扫描，且 `unaccounted=0`。
+
+v1.0.2 create Job 带冻结的预期 template fingerprint、binding generation、Workshop ID、ContentVersion ID 和 VPK SHA。Controller 从本机版本化 `templateManifests` 配置读取模板及全部显式静态启动依赖，并以 `template-manifest-sha256-v1` 计算规范清单 SHA256：版本字符串、解析后模板绝对路径、模板原始字节 SHA256 与长度，以及按规范路径排序的依赖绝对路径、长度、字节 SHA256；字符串与整数均用 8 字节大端长度/值编码。路径按本机规范绝对路径转 `/` 表示；不得跨不同 OS 路径直接比较同一 binding 的 digest。模板与依赖须位于独立只读版本目录；缺失、可写、链接身份不稳定、重复或读回失败均报告 unknown。模板 JSON 字节已经覆盖其中的 arguments、cfg.lines、readiness；d2core 临时 cfg、Dota 安装整体和 core binary 不在此指纹内。运维须完整枚举递归外部启动依赖，且不能通过 Admin/Web 提供任意本机路径。
+
+Controller 在 prepare 前及第一次 core create 前再次读取本机模板和 ContentBinding，核对版本、Workshop ID 与实际 VPK SHA。prepare 增量字段 `templateManifestAlgorithm`、`observedTemplateFingerprintSha256` 与 key/path/port 一起冻结；不同的重复 prepare 返回 409。首次 core call 前明确 mismatch 可结构化 `rejected_no_effect`。可能调用过 core 后出现漂移只保持 unknown、原 key 和容量并继续对账。固定 d2core create 参数仍只有 template、port 和 idempotencyKey。
 
 ## 心跳与节点事实
 

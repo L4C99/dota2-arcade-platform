@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 
 	"github.com/L4C99/dota2-arcade-platform/internal/contracts/nodev1"
 )
@@ -51,7 +52,8 @@ func (r *FactReader) Facts(controllerVersion string, coreProtocolVersion int) no
 	c := r.config
 	h := nodev1.Heartbeat{OS: runtime.GOOS, ControllerVersion: controllerVersion, NodeAPIVersion: nodev1.APIVersion,
 		D2CoreVersion: "unknown", D2CoreCommit: "unknown", D2CoreProtocolVersion: coreProtocolVersion,
-		HardMaxInstances: c.HardMaxInstances, Network: c.Network, Content: make([]nodev1.ContentFact, 0, len(c.ContentBindings))}
+		HardMaxInstances: c.HardMaxInstances, Network: c.Network, Content: make([]nodev1.ContentFact, 0, len(c.ContentBindings)),
+		Capabilities: []string{nodev1.CapabilityContentValidationV102, nodev1.CapabilityTemplateManifestV1, nodev1.CapabilityCoreInventoryV1}}
 	if raw, err := os.ReadFile(c.D2CoreBuildFile); err == nil {
 		var manifest buildManifest
 		if json.Unmarshal(raw, &manifest) == nil && manifest.Version != "" && manifest.GitCommit != "" {
@@ -62,7 +64,30 @@ func (r *FactReader) Facts(controllerVersion string, coreProtocolVersion int) no
 	for _, binding := range c.ContentBindings {
 		h.Content = append(h.Content, r.readContentFact(binding))
 	}
+	keys := make([]string, 0, len(c.TemplateManifests))
+	for key := range c.TemplateManifests {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fact := nodev1.TemplateFact{BindingKey: key, State: "unknown"}
+		if _, digest, err := c.TemplateManifestSHA256V1(key); err == nil {
+			fact.State, fact.ManifestAlgorithm, fact.FingerprintSHA256 = "confirmed", nodev1.TemplateManifestAlgorithmV1, digest
+		}
+		h.TemplateFacts = append(h.TemplateFacts, fact)
+	}
 	return h
+}
+
+// ContentFact deliberately creates a fresh reader for the pre-core check;
+// heartbeat's stat-based digest cache is unsuitable for an execution fence.
+func (c Config) ContentFact(workshopID string) nodev1.ContentFact {
+	for _, binding := range c.ContentBindings {
+		if binding.WorkshopID == workshopID {
+			return NewFactReader(c).readContentFact(binding)
+		}
+	}
+	return nodev1.ContentFact{WorkshopID: workshopID, State: "unknown"}
 }
 
 func (r *FactReader) readContentFact(binding ContentBinding) nodev1.ContentFact {

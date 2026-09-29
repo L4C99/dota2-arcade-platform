@@ -99,7 +99,7 @@ func (a *api) nodeActiveAllocations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	allocations, err := a.store.ActiveAllocationsForNode(r.Context(), nodeID)
+	allocations, err := a.store.ActiveAllocationsForNodeWithCapability(r.Context(), nodeID, a.requestCapability(r, nodeID))
 	if err != nil {
 		http.Error(w, "active allocations unavailable", http.StatusServiceUnavailable)
 		return
@@ -115,6 +115,9 @@ func (a *api) nodeInstanceFact(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !nodeIDPattern.MatchString(id) {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if !a.authorizeAllocation(w, r, nodeID, id) {
 		return
 	}
 	var fact nodev1.InstanceFact
@@ -140,7 +143,7 @@ func (a *api) nodeOpenJobs(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	jobs, err := a.store.OpenJobsForNode(r.Context(), nodeID)
+	jobs, err := a.store.OpenJobsForNodeWithCapability(r.Context(), nodeID, a.requestCapability(r, nodeID))
 	if err != nil {
 		http.Error(w, "jobs unavailable", http.StatusServiceUnavailable)
 		return
@@ -153,11 +156,11 @@ func (a *api) nodeClaimJob(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	claim := a.store.ClaimNextJob
+	claim := a.store.ClaimNextJobWithCapability
 	if r.URL.Query().Get("independentStop") == "true" {
-		claim = a.store.ClaimIndependentStop
+		claim = a.store.ClaimIndependentStopWithCapability
 	}
-	job, err := claim(r.Context(), nodeID)
+	job, err := claim(r.Context(), nodeID, a.requestCapability(r, nodeID))
 	if err != nil {
 		http.Error(w, "claim unavailable", http.StatusServiceUnavailable)
 		return
@@ -174,7 +177,7 @@ func (a *api) nodeGetJob(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	job, err := a.store.JobForNode(r.Context(), nodeID, r.PathValue("id"))
+	job, err := a.store.JobForNodeWithCapability(r.Context(), nodeID, r.PathValue("id"), a.requestCapability(r, nodeID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
@@ -191,12 +194,16 @@ func (a *api) nodePrepareJob(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !a.authorizeJob(w, r, nodeID, r.PathValue("id")) {
+		return
+	}
 	var request nodev1.PrepareCreateRequest
 	if err := decodeNodeJSON(w, r, &request); err != nil {
 		http.Error(w, "invalid prepare JSON", http.StatusBadRequest)
 		return
 	}
-	frozen, err := a.store.PrepareCreate(r.Context(), nodeID, r.PathValue("id"), request.Template, request.Port)
+	frozen, err := a.store.PrepareCreateWithManifest(r.Context(), nodeID, r.PathValue("id"), request.Template, request.Port,
+		request.TemplateManifestAlgorithm, request.ObservedTemplateFingerprintSHA256)
 	if errors.Is(err, pgx.ErrNoRows) {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
@@ -215,6 +222,9 @@ func (a *api) nodePrepareJob(w http.ResponseWriter, r *http.Request) {
 func (a *api) nodeReportJob(w http.ResponseWriter, r *http.Request) {
 	nodeID, ok := a.authenticatedNode(w, r)
 	if !ok {
+		return
+	}
+	if !a.authorizeJob(w, r, nodeID, r.PathValue("id")) {
 		return
 	}
 	var request nodev1.ReportRequest
@@ -240,4 +250,74 @@ func (a *api) nodeReportJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, job)
+}
+
+func (a *api) authorizeJob(w http.ResponseWriter, r *http.Request, nodeID, jobID string) bool {
+	capability, err := a.store.RequiredCapabilityForJob(r.Context(), nodeID, jobID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return false
+	}
+	if err != nil {
+		http.Error(w, "job unavailable", http.StatusServiceUnavailable)
+		return false
+	}
+	if !a.requestHasCapability(r, nodeID, capability) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return false
+	}
+	return true
+}
+
+func (a *api) authorizeAllocation(w http.ResponseWriter, r *http.Request, nodeID, allocationID string) bool {
+	capability, err := a.store.RequiredCapabilityForAllocation(r.Context(), nodeID, allocationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return false
+	}
+	if err != nil {
+		http.Error(w, "allocation unavailable", http.StatusServiceUnavailable)
+		return false
+	}
+	if !a.requestHasCapability(r, nodeID, capability) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return false
+	}
+	return true
+}
+
+func (a *api) nodeInventory(w http.ResponseWriter, r *http.Request) {
+	nodeID, ok := a.authenticatedNode(w, r)
+	if !ok {
+		return
+	}
+	if !a.requestHasNodeCapability(r, nodeID, nodev1.CapabilityCoreInventoryV1) {
+		http.Error(w, "capability required", http.StatusForbidden)
+		return
+	}
+	var report nodev1.InventoryReport
+	if decodeNodeJSON(w, r, &report) != nil || report.Validate() != nil {
+		http.Error(w, "invalid inventory", http.StatusBadRequest)
+		return
+	}
+	instances := make([]store.InventoryInstance, 0, len(report.Instances))
+	for _, x := range report.Instances {
+		instances = append(instances, store.InventoryInstance{
+			InstanceID: x.InstanceID, Lifecycle: x.Lifecycle, Process: x.Process, Cleanup: x.Cleanup, CurrentOperationID: x.CurrentOperationID,
+		})
+	}
+	snapshot, err := a.store.RecordInventory(r.Context(), nodeID, report.ScanID, report.Complete, report.ErrorCode, instances)
+	if errors.Is(err, store.ErrJobConflict) {
+		http.Error(w, "inventory conflict", http.StatusConflict)
+		return
+	}
+	if err != nil {
+		http.Error(w, "inventory unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		ReceivedAt       string `json:"receivedAt"`
+		State            string `json:"state"`
+		UnaccountedCount int    `json:"unaccountedCount"`
+	}{snapshot.ReceivedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"), snapshot.State, len(snapshot.UnaccountedInstanceIDs)})
 }

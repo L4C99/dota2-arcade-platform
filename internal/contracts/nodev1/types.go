@@ -56,6 +56,50 @@ type Heartbeat struct {
 	A2SQueryOK            bool            `json:"a2sQueryOk"` // Deprecated: derived compatibility fact only.
 	A2SDiagnostics        []A2SDiagnostic `json:"a2sDiagnostics,omitempty"`
 	Content               []ContentFact   `json:"content"`
+	Capabilities          []string        `json:"capabilities,omitempty"`
+	InventoryScanID       string          `json:"inventoryScanId,omitempty"`
+	InventoryState        string          `json:"inventoryState,omitempty"`
+	TemplateFacts         []TemplateFact  `json:"templateFacts,omitempty"`
+}
+
+const (
+	CapabilityContentValidationV102 = "contentValidationV102"
+	CapabilityTemplateManifestV1    = "templateManifestSha256V1"
+	CapabilityCoreInventoryV1       = "coreInventoryV1"
+	RequiredContentValidationV102   = "content_validation_v102"
+	TemplateManifestAlgorithmV1     = "template-manifest-sha256-v1"
+)
+
+type TemplateFact struct {
+	BindingKey        string `json:"bindingKey"`
+	State             string `json:"state"`
+	ManifestAlgorithm string `json:"manifestAlgorithm,omitempty"`
+	FingerprintSHA256 string `json:"fingerprintSha256,omitempty"`
+}
+
+type CapabilitySessionRequest struct {
+	ProcessID    string   `json:"processId"`
+	Capabilities []string `json:"capabilities"`
+}
+
+type CapabilitySession struct {
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+type InventoryInstance struct {
+	InstanceID         string `json:"instanceId"`
+	Lifecycle          string `json:"lifecycle"`
+	Process            string `json:"process"`
+	Cleanup            string `json:"cleanup"`
+	CurrentOperationID string `json:"currentOperationId,omitempty"`
+}
+
+type InventoryReport struct {
+	ScanID    string              `json:"scanId"`
+	Complete  bool                `json:"complete"`
+	Instances []InventoryInstance `json:"instances"`
+	ErrorCode string              `json:"errorCode,omitempty"`
 }
 
 // A2SDiagnostic is an administrator-only fact about one currently Ready instance.
@@ -93,16 +137,22 @@ type InstanceFact struct {
 }
 
 type Job struct {
-	ID                 string        `json:"id"`
-	Kind               string        `json:"kind"`
-	State              string        `json:"state"`
-	IntegrationOnly    bool          `json:"integrationOnly"`
-	TemplateBindingKey string        `json:"templateBindingKey,omitempty"`
-	RequestedPort      int           `json:"requestedPort"`
-	InstanceID         string        `json:"instanceId,omitempty"`
-	OperationID        string        `json:"operationId,omitempty"`
-	FrozenCreate       *FrozenCreate `json:"frozenCreate,omitempty"`
-	PreparedAtUnix     int64         `json:"preparedAtUnix,omitempty"`
+	ID                                string        `json:"id"`
+	Kind                              string        `json:"kind"`
+	State                             string        `json:"state"`
+	IntegrationOnly                   bool          `json:"integrationOnly"`
+	TemplateBindingKey                string        `json:"templateBindingKey,omitempty"`
+	RequestedPort                     int           `json:"requestedPort"`
+	InstanceID                        string        `json:"instanceId,omitempty"`
+	OperationID                       string        `json:"operationId,omitempty"`
+	FrozenCreate                      *FrozenCreate `json:"frozenCreate,omitempty"`
+	PreparedAtUnix                    int64         `json:"preparedAtUnix,omitempty"`
+	RequiredCapability                string        `json:"requiredCapability,omitempty"`
+	ExpectedTemplateFingerprintSHA256 string        `json:"expectedTemplateFingerprintSha256,omitempty"`
+	TemplateBindingGeneration         int64         `json:"templateBindingGeneration,omitempty"`
+	ExpectedWorkshopID                string        `json:"expectedWorkshopId,omitempty"`
+	ExpectedContentVersionID          string        `json:"expectedContentVersionId,omitempty"`
+	ExpectedVPKSHA256                 string        `json:"expectedVpkSha256,omitempty"`
 }
 
 // CreateFingerprint is the Platform's frozen request digest. d2core applies
@@ -117,15 +167,20 @@ func CreateFingerprint(key, template string, port int) [32]byte {
 }
 
 type FrozenCreate struct {
-	IdempotencyKey    string `json:"idempotencyKey"`
-	Template          string `json:"template"`
-	Port              int    `json:"port"`
-	FingerprintSHA256 string `json:"fingerprintSha256"`
+	IdempotencyKey            string `json:"idempotencyKey"`
+	Template                  string `json:"template"`
+	Port                      int    `json:"port"`
+	FingerprintSHA256         string `json:"fingerprintSha256"`
+	RequiredCapability        string `json:"requiredCapability,omitempty"`
+	TemplateManifestAlgorithm string `json:"templateManifestAlgorithm,omitempty"`
+	TemplateFingerprintSHA256 string `json:"templateFingerprintSha256,omitempty"`
 }
 
 type PrepareCreateRequest struct {
-	Template string `json:"template"`
-	Port     int    `json:"port"`
+	Template                          string `json:"template"`
+	Port                              int    `json:"port"`
+	TemplateManifestAlgorithm         string `json:"templateManifestAlgorithm,omitempty"`
+	ObservedTemplateFingerprintSHA256 string `json:"observedTemplateFingerprintSha256,omitempty"`
 }
 
 type ReportRequest struct {
@@ -261,6 +316,32 @@ func (h Heartbeat) Validate() error {
 	if h.HardMaxInstances < 0 {
 		return fmt.Errorf("invalid hard max")
 	}
+	if err := ValidateCapabilities(h.Capabilities); err != nil {
+		return err
+	}
+	if h.InventoryState != "" && h.InventoryState != "confirmed" && h.InventoryState != "unknown" {
+		return fmt.Errorf("invalid inventory state")
+	}
+	if (h.InventoryState == "") != (h.InventoryScanID == "") || len(h.InventoryScanID) > 128 {
+		return fmt.Errorf("invalid inventory scan identity")
+	}
+	if len(h.TemplateFacts) > 256 {
+		return fmt.Errorf("too many template facts")
+	}
+	seenBindings := make(map[string]bool)
+	for _, fact := range h.TemplateFacts {
+		if fact.BindingKey == "" || len(fact.BindingKey) > 128 || seenBindings[fact.BindingKey] || strings.ContainsAny(fact.BindingKey, "\r\n\x00") {
+			return fmt.Errorf("invalid or duplicate template binding key")
+		}
+		seenBindings[fact.BindingKey] = true
+		if fact.State == "confirmed" {
+			if fact.ManifestAlgorithm != TemplateManifestAlgorithmV1 || !revisionPattern.MatchString(fact.FingerprintSHA256) {
+				return fmt.Errorf("invalid template identity")
+			}
+		} else if fact.State != "unknown" || fact.ManifestAlgorithm != "" || fact.FingerprintSHA256 != "" {
+			return fmt.Errorf("invalid unknown template identity")
+		}
+	}
 	if err := h.Network.Validate(h.HardMaxInstances); err != nil {
 		return err
 	}
@@ -307,6 +388,59 @@ func (h Heartbeat) Validate() error {
 		}
 	}
 	return nil
+}
+
+func ValidateCapabilities(capabilities []string) error {
+	if len(capabilities) > 16 {
+		return fmt.Errorf("too many capabilities")
+	}
+	seen := make(map[string]bool)
+	for _, capability := range capabilities {
+		if seen[capability] {
+			return fmt.Errorf("duplicate capability")
+		}
+		seen[capability] = true
+		switch capability {
+		case CapabilityContentValidationV102, CapabilityTemplateManifestV1, CapabilityCoreInventoryV1:
+		default:
+			return fmt.Errorf("unknown capability")
+		}
+	}
+	return nil
+}
+
+func (r InventoryReport) Validate() error {
+	if r.ScanID == "" || len(r.ScanID) > 128 || !coreTokenPattern.MatchString(r.ScanID) || len(r.Instances) > 4096 {
+		return fmt.Errorf("invalid inventory scan")
+	}
+	if r.Complete == (r.ErrorCode != "") || (!r.Complete && len(r.Instances) != 0) {
+		return fmt.Errorf("invalid inventory completeness")
+	}
+	if r.ErrorCode != "" && !coreTokenPattern.MatchString(r.ErrorCode) {
+		return fmt.Errorf("invalid inventory error")
+	}
+	seen := make(map[string]bool)
+	for _, instance := range r.Instances {
+		if !coreTokenPattern.MatchString(instance.InstanceID) || seen[instance.InstanceID] ||
+			!oneOf(instance.Lifecycle, "active", "failed", "reclaimed") || !oneOf(instance.Process, "running", "stopped", "unknown") || !oneOf(instance.Cleanup, "pending", "failed", "complete") ||
+			(instance.CurrentOperationID != "" && !coreTokenPattern.MatchString(instance.CurrentOperationID)) {
+			return fmt.Errorf("invalid inventory instance")
+		}
+		seen[instance.InstanceID] = true
+		if instance.Lifecycle == "reclaimed" && instance.Process == "stopped" && instance.Cleanup == "complete" {
+			return fmt.Errorf("terminal instance in active inventory")
+		}
+	}
+	return nil
+}
+
+func oneOf(value string, choices ...string) bool {
+	for _, choice := range choices {
+		if value == choice {
+			return true
+		}
+	}
+	return false
 }
 
 func (n NetworkFacts) Validate(hardMax int) error {

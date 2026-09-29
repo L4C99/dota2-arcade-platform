@@ -144,7 +144,17 @@ func (c *Client) List(ctx context.Context) (ListResult, error) {
 		return ListResult{}, err
 	}
 	if result.Instances == nil {
-		result.Instances = []Instance{}
+		return ListResult{}, errors.New("incomplete d2core list response")
+	}
+	seen := make(map[string]bool, len(result.Instances))
+	for _, instance := range result.Instances {
+		if instance.InstanceID == "" || seen[instance.InstanceID] ||
+			(instance.Lifecycle != "active" && instance.Lifecycle != "failed" && instance.Lifecycle != "reclaimed") ||
+			(instance.Process != "running" && instance.Process != "stopped" && instance.Process != "unknown") ||
+			(instance.Cleanup != "pending" && instance.Cleanup != "failed" && instance.Cleanup != "complete") {
+			return ListResult{}, errors.New("invalid d2core list instance")
+		}
+		seen[instance.InstanceID] = true
 	}
 	return result, nil
 }

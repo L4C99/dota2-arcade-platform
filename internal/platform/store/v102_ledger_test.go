@@ -231,6 +231,12 @@ func v102ValidationFixture(t *testing.T, hard int) (*Store, ValidationCandidate)
 	if _, err := s.RecordInventory(ctx, node, "second-scan", true, "", nil); !errors.Is(err, ErrJobConflict) {
 		t.Fatalf("duplicate scan accepted: %v", err)
 	}
+	h.InventoryScanID, h.InventoryState = "second-scan", "confirmed"
+	h.TemplateFacts = []nodev1.TemplateFact{{BindingKey: "test-binding", State: "confirmed", ManifestAlgorithm: nodev1.TemplateManifestAlgorithmV1, FingerprintSHA256: fingerprint}}
+	h.Capabilities = []string{nodev1.CapabilityContentValidationV102, nodev1.CapabilityTemplateManifestV1, nodev1.CapabilityCoreInventoryV1}
+	if _, err := s.RecordHeartbeat(ctx, node, h); err != nil {
+		t.Fatal(err)
+	}
 	epoch, err := s.BeginScopedMaintenance(ctx, node, game, admin, "maintenance-1", "content validation", 0)
 	if err != nil || epoch != 1 {
 		t.Fatalf("maintenance epoch %d %v", epoch, err)

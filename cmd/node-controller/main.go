@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -53,15 +55,35 @@ func run(args []string) error {
 	// One slot per configured instance, with a second slot on single-capacity
 	// nodes so an independent stop can progress beside an unresolved create.
 	worker := &runner.Runner{Platform: client, Core: coreClient, TemplateBindings: conf.TemplateBindings,
-		Network: conf.Network, MaxConcurrentJobs: min(max(conf.HardMaxInstances, 2), 32)}
+		Network: conf.Network, TemplateProof: conf.TemplateManifestSHA256V1, ContentProof: conf.ContentFact,
+		MaxConcurrentJobs: min(max(conf.HardMaxInstances, 2), 32)}
 	factReader := config.NewFactReader(conf)
-	send := func(ctx context.Context) (nodev1.HeartbeatResult, error) {
+	send := func(ctx context.Context) (nodev1.HeartbeatResult, core.ListResult, bool, error) {
+		// Session establishment precedes inventory and heartbeat; a failure
+		// leaves all v1.0.2 execution routes closed while legacy work survives.
+		sessionErr := client.EnsureSession(ctx)
 		protocol := 0
 		list, listErr := coreClient.List(ctx)
+		var scan [16]byte
+		if _, err := rand.Read(scan[:]); err != nil {
+			return nodev1.HeartbeatResult{}, core.ListResult{}, false, err
+		}
+		scanID := hex.EncodeToString(scan[:])
+		inventory := inventoryForList(scanID, list, listErr)
 		if listErr == nil {
 			protocol = 1
 		}
 		facts := factReader.Facts(buildinfo.Version, protocol)
+		facts.InventoryScanID, facts.InventoryState = scanID, "unknown"
+		inventoryErr := sessionErr
+		if inventoryErr == nil {
+			inventoryErr = client.ReportInventory(ctx, inventory)
+		}
+		if inventoryErr == nil && inventory.Complete {
+			facts.InventoryState = "confirmed"
+		} else {
+			client.DropSession()
+		}
 		if conf.Network.A2SEnabled && listErr == nil {
 			facts.A2SDiagnostics = network.ProbeReadyInstances(ctx, list.Instances)
 			facts.A2SQueryOK = len(facts.A2SDiagnostics) > 0
@@ -72,12 +94,12 @@ func run(args []string) error {
 			}
 		}
 		result, err := client.Heartbeat(ctx, facts)
-		return result, err
+		return result, list, listErr == nil && inventory.Complete, err
 	}
 	if args[0] == "heartbeat" {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		result, err := send(ctx)
+		result, _, _, err := send(ctx)
 		if err != nil {
 			return err
 		}
@@ -91,7 +113,7 @@ func run(args []string) error {
 	lastStatus := ""
 	for {
 		cycle, cancel := context.WithTimeout(ctx, 20*time.Second)
-		result, err := send(cycle)
+		result, list, listOK, err := send(cycle)
 		status := result.CompatibilityStatus
 		if err != nil {
 			log.Printf("heartbeat failed: %v", err)
@@ -99,9 +121,9 @@ func run(args []string) error {
 			log.Printf("node compatibility: %s", status)
 			lastStatus = status
 		}
-		if err == nil && status == "compatible" {
+		if err == nil && status == "compatible" && listOK {
 			jobCycle, cancelJobs := context.WithTimeout(ctx, 20*time.Second)
-			if err := worker.Step(jobCycle); err != nil {
+			if err := worker.StepWithList(jobCycle, list); err != nil {
 				log.Printf("node job cycle failed: %v", err)
 			} else if result.ReconcileRequestedGeneration > result.ReconcileCompletedGeneration {
 				if err := client.CompleteReconcile(jobCycle, result.ReconcileRequestedGeneration); err != nil {
@@ -117,4 +139,27 @@ func run(args []string) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+func inventoryForList(scanID string, list core.ListResult, listErr error) nodev1.InventoryReport {
+	report := nodev1.InventoryReport{ScanID: scanID, Complete: listErr == nil, Instances: []nodev1.InventoryInstance{}}
+	if listErr != nil {
+		report.ErrorCode = "CORE_LIST_FAILED"
+		return report
+	}
+	if list.Instances == nil {
+		report.Complete, report.ErrorCode = false, "CORE_LIST_INVALID"
+		return report
+	}
+	for _, instance := range list.Instances {
+		if instance.Lifecycle == "reclaimed" && instance.Process == "stopped" && instance.Cleanup == "complete" {
+			continue
+		}
+		report.Instances = append(report.Instances, nodev1.InventoryInstance{InstanceID: instance.InstanceID,
+			Lifecycle: instance.Lifecycle, Process: instance.Process, Cleanup: instance.Cleanup, CurrentOperationID: instance.CurrentOperationID})
+	}
+	if report.Validate() != nil {
+		report.Complete, report.Instances, report.ErrorCode = false, []nodev1.InventoryInstance{}, "CORE_LIST_INVALID"
+	}
+	return report
 }

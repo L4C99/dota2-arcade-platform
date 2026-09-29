@@ -33,6 +33,8 @@ type Runner struct {
 	Core             core.API
 	TemplateBindings map[string]string
 	Network          nodev1.NetworkFacts
+	TemplateProof    func(string) (string, string, error)
+	ContentProof     func(string) nodev1.ContentFact
 	// MaxConcurrentJobs bounds one cycle's independent core/API work. The
 	// Platform's durable capacity reservation remains the create limit.
 	MaxConcurrentJobs int
@@ -46,6 +48,11 @@ func (r *Runner) Step(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	return r.StepWithList(ctx, list)
+}
+
+// StepWithList uses the exact cycle-local List result reported as inventory.
+func (r *Runner) StepWithList(ctx context.Context, list core.ListResult) error {
 	jobs, err := r.Platform.OpenJobs(ctx)
 	if err != nil {
 		return err
@@ -175,6 +182,9 @@ func (r *Runner) reconcileActive(ctx context.Context, platform activeReconciler)
 }
 
 func (r *Runner) handle(ctx context.Context, job nodev1.Job, fresh bool, list core.ListResult) error {
+	if err := r.checkExecutionSession(ctx, job); err != nil {
+		return err
+	}
 	switch job.Kind {
 	case "create":
 		return r.create(ctx, job, fresh, list.Storage.HistoryDays)
@@ -208,10 +218,22 @@ func (r *Runner) create(ctx context.Context, job nodev1.Job, fresh bool, history
 			return r.report(ctx, job, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "LOCAL_PORT_RANGE", ErrorStage: "validate"})
 		}
 		path := r.TemplateBindings[job.TemplateBindingKey]
+		manifestSHA := ""
+		if job.RequiredCapability == nodev1.RequiredContentValidationV102 {
+			var proofErr error
+			path, manifestSHA, proofErr = r.verifyMachineProof(job)
+			if proofErr != nil {
+				return r.report(ctx, job, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "LOCAL_IDENTITY_MISMATCH", ErrorStage: "validate"})
+			}
+		}
 		if !validCorePath(path) {
 			return r.report(ctx, job, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "LOCAL_TEMPLATE_BINDING", ErrorStage: "validate"})
 		}
-		prepared, err := r.Platform.Prepare(ctx, job.ID, nodev1.PrepareCreateRequest{Template: path, Port: job.RequestedPort})
+		request := nodev1.PrepareCreateRequest{Template: path, Port: job.RequestedPort}
+		if job.RequiredCapability == nodev1.RequiredContentValidationV102 {
+			request.TemplateManifestAlgorithm, request.ObservedTemplateFingerprintSHA256 = nodev1.TemplateManifestAlgorithmV1, manifestSHA
+		}
+		prepared, err := r.Platform.Prepare(ctx, job.ID, request)
 		if err != nil {
 			return err
 		}
@@ -219,6 +241,21 @@ func (r *Runner) create(ctx context.Context, job nodev1.Job, fresh bool, history
 	}
 	if err := validateFrozen(job, *frozen); err != nil {
 		return err
+	}
+	if job.RequiredCapability == nodev1.RequiredContentValidationV102 {
+		path, digest, err := r.verifyMachineProof(job)
+		if err != nil || path != frozen.Template || digest != frozen.TemplateFingerprintSHA256 {
+			if !retrying {
+				return r.report(ctx, job, nodev1.ReportRequest{State: "rejected_no_effect", ErrorCode: "LOCAL_IDENTITY_DRIFT", ErrorStage: "validate"})
+			}
+			if job.State == "claimed" {
+				return r.report(ctx, job, nodev1.ReportRequest{State: "unknown", ErrorCode: "LOCAL_IDENTITY_DRIFT", ErrorStage: "reconcile"})
+			}
+			return errors.New("local machine identity drift after possible core call")
+		}
+		if err := r.checkExecutionSession(ctx, job); err != nil {
+			return err
+		}
 	}
 	accepted, err := r.Core.Create(ctx, *frozen)
 	if err != nil {
@@ -252,6 +289,9 @@ func withinCoreHistory(preparedAt int64, historyDays int, now time.Time) bool {
 }
 
 func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
+	if err := r.checkExecutionSession(ctx, job); err != nil {
+		return err
+	}
 	if job.State == "accepted" || job.State == "unknown" && job.OperationID != "" {
 		return r.observe(ctx, job)
 	}
@@ -295,6 +335,9 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 			oldTerminalOperation = op.OperationID
 		}
 	}
+	if err := r.checkExecutionSession(ctx, job); err != nil {
+		return err
+	}
 	accepted, err := r.Core.Stop(ctx, job.InstanceID)
 	if err != nil {
 		if terminalCoreFailure(err) || coreIdentityFailure(err) {
@@ -331,6 +374,12 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 func (r *Runner) observe(ctx context.Context, job nodev1.Job) error {
 	if job.OperationID == "" || job.InstanceID == "" {
 		return nil
+	}
+	if job.Kind == "create" && job.RequiredCapability == nodev1.RequiredContentValidationV102 {
+		if _, _, err := r.verifyMachineProof(job); err != nil {
+			return r.report(ctx, job, nodev1.ReportRequest{State: "unknown", InstanceID: job.InstanceID,
+				OperationID: job.OperationID, ErrorCode: "LOCAL_IDENTITY_DRIFT", ErrorStage: "reconcile"})
+		}
 	}
 	op, err := r.Core.Operation(ctx, job.OperationID)
 	if err != nil {
@@ -463,7 +512,41 @@ func validateFrozen(job nodev1.Job, f nodev1.FrozenCreate) error {
 	if f.FingerprintSHA256 != hex.EncodeToString(digest[:]) {
 		return errors.New("frozen core create fingerprint mismatch")
 	}
+	if job.RequiredCapability == nodev1.RequiredContentValidationV102 && (f.RequiredCapability != job.RequiredCapability ||
+		f.TemplateManifestAlgorithm != nodev1.TemplateManifestAlgorithmV1 || f.TemplateFingerprintSHA256 != job.ExpectedTemplateFingerprintSHA256) {
+		return errors.New("frozen machine identity mismatch")
+	}
 	return nil
+}
+
+func (r *Runner) verifyMachineProof(job nodev1.Job) (string, string, error) {
+	if r.TemplateProof == nil || r.ContentProof == nil || job.ExpectedTemplateFingerprintSHA256 == "" ||
+		job.TemplateBindingGeneration < 1 || job.ExpectedWorkshopID == "" || job.ExpectedContentVersionID == "" || job.ExpectedVPKSHA256 == "" {
+		return "", "", errors.New("incomplete machine proof")
+	}
+	path, digest, err := r.TemplateProof(job.TemplateBindingKey)
+	if err != nil || digest != job.ExpectedTemplateFingerprintSHA256 {
+		return "", "", errors.New("template identity mismatch")
+	}
+	fact := r.ContentProof(job.ExpectedWorkshopID)
+	if fact.State != "confirmed" || fact.WorkshopID != job.ExpectedWorkshopID || fact.ContentVersionID != job.ExpectedContentVersionID || fact.VPKSHA256 != job.ExpectedVPKSHA256 {
+		return "", "", errors.New("content identity mismatch")
+	}
+	return path, digest, nil
+}
+
+func (r *Runner) checkExecutionSession(ctx context.Context, job nodev1.Job) error {
+	if job.RequiredCapability == "" || job.RequiredCapability == "legacy_v1" {
+		return nil
+	}
+	if job.RequiredCapability != nodev1.RequiredContentValidationV102 {
+		return errors.New("unsupported execution capability")
+	}
+	checker, ok := r.Platform.(interface{ CheckSession(context.Context) error })
+	if !ok {
+		return errors.New("capability session checker unavailable")
+	}
+	return checker.CheckSession(ctx)
 }
 
 func validCorePath(path string) bool {

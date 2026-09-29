@@ -18,6 +18,13 @@
   "templateBindings": {
     "example-template-key": "C:\\ProgramData\\DotaArcadeNode\\templates\\example.json"
   },
+  "templateManifests": {
+    "example-template-key": {
+      "versionRoot": "C:\\ProgramData\\DotaArcadeNode\\templates\\versions\\example-v1",
+      "templatePath": "C:\\ProgramData\\DotaArcadeNode\\templates\\versions\\example-v1\\template.json",
+      "dependencies": []
+    }
+  },
   "contentBindings": [
     {
       "workshopId": "1234567890",
