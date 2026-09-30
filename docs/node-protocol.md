@@ -1,8 +1,10 @@
 # Node API v1 协议（v1.0.2 I3 候选）
 
+Upcoming Platform v1.0.2 fixes Core v0.1.2 / `6dddb5892f962e70beb32fc30df4a78bce595528`, protocol/schema/format 1/1/2, Node API 1 and migration 22. See [Core alignment amendment](specs/v1.0.2-core-v0.1.2-alignment.md). Runtime/client behavior, FIX-05 and capability/operation-start fences are unchanged; I4 has not started and Production has not been upgraded by this alignment.
+
 > I2 已实现的增量合同由 I3 的玩家调度正式使用；尚未部署 Production。旧 v1 请求形状保持合法，必须先升级 Platform 再升级 Controller。
 
-I3 中，`validation_contract=v1_0_2` 的**普通玩家** Allocation 只有在 Node × Preset × 当前正式内容 × 当前正式模板的有效 PASS、机器事实和 inventory 同事务复查后才建立；其 create Job 为 `required_capability=content_validation_v102`，冻结期望模板指纹、binding generation、Workshop ID、ContentVersion ID 与 VPK SHA。旧 `legacy_v1` 玩法仍产生 legacy Job。Node API 版本与固定 d2core v0.1.1 均不变；旧 Controller 无权执行新 Job。
+I3 中，`validation_contract=v1_0_2` 的**普通玩家** Allocation 只有在 Node × Preset × 当前正式内容 × 当前正式模板的有效 PASS、机器事实和 inventory 同事务复查后才建立；其 create Job 为 `required_capability=content_validation_v102`，冻结期望模板指纹、binding generation、Workshop ID、ContentVersion ID 与 VPK SHA。旧 `legacy_v1` 玩法仍产生 legacy Job。Node API 保持 v1；本对齐固定 d2core v0.1.2，其 Runtime/client 合同不变。旧 Controller 无权执行新 Job。
 
 Node Controller 主动连接 Platform Server 的 `/api/node/v1`。正式环境经 Caddy 使用 HTTPS；Platform Server 只接收 Caddy 转发的本地 HTTP。开发模式只允许 Controller 访问 loopback HTTP。生产不关闭 TLS 证书校验。
 
@@ -26,13 +28,13 @@ Controller 在 prepare 前及第一次 core create 前再次读取本机模板�
 
 ## 心跳与节点事实
 
-`POST /heartbeat` 发送 `Heartbeat` JSON：OS、Controller 版本、Node API 版本、d2core `BUILD.json` 版本与 commit、已建立的本地 protocolVersion、`hardMaxInstances`、本机网络映射以及内容读回事事实。服务端使用自己的 UTC 时间记录 `reportedAt`。只有 Node API v1、固定 d2core `0.1.1` / `988720ad85af1f0d97bfe98ec4da4fcbb070beea` 且本地协议 v1 已验证时，状态为 `compatible`。
+`POST /heartbeat` 发送 `Heartbeat` JSON：OS、Controller 版本、Node API 版本、d2core `BUILD.json` 版本与 commit、已建立的本地 protocolVersion、`hardMaxInstances`、本机网络映射以及内容读回事事实。服务端使用自己的 UTC 时间记录 `reportedAt`。只有 Node API v1、固定 d2core `0.1.2` / `6dddb5892f962e70beb32fc30df4a78bce595528` 且本地协议 v1 已验证时，状态为 `compatible`。
 
 Controller 在首次真正连接 d2core 之前上报 `d2coreProtocolVersion=0`；它不能凭期望值伪称连接已验证。`BUILD.json` 不可读时版本为 `unknown`，该节点不领取新任务。
 
 网络事实包含 `connectHost`、可选 `protocolIp`、本地游戏端口范围、`identity` 或完整 `explicit` 端口映射，以及 A2S 部署声明。Controller 与服务端都验证映射覆盖范围、重复公网端口和 `hardMaxInstances <= 端口池大小`。本地端口范围必须与 d2core serve 的 `--port-min/--port-max` 来自同一部署配置；P0/P5 安装验收还要核对实际服务参数。心跳不会自动改防火墙/NAT。
 
-P3E 的 `connectHost` 可是节点的直连 IP、自有域名或厂商 NAT 域名；域名按完整 DNS label 校验，但不推断其公网可达性。`protocolIp` 只接受显式 IP，可以留空；Controller 不会把 NAT 域名解析成 Steam URI 所需的 IP。`identity` 将 d2core 实际本地端口映射到同号公网端口，`explicit` 必须逐一覆盖本地池并保持公网端口唯一。JoinInfo 使用该实例由 d2core `status` 报告的实际端口，未覆盖时返回 `PORT_MAPPING_UNAVAILABLE` 且实例继续占容量。网络事实变更会改变 entry revision，使旧 JoinInfo 不再展示。固定 d2core v0.1.1 API 不能读取管理器当前 serve 端口范围，部署时必须从同一配置生成 Controller 与 serve 参数并核对运行中的参数；不声称从本地 API 自动发现。
+P3E 的 `connectHost` 可是节点的直连 IP、自有域名或厂商 NAT 域名；域名按完整 DNS label 校验，但不推断其公网可达性。`protocolIp` 只接受显式 IP，可以留空；Controller 不会把 NAT 域名解析成 Steam URI 所需的 IP。`identity` 将 d2core 实际本地端口映射到同号公网端口，`explicit` 必须逐一覆盖本地池并保持公网端口唯一。JoinInfo 使用该实例由 d2core `status` 报告的实际端口，未覆盖时返回 `PORT_MAPPING_UNAVAILABLE` 且实例继续占容量。网络事实变更会改变 entry revision，使旧 JoinInfo 不再展示。固定 d2core v0.1.2 API 不能读取管理器当前 serve 端口范围，部署时必须从同一配置生成 Controller 与 serve 参数并核对运行中的参数；不声称从本地 API 自动发现。
 
 内容事实只在 Controller 能同时读回当前目录链接、metadata 指向和 VPK 文件时报告 `confirmed`；读不到或不一致时报告 `unknown`。P5 Controller 还会核对实际 VPK SHA256 与 metadata，并在心跳里上报可选的 `vpkSha256`。Platform 将它与不可变 ContentVersion SHA256 对照；不匹配则绑定状态为 `unknown`。旧 Controller 缺少该字段时，升级期间可继续读取原有确认状态，但新的真人内容验证必须有匹配的实际 SHA256。Web/Admin 不能通过节点 API 伪造这些事实。
 
@@ -88,7 +90,7 @@ Controller 使用显式绝对路径 JSON 配置，其中包含 Platform URL、No
 
 ## P0D 本地核心调用
 
-Controller 用固定 v0.1.1 Go client 对同用户 d2core manager 发出 `list/create/stop/operation/status`。`list` 成功才将 protocolVersion 报为 1。每次领取新任务前读取未终结任务；集成 create job 只携带逻辑模板绑定键和请求 port。Controller 从本机绑定解析 ASCII 绝对模板路径，调用 `prepare` 持久化 key、路径、port 和指纹，校验服务端返回的冻结值，再将原值提交 d2core。key 与不可变 NodeJob ID 确定性绑定。
+Controller 用固定 v0.1.2 Go client 对同用户 d2core manager 发出 `list/create/stop/operation/status`。`list` 成功才将 protocolVersion 报为 1。每次领取新任务前读取未终结任务；集成 create job 只携带逻辑模板绑定键和请求 port。Controller 从本机绑定解析 ASCII 绝对模板路径，调用 `prepare` 持久化 key、路径、port 和指纹，校验服务端返回的冻结值，再将原值提交 d2core。key 与不可变 NodeJob ID 确定性绑定。
 
 `accepted` 后保存两个 core ID；仅在 operation 终结且 status 显示 create 为 active/running/ready，或 stop 为 reclaimed/stopped/complete 时报告 `succeeded`。丢失 create 响应保留 `unknown`，不换 key、不盲目再次 create。明确的无副作用 validate/protocol 拒绝可报告 `rejected_no_effect`；已有 core ID 或无法判断副作用时报告 `unknown`。重启和长断联的完整对账属于 P0E 验收。
 

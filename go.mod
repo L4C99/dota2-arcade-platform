@@ -3,7 +3,7 @@ module github.com/L4C99/dota2-arcade-platform
 go 1.27.1
 
 require (
-	github.com/L4C99/dota2-arcade-dedicated-core v0.1.1
+	github.com/L4C99/dota2-arcade-dedicated-core v0.1.2
 	github.com/jackc/pgx/v5 v5.11.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/sys v0.48.0

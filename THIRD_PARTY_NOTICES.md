@@ -3,17 +3,17 @@
 Platform source is MIT licensed; retain the root LICENSE in redistributed packages.
 
 Node Controller incorporates code from **dota2-arcade-dedicated-core**. The fixed
-Platform dependency is **v0.1.1 / 988720ad85af1f0d97bfe98ec4da4fcbb070beea**.
+Platform dependency is **v0.1.2 / 6dddb5892f962e70beb32fc30df4a78bce595528**.
 Its copyright is **Copyright (c) 2026 L4C99**. The complete MIT text is in
 `licenses/d2core-LICENSE.txt`; retain it with compiled Controller distributions.
 The historical-code grant, including compilation into Node Controller binaries,
 is reproduced in `licenses/d2core-LICENSING.md` from
 [db246b2bcce888b87d7854bb12012ea4e90e82cb](https://github.com/L4C99/dota2-arcade-dedicated-core/blob/db246b2bcce888b87d7854bb12012ea4e90e82cb/LICENSING.md).
-That commit is licensing evidence only, not a runtime dependency upgrade.
+That historical clarification remains licensing evidence. The current fixed v0.1.2 Release includes its own MIT LICENSE, identical to the complete text retained here.
 
 Platform packages do **not** redistribute the d2core server executable. Obtain it
-separately from the official fixed v0.1.1 Release as described in deploy/README.md.
-The original tag, commit and Release assets remain unchanged by the clarification.
+separately from the official fixed v0.1.2 Release as described in deploy/README.md.
+The historical v0.1.1 tag, commit and Release assets remain unchanged by the clarification.
 
 Release packaging collects complete license/notice files for the Go modules
 compiled into the five supported binaries, the Go runtime, and installed npm

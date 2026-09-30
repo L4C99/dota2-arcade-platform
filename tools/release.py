@@ -48,6 +48,9 @@ def licenses(out, modules):
     for name, module in sorted(modules.items()):
         inventory.append({"ecosystem": "go", "name": name, "version": module["Version"]})
         if name.endswith("dota2-arcade-dedicated-core"):
+            official = Path(module["Dir"]) / "LICENSE"
+            if official.read_text() != (dest / "d2core-LICENSE.txt").read_text():
+                raise RuntimeError("fixed Core MIT license mismatch")
             continue
         source = Path(module["Dir"])
         found = []
@@ -117,8 +120,8 @@ def main():
     out.mkdir(parents=True, exist_ok=False)
     time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     metadata = {"version": args.version, "gitCommit": sha, "gitDirty": False, "buildTime": time,
-                "nodeAPIVersion": 1, "migrationVersion": EXPECTED_MIGRATION_VERSION, "d2coreVersion": "0.1.1",
-                "d2coreCommit": "988720ad85af1f0d97bfe98ec4da4fcbb070beea"}
+                "nodeAPIVersion": 1, "migrationVersion": EXPECTED_MIGRATION_VERSION, "d2coreVersion": "0.1.2",
+                "d2coreCommit": "6dddb5892f962e70beb32fc30df4a78bce595528"}
     migrations = sorted((ROOT / "internal/platform/store/migrations").glob("*.sql"))
     if [int(p.name.split("_")[0]) for p in migrations] != list(range(1, EXPECTED_MIGRATION_VERSION + 1)):
         raise RuntimeError("unexpected migration baseline")
@@ -139,6 +142,8 @@ def main():
             identity = run(["go", "version", "-m", str(out / name)])
             if "vcs.revision=" + sha not in identity or "vcs.modified=false" not in identity:
                 raise RuntimeError("binary source identity mismatch")
+            if command == "node-controller" and "github.com/L4C99/dota2-arcade-dedicated-core\tv0.1.2\t" not in identity:
+                raise RuntimeError("Controller fixed Core module mismatch")
             for dep in objects(run(["go", "list", "-mod=readonly", "-deps", "-json", "./cmd/" + command], env=env)):
                 module = dep.get("Module", {})
                 if module and not module.get("Main"):

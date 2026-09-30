@@ -110,3 +110,33 @@ func TestP3EEntryRevisionCoversMappingsAndHost(t *testing.T) {
 		t.Fatal("connect host change did not change entry revision")
 	}
 }
+
+func TestFixedCoreV012Compatibility(t *testing.T) {
+	const currentCommit = "6dddb5892f962e70beb32fc30df4a78bce595528"
+	const oldCommit = "988720ad85af1f0d97bfe98ec4da4fcbb070beea"
+	cases := []struct {
+		name, version, commit string
+		protocol, api         int
+		compatible            bool
+	}{
+		{"exact release", "0.1.2", currentCommit, 1, 1, true},
+		{"existing v prefix", "v0.1.2", currentCommit, 1, 1, true},
+		{"old release", "0.1.1", oldCommit, 1, 1, false},
+		{"old release with new commit", "0.1.1", currentCommit, 1, 1, false},
+		{"wrong commit", "0.1.2", oldCommit, 1, 1, false},
+		{"missing commit", "0.1.2", "", 1, 1, false},
+		{"wrong protocol", "0.1.2", currentCommit, 2, 1, false},
+		{"unverified protocol", "0.1.2", currentCommit, 0, 1, false},
+		{"wrong node API", "0.1.2", currentCommit, 1, 2, false},
+		{"other release", "0.1.3", currentCommit, 1, 1, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := Heartbeat{ControllerVersion: "test", NodeAPIVersion: tc.api,
+				D2CoreVersion: tc.version, D2CoreCommit: tc.commit, D2CoreProtocolVersion: tc.protocol}
+			if got := Compatible(h); got != tc.compatible {
+				t.Fatalf("Compatible(%+v) = %v, want %v", h, got, tc.compatible)
+			}
+		})
+	}
+}

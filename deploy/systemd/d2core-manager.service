@@ -1,5 +1,5 @@
 [Unit]
-Description=Fixed d2core v0.1.1 manager for Dota 2 Arcade Node
+Description=Fixed d2core v0.1.2 manager for Dota 2 Arcade Node
 After=network-online.target
 Wants=network-online.target
 

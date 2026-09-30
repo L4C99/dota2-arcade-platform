@@ -20,6 +20,8 @@ def main():
     root = args.directory.resolve()
     manifest = json.loads((root / "MANIFEST.json").read_text())
     assert manifest["gitDirty"] is False and manifest["migrationVersion"] == 22
+    assert manifest["d2coreVersion"] == "0.1.2"
+    assert manifest["d2coreCommit"] == "6dddb5892f962e70beb32fc30df4a78bce595528"
     for line in (root / "SHA256SUMS").read_text().splitlines():
         expected, name = line.split("  ", 1)
         assert Path(name).name == name
@@ -35,18 +37,24 @@ def main():
                     assert archive.testzip() is None
                     names = archive.namelist()
                     identity = json.loads(archive.read("PLATFORM-BUILD.json"))
+                    dependencies = json.loads(archive.read("DEPENDENCIES.json"))
                     if "game-node" in path.name:
                         assert {"bin/node-controller.exe", "bin/content-tool.exe"}.issubset(names)
             else:
                 with tarfile.open(path) as archive:
                     names = archive.getnames()
                     identity = json.load(archive.extractfile("PLATFORM-BUILD.json"))
+                    dependencies = json.load(archive.extractfile("DEPENDENCIES.json"))
                     for member in archive.getmembers():
                         assert member.isfile()
                         if member.name in ("platform-server", "node-controller", "content-tool") or member.name.endswith(".sh"):
                             assert member.mode == 0o755
                     if "game-node" in path.name:
                         assert {"node-controller", "content-tool"}.issubset(names)
+            for key in ("d2coreVersion", "d2coreCommit", "nodeAPIVersion", "migrationVersion"):
+                assert identity[key] == manifest[key], (path.name, key)
+            core = [d for d in dependencies if d["name"] == "github.com/L4C99/dota2-arcade-dedicated-core"]
+            assert len(core) == 1 and core[0]["version"] == "v0.1.2"
             assert identity["gitCommit"] == manifest["gitCommit"] and identity["gitDirty"] is False
             assert {"LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/d2core-LICENSE.txt", "DEPENDENCIES.json"}.issubset(names)
             for name in names:
@@ -115,11 +123,16 @@ def main():
                     (installRoot / "bin" / name).write_bytes(archive.read("bin/" + name))
             # Existence/build fixture only: never execute a fake or real d2core.
             (installRoot / "bin/d2core.exe").write_bytes(b"preflight fixture only")
-            (installRoot / "bin/BUILD.json").write_text(json.dumps({"version":"0.1.1", "gitCommit":manifest["d2coreCommit"]}))
+            (installRoot / "bin/BUILD.json").write_text(json.dumps({"version":manifest["d2coreVersion"], "gitCommit":manifest["d2coreCommit"]}))
             config["hardMaxInstances"] = 1
             (installRoot / "config/node-controller.json").write_text(json.dumps(config))
             command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(installRoot / "bin/install-node.ps1"), "-Root", str(installRoot), "-ValidateOnly"]
             assert subprocess.run(command, capture_output=True).returncode == 0
+            buildFile = installRoot / "bin/BUILD.json"
+            currentBuild = buildFile.read_bytes()
+            buildFile.write_text(json.dumps({"version":"0.1.1", "gitCommit":"988720ad85af1f0d97bfe98ec4da4fcbb070beea"}))
+            assert subprocess.run(command, capture_output=True).returncode != 0
+            buildFile.write_bytes(currentBuild)
             for name in ("content-tool.exe", "d2core.exe", "BUILD.json", "node-controller.exe"):
                 missing = installRoot / "bin" / name
                 data = missing.read_bytes(); missing.unlink()

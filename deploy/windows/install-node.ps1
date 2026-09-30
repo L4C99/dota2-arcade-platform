@@ -18,8 +18,8 @@ $min = [int]$config.network.localPortMin
 $max = [int]$config.network.localPortMax
 if ($min -lt 1 -or $max -gt 65535 -or $min -gt $max) { throw 'Invalid local port range' }
 $manifest = Get-Content -LiteralPath (Join-Path $Root 'bin\BUILD.json') -Raw | ConvertFrom-Json
-if ($manifest.version -ne '0.1.1' -or $manifest.gitCommit -ne '988720ad85af1f0d97bfe98ec4da4fcbb070beea') { throw 'd2core must be fixed v0.1.1' }
-Write-Output "Node preflight passed: local port range $min..$max; d2core v0.1.1"
+if ($manifest.version -ne '0.1.2' -or $manifest.gitCommit -ne '6dddb5892f962e70beb32fc30df4a78bce595528') { throw 'd2core must be fixed v0.1.2' }
+Write-Output "Node preflight passed: local port range $min..$max; d2core v0.1.2"
 if ($ValidateOnly) { return }
 if ($null -eq $Credential) { $Credential = Get-Credential -Message 'Runtime account used by both d2core and Node Controller' }
 $powershell = (Get-Process -Id $PID).Path

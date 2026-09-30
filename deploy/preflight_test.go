@@ -24,7 +24,7 @@ func TestA4WindowsContentToolPreflight(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(root, "bin", "BUILD.json"), []byte(`{"version":"0.1.1","gitCommit":"988720ad85af1f0d97bfe98ec4da4fcbb070beea"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "bin", "BUILD.json"), []byte(`{"version":"0.1.2","gitCommit":"6dddb5892f962e70beb32fc30df4a78bce595528"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	secret := filepath.Join(root, "config", "secret")
@@ -47,6 +47,22 @@ func TestA4WindowsContentToolPreflight(t *testing.T) {
 	if out, err := run(); err != nil || !strings.Contains(string(out), "preflight passed") {
 		t.Fatalf("complete preflight %s %v", out, err)
 	}
+
+	for _, tc := range []struct{ name, manifest string }{
+		{"old release", `{"version":"0.1.1","gitCommit":"988720ad85af1f0d97bfe98ec4da4fcbb070beea"}`},
+		{"wrong commit", `{"version":"0.1.2","gitCommit":"988720ad85af1f0d97bfe98ec4da4fcbb070beea"}`},
+		{"wrong version", `{"version":"0.1.3","gitCommit":"6dddb5892f962e70beb32fc30df4a78bce595528"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(filepath.Join(root, "bin", "BUILD.json"), []byte(tc.manifest), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if out, err := run(); err == nil || !strings.Contains(string(out), "d2core must be fixed v0.1.2") {
+				t.Fatalf("incompatible build accepted: %s %v", out, err)
+			}
+		})
+	}
+
 }
 func TestA4LinuxJQPreflight(t *testing.T) {
 	if runtime.GOOS == "windows" {

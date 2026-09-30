@@ -43,13 +43,13 @@ func TestConfigRequiresSafeTransportAndPaths(t *testing.T) {
 func TestFactsReadback(t *testing.T) {
 	root := t.TempDir()
 	config := validConfig(root)
-	manifest := []byte(`{"version":"0.1.1","gitCommit":"988720ad85af1f0d97bfe98ec4da4fcbb070beea"}`)
+	manifest := []byte(`{"version":"0.1.2","gitCommit":"6dddb5892f962e70beb32fc30df4a78bce595528"}`)
 	if err := os.WriteFile(config.D2CoreBuildFile, manifest, 0600); err != nil {
 		t.Fatal(err)
 	}
 	config.ContentBindings = []ContentBinding{{WorkshopID: "123", CurrentLinkPath: filepath.Join(root, "current"), MetadataPath: filepath.Join(root, "current.json")}}
 	h := config.Facts("test", 0)
-	if h.D2CoreVersion != "0.1.1" || h.D2CoreCommit != nodev1.D2CoreCommit || h.Content[0].State != "unknown" {
+	if h.D2CoreVersion != "0.1.2" || h.D2CoreCommit != nodev1.D2CoreCommit || h.Content[0].State != "unknown" {
 		t.Fatalf("unexpected facts: %+v", h)
 	}
 	release := filepath.Join(root, "release")

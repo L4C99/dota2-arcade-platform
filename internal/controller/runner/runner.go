@@ -364,7 +364,7 @@ func (r *Runner) stop(ctx context.Context, job nodev1.Job) error {
 	if accepted.InstanceID != job.InstanceID {
 		return fmt.Errorf("core stop returned different instance ID")
 	}
-	// v0.1.1 can still return the finished worker's operation until teardown
+	// Fixed d2core v0.1.2 retains the ability to return the finished worker's operation until teardown
 	// removes the worker. Do not freeze that old failure into this new job.
 	// Retain this job without an operation ID and retry on the next cycle.
 	if oldTerminalOperation != "" && accepted.OperationID == oldTerminalOperation {

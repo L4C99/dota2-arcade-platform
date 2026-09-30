@@ -8,14 +8,14 @@ This repository is developed primarily with AI coding agents.
 - Read the full frozen spec before substantial implementation work.
 - The current user prompt authorizes only the named stage/substage. The full V1 spec is context, not permission to implement everything.
 - If a user request appears to change a frozen invariant or V1 scope, do not silently reinterpret the spec. Point out the conflict and wait for explicit project-owner direction.
-- Formal implementation/API/migration docs created later may refine implementation details, but may not contradict `docs/specs/v1.md`.
+- Formal implementation/API/migration docs created later may refine implementation details, but may not contradict `docs/specs/v1.md` except explicit Owner-approved amendments. The Core alignment amendment changes only the v1.0.2 dependency identity.
 
 ## Fixed d2core dependency
 
-V1 is built against:
+Upcoming Platform v1.0.2 is built against (see `docs/specs/v1.0.2-core-v0.1.2-alignment.md`; frozen historical specs are preserved):
 
-- Release/tag: `v0.1.1`
-- Commit: `988720ad85af1f0d97bfe98ec4da4fcbb070beea`
+- Release/tag: `v0.1.2`
+- Commit: `6dddb5892f962e70beb32fc30df4a78bce595528`
 - protocolVersion: `1`
 - template schemaVersion: `1`
 - disk formatVersion: `2`
@@ -83,7 +83,7 @@ Never violate these:
 - Platform Server production baseline: Linux amd64, Ubuntu 24.04 LTS first verified distro.
 - Node Controller target: Windows amd64 + Linux amd64.
 - Content Tool target when implemented: Windows + Linux.
-- Go toolchain must satisfy the frozen d2core v0.1.1 dependency requirement (at least Go 1.27.1).
+- Go toolchain must satisfy the frozen d2core v0.1.2 dependency requirement (at least Go 1.27.1).
 - d2core-related critical local paths must obey the fixed release's ASCII absolute-path constraints.
 
 ## Completion report

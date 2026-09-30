@@ -106,7 +106,7 @@ jobs:
           go-version-file: go.mod
       - name: Clean Web checks and all supported release packages
         working-directory: .
-        run: python3 tools/release.py --output dist/rc1-ci
+        run: python3 tools/release.py --version v1.0.2-core-v0.1.2-alignment --output dist/rc1-ci
       - name: Linux artifact smoke and archive integrity
         working-directory: .
         run: |

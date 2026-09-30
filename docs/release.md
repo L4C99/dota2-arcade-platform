@@ -1,4 +1,4 @@
-# 正式 Release 构建与发布（v1.0.2 I3 候选）
+# 正式 Release 构建与发布（upcoming v1.0.2）
 
 > I3 候选分支的 `release.publish` 是游戏内容/玩法正式组合的数据库事务，不是 Git tag、GitHub Release 或 Production deployment。当前 Production 仍为 v1.0.1；本轮只准备和验证候选，不发布生产版本。
 
@@ -15,7 +15,7 @@ python tools/release_smoke.py dist/<OUTPUT>
 
 ## 产物与完整性
 
-`MANIFEST.json` 记录文件名、字节数、SHA256 和源码 SHA；`SHA256SUMS` 覆盖全部产物与 manifest。I3 候选包内 `PLATFORM-BUILD.json` 记录 Node API 1、最新 migration 22 和固定 d2core 依赖；`web/BUILD.json` 标识配套 Production bundle。`MIGRATIONS-SHA256SUMS` 记录内嵌 SQL 的字节校验，0001–0021 保持不可变。Migration 22 只增加 Admin I3 request-id 成功账本，供 validation.start 与 release.publish 幂等使用；升级、重复执行和备份恢复须通过独立 PostgreSQL 验证。
+`MANIFEST.json` 记录文件名、字节数、SHA256 和源码 SHA；`SHA256SUMS` 覆盖全部产物与 manifest。I3 候选包内 `PLATFORM-BUILD.json` 记录 Node API 1、最新 migration 22 和固定 d2core 依赖；`web/BUILD.json` 标识配套 Production bundle。`MIGRATIONS-SHA256SUMS` 记录内嵌 SQL 的字节校验，本轮 0001–0022 保持不可变。Migration 22 只增加 Admin I3 request-id 成功账本，供 validation.start 与 release.publish 幂等使用；升级、重复执行和备份恢复须通过独立 PostgreSQL 验证。
 
 | 包 | 运行内容 |
 | --- | --- |
@@ -30,14 +30,9 @@ python tools/release_smoke.py dist/<OUTPUT>
 
 ## 固定 d2core 获取与核验
 
-节点单独从正式 [d2core v0.1.1 Release](https://github.com/L4C99/dota2-arcade-dedicated-core/releases/tag/v0.1.1)取得相应 ZIP 与校验文件。RC1 许可核验时记录的 ZIP SHA256 为：
+节点单独从正式 [d2core v0.1.2 Release](https://github.com/L4C99/dota2-arcade-dedicated-core/releases/tag/v0.1.2)取得对应 ZIP 与官方校验文件；Platform 包不分发 d2core server binary。核对官方 `SHA256SUMS`、`BUILD.json` 与 `d2core version --json`：版本 0.1.2、commit `6dddb5892f962e70beb32fc30df4a78bce595528`、protocol/schema/format 1/1/2、一致的 buildTime、`gitDirty=false`。d2core 的 `BUILD.json` 与平台的 `PLATFORM-BUILD.json` 分开保存，不用 d2core `main` 或改名 RC 包替代。Controller 构建还须以 `go version -m` 确认实际嵌入的 Go module 为 v0.1.2。正式基线由[alignment amendment](specs/v1.0.2-core-v0.1.2-alignment.md)限定。
 
-```text
-58bc1e1425466dd207e90c6ab93cb9e3ee1debfc0de7992d7fca6261df1f082c  d2core-v0.1.1-linux-amd64.zip
-a930ee5ae4a5f7aa21f51d7bc6ad3b0e876f4c967f950455bd46cf86d3d7ae82  d2core-v0.1.1-windows-amd64.zip
-```
-
-同时核对官方 `SHA256SUMS`、`BUILD.json` 与 `d2core version --json`：版本 0.1.1、commit `988720ad85af1f0d97bfe98ec4da4fcbb070beea`、一致的 buildTime、`gitDirty=false`。d2core 的 `BUILD.json` 与平台的 `PLATFORM-BUILD.json` 分开保存，不用 d2core `main` 或改名 RC 包替代。历史源码/client 的授权证据见 commit `db246b2bcce888b87d7854bb12012ea4e90e82cb`；运行与协议基线没有改变。
+RC1 当时使用 v0.1.1 的许可和 ZIP 校验属于[历史 RC1 验收](validation/rc1.md)，不能用于校验 v0.1.2 包。历史源码/client 的授权证据 `db246b2bcce888b87d7854bb12012ea4e90e82cb` 与 `licenses/d2core-LICENSING.md` 保留。当前固定 Release 自带正式 MIT LICENSE，与 `licenses/d2core-LICENSE.txt` 一致；编译进 Controller 的 client/module 授权随 Platform 包分发。
 
 ## 发布边界与历史
 

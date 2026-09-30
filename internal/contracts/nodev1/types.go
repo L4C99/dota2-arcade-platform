@@ -17,8 +17,8 @@ import (
 const (
 	APIPath               = "/api/node/v1"
 	APIVersion            = 1
-	D2CoreVersion         = "0.1.1"
-	D2CoreCommit          = "988720ad85af1f0d97bfe98ec4da4fcbb070beea"
+	D2CoreVersion         = "0.1.2"
+	D2CoreCommit          = "6dddb5892f962e70beb32fc30df4a78bce595528"
 	D2CoreProtocolVersion = 1
 )
 

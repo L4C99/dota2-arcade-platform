@@ -1,4 +1,4 @@
-// Package core adapts the fixed d2core v0.1.1 Go client without changing its
+// Package core adapts the fixed d2core v0.1.2 Go client without changing its
 // process, port, readiness, recovery or reclaim semantics.
 package core
 

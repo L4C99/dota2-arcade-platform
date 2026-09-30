@@ -6,6 +6,8 @@
 
 v1.0.1 是仅修改代码的 create-dispatch Hotfix：同一 Node 上未解决的普通 create 不再阻塞其他独立 Allocation 的 create。独立 NodeJob 由 Controller 的有界 worker 推进，Store 仍阻止同一 Allocation 或已知 instance 的冲突领取。它没有改变数据库 schema、Node API、调度架构或 Steam readiness。Steam Ready marker 偶发长时间不出现并导致 `START_TIMEOUT` 是独立调查项；现有证据不足以判定 Steam、后端、网络或 marker 的根因。
 
+**当前开发 / upcoming v1.0.2：**固定 Core v0.1.2，protocol/schema/format 为 1/1/2；依据[Core alignment amendment](docs/specs/v1.0.2-core-v0.1.2-alignment.md)。I4 尚未开始，本对齐不改变已部署 Production。
+
 ## 组成与边界
 
 | 组件 | 职责与目标平台 |
@@ -15,7 +17,7 @@ v1.0.1 是仅修改代码的 create-dispatch Hotfix：同一 Node 上未解决�
 | Content Tool | Windows / Linux 离线运维工具；准备不可变 VPK 版本并显式切换目录链接，不自动 Drain、下载或发布平台目标。 |
 | Web | Vue 3 / TypeScript / Vite 玩家与管理员界面；Production bundle 由 Platform Server 提供，经 Caddy 对外服务。 |
 
-运行依赖 PostgreSQL、Caddy 和节点上的 [d2core v0.1.1](https://github.com/L4C99/dota2-arcade-dedicated-core/releases/tag/v0.1.1)，固定 commit 为 `988720ad85af1f0d97bfe98ec4da4fcbb070beea`。Node API version 仍为 **1**，最新 migration 仍为 **19**。Platform Server 不直接调用 d2core；游戏流量不经过 Web 控制面。V1 未引入 Redis、MQ、Kubernetes 或微服务拆分，也不提供活动实例内容热切换。详见[架构说明](docs/architecture.md)。
+运行依赖 PostgreSQL、Caddy 和节点上的 [d2core v0.1.2](https://github.com/L4C99/dota2-arcade-dedicated-core/releases/tag/v0.1.2)，固定 commit 为 `6dddb5892f962e70beb32fc30df4a78bce595528`。Node API version 仍为 **1**，最新 migration 为 **22**。Platform Server 不直接调用 d2core；游戏流量不经过 Web 控制面。V1 未引入 Redis、MQ、Kubernetes 或微服务拆分，也不提供活动实例内容热切换。详见[架构说明](docs/architecture.md)。
 
 ## 开发与构建
 

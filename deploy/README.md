@@ -1,11 +1,13 @@
 # Reference deployment assets
 
+Upcoming Platform v1.0.2 fixes Core v0.1.2 / `6dddb5892f962e70beb32fc30df4a78bce595528`, protocol/schema/format 1/1/2, Node API 1 and migration 22. See [Core alignment amendment](../docs/specs/v1.0.2-core-v0.1.2-alignment.md). Runtime/client behavior, FIX-05 and capability/operation-start fences are unchanged; I4 has not started and Production has not been upgraded by this alignment.
+
 These files describe an Ubuntu 24.04 LTS amd64 control plane and native Linux/Windows game nodes. They are examples; choose private host paths and accounts before installation. Production deployment requires separate authorization.
 
-Use the [RC1 packages and identity procedure](../docs/release.md). Run `version`
+Use the [current packages and identity procedure](../docs/release.md). Run `version`
 on the unpacked executables, compare PLATFORM-BUILD.json and SHA256SUMS, and keep
 the included licenses. Node packages deliberately exclude d2core server binaries;
-retrieve and verify official fixed v0.1.1 separately. Its BUILD.json is required.
+retrieve and verify official fixed v0.1.2 separately. Its BUILD.json is required: version `0.1.2`, gitCommit `6dddb5892f962e70beb32fc30df4a78bce595528`. Windows preflight rejects v0.1.1 and mismatched identities. Linux retains the existing Bash/jq/port-config wrapper; operators must verify this exact BUILD identity before starting it, and Controller/Platform compatibility remains fail closed.
 
 ## Linux Web control plane
 
@@ -47,7 +49,7 @@ production TLS and production restore remain later real environment gates.
 
 ## Linux game node
 
-Install Bash and `jq` first (Ubuntu: `sudo apt-get install jq`); the manager wrapper checks `jq` before startup. Install `node-controller`, `content-tool`, official fixed d2core v0.1.1 and `BUILD.json` in a versioned native directory, with `current` pointing at the active build. Keep the Controller JSON and node Secret outside that directory under `/etc/dota-arcade-node/`; allow the shared ordinary runtime account to read the Secret. Keep d2core data, logs, templates and ContentRoot on persistent storage. Adjust `configs/examples/node-controller.linux.json.example` for actual local paths and network facts. Install the three Linux files in `systemd/` and the executable `start-d2core-manager.sh` into the active node build.
+Install Bash and `jq` first (Ubuntu: `sudo apt-get install jq`); the manager wrapper checks `jq` before startup. Install `node-controller`, `content-tool`, official fixed d2core v0.1.2 and `BUILD.json` in a versioned native directory, with `current` pointing at the active build. Keep the Controller JSON and node Secret outside that directory under `/etc/dota-arcade-node/`; allow the shared ordinary runtime account to read the Secret. Keep d2core data, logs, templates and ContentRoot on persistent storage. Adjust `configs/examples/node-controller.linux.json.example` for actual local paths and network facts. Install the three Linux files in `systemd/` and the executable `start-d2core-manager.sh` into the active node build.
 
 `start-d2core-manager.sh` reads the Controller JSON with `jq` and passes its `network.localPortMin`/`localPortMax` to fixed d2core `serve`. This makes both components use the same local game-port bounds. The Controller service follows the manager and retries on failure. Neither unit configures firewall, NAT, Steam or Dota.
 
@@ -65,7 +67,7 @@ the Drain/occupied=0/open jobs=0/list-empty runbook in operations.md.
 
 ## Windows game node
 
-Place `node-controller.exe`, `content-tool.exe`, official d2core v0.1.1 `d2core.exe` and its `BUILD.json` under `C:\ProgramData\DotaArcadeNode\bin`, with JSON and Secret under `config`, plus persistent `data`, `content`, `templates` and `logs`. Copy the three scripts in `windows/` to `bin`. Edit `configs/examples/node-controller.windows.json.example` and validate all local paths and network mappings.
+Place `node-controller.exe`, `content-tool.exe`, official d2core v0.1.2 `d2core.exe` and its `BUILD.json` under `C:\ProgramData\DotaArcadeNode\bin`, with JSON and Secret under `config`, plus persistent `data`, `content`, `templates` and `logs`. Copy the three scripts in `windows/` to `bin`. Edit `configs/examples/node-controller.windows.json.example` and validate all local paths and network mappings.
 
 Run `install-node.ps1 -Root C:\ProgramData\DotaArcadeNode -ValidateOnly` first. After checking the output and runtime account, run it without `-ValidateOnly` in an elevated PowerShell session and supply that account's credential at the prompt. It registers two startup scheduled tasks under the same account. Start the d2core task first, then Controller, and verify task results, transcripts, Platform heartbeat, direct d2core list and Dota process state. The d2core wrapper reads the exact same Controller JSON port bounds on every start. The installer does not alter firewall, NAT, Dota files or router state.
 

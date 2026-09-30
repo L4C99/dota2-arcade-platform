@@ -4,7 +4,7 @@ set -euo pipefail
 command -v jq >/dev/null 2>&1 || { echo 'required prerequisite missing: jq (install jq before starting d2core)' >&2; exit 1; }
 
 : "${NODE_CONFIG:?NODE_CONFIG must name the Controller JSON config}"
-: "${D2CORE_BIN:?D2CORE_BIN must name fixed d2core v0.1.1}"
+: "${D2CORE_BIN:?D2CORE_BIN must name fixed d2core v0.1.2}"
 test -f "$NODE_CONFIG"
 test -x "$D2CORE_BIN"
 
