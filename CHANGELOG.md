@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.2
+
+发布日期：2026-10-01 Beijing。[正式 Release](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.2)，tag/资产源码 `23b76126fad250d1b476d06411e981a017f236ab`，冻结 clean b2，buildTime `2026-09-30T13:32:01Z`。
+
+- 固定 d2core v0.1.2；Node API 1、migration 22、protocol/schema/format 1/1/2。
+- 增加内容/模板机器事实与身份核对、玩法 ValidationRun 真人确认及完整回收门槛、原子发布与配套 Admin 操作/幂等账本。
+- Production I4 使用 v1.0.2-i4，原验收覆盖 Linux OMG N7 真人 ValidationRun 与发布后普通 Player Web 正常停止/full reclaim；clean b2 通过 Windows native/offline 和隔离 Linux native/package qualification。两者的 binary identity/buildTime/hash 不同，不互相替代验收结论。
+- 正式发布原始 11 个冻结文件，未重新构建；GitHub 实际下载 read-back 校验见[发布记录](docs/validation/v1.0.2-final-release.md)。
+- Owner 取消 Final Release Adoption，Production 保持 v1.0.2-i4，无本次发布引发的重启、替换、DB/内容/玩法变更。clean b2 未完成 Production runtime adoption。
+- 项目进入 Feature Freeze / Maintenance Only。Windows Production、全容量负载与历史 START_TIMEOUT / MACHINE_PROOF_STALE UI 维护调查不属于本次解决范围。
+
 ## v1.0.1
 
 发布日期：2026-09-27 UTC / 2026-09-28 Beijing。[正式 Release](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.1)，源码 commit `8733b652372c83beb42a37f964652be9a82a7fd7`。

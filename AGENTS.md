@@ -2,6 +2,13 @@
 
 This repository is developed primarily with AI coding agents.
 
+## Current project state — Owner decision 2026-10-01
+
+- Feature Freeze / Maintenance Only. Do not start new feature work; maintenance, fixes and operations require explicit Owner scope.
+- GitHub Release v1.0.2 uses the exact frozen `v1.0.2-final-20260930-b2` assets, built from `23b76126fad250d1b476d06411e981a017f236ab`. Do not rebuild or replace this released set.
+- Final Release Adoption is canceled. Production remains `v1.0.2-i4`; this Release must not cause service restarts, binary replacement or runtime changes. Any future deployment needs separate explicit Owner authorization.
+- Keep Production I4 acceptance distinct from clean b2 native/offline qualification; see `docs/validation/v1.0.2-final-release.md`.
+
 ## Authority
 
 - `docs/specs/v1.md` is the frozen V1 product/architecture/acceptance specification.
@@ -12,7 +19,7 @@ This repository is developed primarily with AI coding agents.
 
 ## Fixed d2core dependency
 
-Upcoming Platform v1.0.2 is built against (see `docs/specs/v1.0.2-core-v0.1.2-alignment.md`; frozen historical specs are preserved):
+Platform v1.0.2 is built against (see `docs/specs/v1.0.2-core-v0.1.2-alignment.md`; frozen historical specs are preserved):
 
 - Release/tag: `v0.1.2`
 - Commit: `6dddb5892f962e70beb32fc30df4a78bce595528`

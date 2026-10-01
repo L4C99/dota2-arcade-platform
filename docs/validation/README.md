@@ -4,9 +4,11 @@
 
 **当前结论：**V1 已以 [v1.0.0](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.0) 正式发布；后续 create-dispatch Hotfix 已以 [v1.0.1](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.1) 正式发布并完成 Production promotion。A.7 真人试用和 A.8 最终发布门槛均已完成。旧记录中“最终 Release 仍被 A.7 阻塞”等说法是**当时判断**，不是今天的未完成事项。
 
+**2026-10-01 v1.0.2 收口：**正式 Release 分发 frozen clean b2；Production 保持 `v1.0.2-i4`。Final Release Adoption 已由 Owner 取消，项目进入 Feature Freeze / Maintenance Only。Linux Production I4（原 OMG N7 真人闭环）与 clean b2 native/offline qualification 必须分别理解，见[v1.0.2 正式发布记录](v1.0.2-final-release.md)。后续历史记录中的 Adoption deferred/blocked 是其形成时点，不意味着应继续部署。
+
 ## 推荐阅读顺序
 
-1. **当前状态和合同：**[根 README](../../README.md)、[Changelog](../../CHANGELOG.md)、[正式 Release](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.1)；现行操作和接口见[架构](../architecture.md)、[玩家 API](../player-api.md)、[管理员 API](../admin-api.md)、[Node 协议](../node-protocol.md)、[运维](../operations.md)与[发布说明](../release.md)。
+1. **当前状态和合同：**[根 README](../../README.md)、[Changelog](../../CHANGELOG.md)、[正式 Release](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.2)、[v1.0.2 发布范围](v1.0.2-final-release.md)；现行操作和接口见[架构](../architecture.md)、[玩家 API](../player-api.md)、[管理员 API](../admin-api.md)、[Node 协议](../node-protocol.md)、[运维](../operations.md)与[发布说明](../release.md)。
 2. **冻结产品规则：**[V1 规格](../specs/v1.md)、[Amendment 001](../specs/v1-amendment-001-entry-verification.md)、[Amendment 002](../specs/v1-amendment-002-human-trial-gate.md)。修订明确改变了原规格对应验收语义；旧 validation 只反映其时点。
 3. **V1 开发链：**依次阅读 [P0](p0-summary.md) → [P1](p1-summary.md) → [P2](p2-summary.md) → [P3](p3-summary.md) → [P4](p4-summary.md) → [P5](p5-summary.md) 收口，再看 [A.4 定向修复](a4-repair.md) → [RC1 工程候选](rc1.md)。原 A.2/A.3 审查基线 `9bf6d7d6b3195ca8af954a702ed69827f22afc4d` 保留不变。
 4. **正式发布与 Hotfix 链：**先看 [v1.0.0 Release](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.0)，再看 [v1.0.1 create-dispatch 验证](v1.0.1-create-dispatch.md)和 [v1.0.1 Release](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.1)。Hotfix 文件的 Candidate 正文仍是当时的验证证据；顶部 post-release note 说明其后续发布结果。

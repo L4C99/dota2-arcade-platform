@@ -1,6 +1,14 @@
-# 正式 Release 构建与发布（upcoming v1.0.2）
+# 正式 Release 构建与发布
 
-> I3 候选分支的 `release.publish` 是游戏内容/玩法正式组合的数据库事务，不是 Git tag、GitHub Release 或 Production deployment。当前 Production 仍为 v1.0.1；本轮只准备和验证候选，不发布生产版本。
+> `release.publish` 是游戏内容/玩法正式组合的数据库事务，不是 Git tag、GitHub Release 或 Production deployment。当前正式资产为 [v1.0.2](https://github.com/L4C99/dota2-arcade-platform/releases/tag/v1.0.2)，Production 保持 `v1.0.2-i4`。Owner 于 2026-10-01 取消 Final Release Adoption；本次资产发布不重启或替换 Production。项目进入 Feature Freeze / Maintenance Only。
+
+## v1.0.2 已冻结资产
+
+正式 Release 必须使用原始 `v1.0.2-final-20260930-b2` 的 11 个发布文件，固定源码/tag `23b76126fad250d1b476d06411e981a017f236ab`、version `v1.0.2`、buildTime `2026-09-30T13:32:01Z`。不重新构建、不重新压包、不修改 BUILD/MANIFEST/SHA256SUMS，不用 CI alignment artifact 或 I4 artifact 替代。构建遗留 staging 目录不属于发布资产。
+
+Production I4 的真实 Linux 运行/OMG N7 真人闭环与 clean b2 的 Windows native/offline、隔离 Linux native/package 资格是两组证据。b2 没有完成 Production adoption，不能由正式发布推断已部署或通过其自身真人 I4。完整身份、hash、GitHub 下载读回结果及限制见[正式发布记录](validation/v1.0.2-final-release.md)。
+
+v1.0.2 tag 保持在构建源码；发布后最小文档收口在 main 另作提交。冻结包内文档保留构建时点内容；当前发布状态以 Release 说明、main README 与正式发布记录为准。以下是通用构建流程，不授权重构建这批正式资产。
 
 从目标源码 SHA 的**干净 checkout** 构建。需要 Go 1.27.1 或更新、Node.js 22/npm、Python 3.10 或更新。正式构建必须显式传入版本：`tools/release.py` 当前默认值仍是历史 RC 标签 `v1.0.0-rc1`，不能依赖默认值。
 
@@ -15,7 +23,7 @@ python tools/release_smoke.py dist/<OUTPUT>
 
 ## 产物与完整性
 
-`MANIFEST.json` 记录文件名、字节数、SHA256 和源码 SHA；`SHA256SUMS` 覆盖全部产物与 manifest。I3 候选包内 `PLATFORM-BUILD.json` 记录 Node API 1、最新 migration 22 和固定 d2core 依赖；`web/BUILD.json` 标识配套 Production bundle。`MIGRATIONS-SHA256SUMS` 记录内嵌 SQL 的字节校验，本轮 0001–0022 保持不可变。Migration 22 只增加 Admin I3 request-id 成功账本，供 validation.start 与 release.publish 幂等使用；升级、重复执行和备份恢复须通过独立 PostgreSQL 验证。
+`MANIFEST.json` 记录文件名、字节数、SHA256 和源码 SHA；`SHA256SUMS` 覆盖全部产物与 manifest。v1.0.2 包内 `PLATFORM-BUILD.json` 记录 Node API 1、最新 migration 22 和固定 d2core 依赖；`web/BUILD.json` 标识配套 Web bundle。`MIGRATIONS-SHA256SUMS` 记录内嵌 SQL 的字节校验，0001–0022 保持不可变。Migration 22 只增加 Admin I3 request-id 成功账本，供 validation.start 与 release.publish 幂等使用；升级、重复执行和备份恢复须通过独立 PostgreSQL 验证。本次 GitHub Release 不执行任何 Production migration。
 
 | 包 | 运行内容 |
 | --- | --- |
